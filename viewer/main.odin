@@ -32,6 +32,9 @@ main :: proc() {
 		},
 	}
 
+	ui_ctx := init_ui_context()
+	defer deinit_ui_context(ui_ctx)
+
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.RAYWHITE)
@@ -39,8 +42,10 @@ main :: proc() {
 		defer rl.EndDrawing()
 
 
-		if box({width = grow(), height = fixed(320)}) {
+		if open_element(&ui_ctx, {width = grow(), height = fixed(320)}) {
+			if open_element(&ui_ctx, {width = fixed(20), height = grow()}) {
 
+			}
 		}
 
 		render_commands(cmds[:])
