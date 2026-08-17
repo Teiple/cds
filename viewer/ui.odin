@@ -46,11 +46,12 @@ Pop_Clip_Command :: struct {}
 
 UI_Context :: struct {
 	elements:           [dynamic]UI_Element,
-	open_element_stack: [dynamic]UI_Element_Index,
-	growable_buffer:    [dynamic]UI_Element_Index,
+	open_element_stack: [dynamic]UI_Index,
+	growable_buffer:    [dynamic]UI_Index,
 	render_commands:    [dynamic]Render_Command,
 	text_measurer:      UI_TextMeasurer,
 	default_font:       Viewer_Font,
+	child_iter:         proc(ctx: ^UI_Context, current_index: UI_Index, iter: ^UI_Index) -> bool,
 }
 
 Sizing_Axis :: struct {
@@ -104,7 +105,7 @@ Child_Alignment_Y :: enum {
 	Bottom,
 }
 
-UI_Element_Index :: distinct i32
+UI_Index :: i32
 
 UI_LayoutDeclare :: struct {
 	id:               string,
@@ -151,8 +152,8 @@ UI_Element :: struct {
 	id:           string,
 	position:     rl.Vector2,
 	size:         rl.Vector2,
-	parent:       UI_Element_Index,
-	preorder_idx: i32, // index in the flat elements array
+	parent:       UI_Index,
+	index:        UI_Index, // index in the flat elements array
 	subtree_size: i32, // number of nodes in this subtree (set on close)
 	limits:       UI_Limits,
 	attributes:   union {
@@ -169,30 +170,25 @@ UI_Limits :: struct {
 }
 
 LayoutAttributes :: struct {
-	element: UI_Element_Index,
+	element: UI_Index,
 	config:  UI_LayoutConfig,
-	// child_start and child_count removed
 }
 
 TextAttributes :: struct {
-	element: UI_Element_Index,
+	element: UI_Index,
 	config:  UI_TextConfig,
 }
-
-// -----------------------------------------------------------------------------
-// Opening / closing
-// -----------------------------------------------------------------------------
 
 @(deferred_in_out = close_layout)
 open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
-	index := UI_Element_Index(len(ctx.elements))
+	index := UI_Index(len(ctx.elements))
 
 	config, limits := parse_layout_declare(default_layout(), declare)
 	ui_ele := UI_Element {
 		id = declare.id,
 		parent = parent,
-		preorder_idx = i32(len(ctx.elements)), // set before append
+		index = i32(len(ctx.elements)), // set before append
 		attributes = LayoutAttributes{config = config, element = index},
 		limits = limits,
 	}
@@ -204,13 +200,13 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 @(deferred_in_out = close_text)
 open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) -> bool {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
-	index := UI_Element_Index(len(ctx.elements))
+	index := UI_Index(len(ctx.elements))
 
 	config, limits := parse_text_declare(default_text(ctx^), declare)
 	ui_ele := UI_Element {
 		id = declare.id,
 		parent = parent_idx,
-		preorder_idx = i32(len(ctx.elements)),
+		index = i32(len(ctx.elements)),
 		attributes = TextAttributes{config = config, element = index},
 		limits = limits,
 	}
@@ -235,7 +231,7 @@ close_element :: proc(ctx: ^UI_Context) {
 	ele := &ctx.elements[index]
 
 	// Compute subtree size: everything appended after this node is in its subtree
-	ele.subtree_size = i32(len(ctx.elements)) - ele.preorder_idx
+	ele.subtree_size = i32(len(ctx.elements)) - ele.index
 
 	// Run sizing calculations (they use the jump‑loop to iterate children)
 	calculate_width(ctx, index)
@@ -247,12 +243,8 @@ close_element :: proc(ctx: ^UI_Context) {
 	grow_and_shrink_sizing_height(ctx, index)
 }
 
-// -----------------------------------------------------------------------------
-// Sizing helpers
-// -----------------------------------------------------------------------------
-
 @(private)
-calculate_width :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+calculate_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	if layout, ok := current.attributes.(LayoutAttributes); ok {
 		if mode, ok := layout.config.width.(Fixed_Size); ok {
@@ -267,7 +259,7 @@ calculate_width :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
 }
 
 @(private)
-calculate_height :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+calculate_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	if layout, ok := current.attributes.(LayoutAttributes); ok {
 		if mode, ok := layout.config.height.(Fixed_Size); ok {
@@ -297,12 +289,8 @@ clamp_element_size :: proc(
 	return res
 }
 
-// -----------------------------------------------------------------------------
-// Fit sizing (compute natural size from children)
-// -----------------------------------------------------------------------------
-
 @(private)
-fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
@@ -310,14 +298,14 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
 	if _, ok := layout.config.width.(Fixed_Size); ok do return
 
 	// Jump‑loop over direct children
-	idx := current.preorder_idx + 1
-	end := current.preorder_idx + current.subtree_size
+	idx := current.index + 1
+	end := current.index + current.subtree_size
 	child_count := 0
 
 	if layout.config.layout_direction == .Left_To_Right {
 		// Sum widths of children + gaps
 		for idx < end {
-			child := ctx.elements[UI_Element_Index(idx)]
+			child := ctx.elements[idx]
 			current.size.x += child.size.x
 			child_count += 1
 			idx += child.subtree_size
@@ -328,7 +316,7 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
 	} else {
 		// Max width among children
 		for idx < end {
-			child := ctx.elements[UI_Element_Index(idx)]
+			child := ctx.elements[idx]
 			if child.size.x > current.size.x {
 				current.size.x = child.size.x
 			}
@@ -343,35 +331,31 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
 }
 
 @(private)
-fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
 
 	if _, ok := layout.config.height.(Fixed_Size); ok do return
 
-	idx := current.preorder_idx + 1
-	end := current.preorder_idx + current.subtree_size
 	child_count := 0
 
 	if layout.config.layout_direction == .Top_To_Bottom {
-		for idx < end {
-			child := ctx.elements[UI_Element_Index(idx)]
+		for child_index: UI_Index; ctx->child_iter(index, &child_index); {
+			child := ctx.elements[child_index]
 			current.size.y += child.size.y
 			child_count += 1
-			idx += child.subtree_size
 		}
 		if child_count > 0 {
 			current.size.y += f32(child_count - 1) * layout.config.child_gap
 		}
 	} else {
-		for idx < end {
-			child := ctx.elements[UI_Element_Index(idx)]
+		for child_index: UI_Index; ctx->child_iter(index, &child_index); {
+			child := ctx.elements[child_index]
 			if child.size.y > current.size.y {
 				current.size.y = child.size.y
 			}
 			child_count += 1
-			idx += child.subtree_size
 		}
 	}
 
@@ -380,12 +364,8 @@ fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Grow / shrink distribution
-// -----------------------------------------------------------------------------
-
 @(private)
-grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok || current.subtree_size <= 1 do return
@@ -394,10 +374,9 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 
 	// Vertical layout: all grow children expand to fill width
 	if layout.config.layout_direction == .Top_To_Bottom {
-		idx := current.preorder_idx + 1
-		end := current.preorder_idx + current.subtree_size
+		idx, end := current.index + 1, current.index + current.subtree_size
 		for idx < end {
-			child_idx := UI_Element_Index(idx)
+			child_idx := idx
 			child := &ctx.elements[child_idx]
 			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 				if _, ok := child_layout.config.width.(Grow_Size); ok {
@@ -416,11 +395,10 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 	remaining_width := content_width
 	child_count := 0
 
-	idx := current.preorder_idx + 1
-	end := current.preorder_idx + current.subtree_size
+	idx, end := current.index + 1, current.index + current.subtree_size
 
 	for idx < end {
-		child_idx := UI_Element_Index(idx)
+		child_idx := idx
 		child := ctx.elements[child_idx]
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_width -= child.size.x
@@ -527,7 +505,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 
 // Height version – analogous
 @(private)
-grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Element_Index) {
+grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok || current.subtree_size <= 1 do return
@@ -536,10 +514,10 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 
 	// Horizontal layout: all grow children expand to fill height
 	if layout.config.layout_direction == .Left_To_Right {
-		idx := current.preorder_idx + 1
-		end := current.preorder_idx + current.subtree_size
+		idx := current.index + 1
+		end := current.index + current.subtree_size
 		for idx < end {
-			child_idx := UI_Element_Index(idx)
+			child_idx := idx
 			child := &ctx.elements[child_idx]
 			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 				if _, ok := child_layout.config.height.(Grow_Size); ok {
@@ -557,11 +535,10 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 	remaining_height := content_height
 	child_count := 0
 
-	idx := current.preorder_idx + 1
-	end := current.preorder_idx + current.subtree_size
+	idx, end := current.index + 1, current.index + current.subtree_size
 
 	for idx < end {
-		child_idx := UI_Element_Index(idx)
+		child_idx := idx
 		child := ctx.elements[child_idx]
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
@@ -666,23 +643,18 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Element_Index)
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Position calculation (recursive, uses jump‑loop)
-// -----------------------------------------------------------------------------
-
 @(private)
-calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Element_Index = 0) {
-	ui_ele := ctx.elements[index]
-	layout, ok := ui_ele.attributes.(LayoutAttributes)
+calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+	current := ctx.elements[index]
+	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
 
-	left_offset := ui_ele.position.x + layout.config.padding.left
+	left_offset := current.position.x + layout.config.padding.left
 
-	idx := ui_ele.preorder_idx + 1
-	end := ui_ele.preorder_idx + ui_ele.subtree_size
+	idx, end := current.index + 1, current.index + current.subtree_size
 
 	for idx < end {
-		child_idx := UI_Element_Index(idx)
+		child_idx := idx
 		child := &ctx.elements[child_idx]
 		child.position.x = left_offset
 
@@ -696,18 +668,17 @@ calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Element_Index = 0) {
 }
 
 @(private)
-calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Element_Index = 0) {
-	ui_ele := ctx.elements[index]
-	layout, ok := ui_ele.attributes.(LayoutAttributes)
+calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+	current := ctx.elements[index]
+	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
 
-	top_offset := ui_ele.position.y + layout.config.padding.top
+	top_offset := current.position.y + layout.config.padding.top
 
-	idx := ui_ele.preorder_idx + 1
-	end := ui_ele.preorder_idx + ui_ele.subtree_size
+	idx, end := current.index + 1, current.index + current.subtree_size
 
 	for idx < end {
-		child_idx := UI_Element_Index(idx)
+		child_idx := idx
 		child := &ctx.elements[child_idx]
 		child.position.y = top_offset
 
@@ -720,36 +691,31 @@ calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Element_Index = 0) {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Debugging
-// -----------------------------------------------------------------------------
-
-ui_debug_draw_tree :: proc(ctx: UI_Context, index: UI_Element_Index = 0, cur_level: i32 = 1) {
-	ele := ctx.elements[index]
+ui_debug_draw_tree :: proc(ctx: UI_Context, index: UI_Index = 0, cur_level: i32 = 1) {
+	current := ctx.elements[index]
 
 	for i in 0 ..< cur_level - 1 {
 		fmt.print(" . ")
 	}
 
-	layout, ok := ele.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(LayoutAttributes)
 
 	fmt.printf(
 		"%v (%v) %vx%v (pre=%v, sub=%v)",
-		ele.id,
-		ctx.elements[ele.parent].id,
-		ele.size.x,
-		ele.size.y,
-		ele.preorder_idx,
-		ele.subtree_size,
+		current.id,
+		ctx.elements[current.parent].id,
+		current.size.x,
+		current.size.y,
+		current.index,
+		current.subtree_size,
 	)
 
 	if ok {
 		fmt.println(layout.config.layout_direction == .Left_To_Right ? " LTR" : " TTB")
 		// print direct children
-		idx := ele.preorder_idx + 1
-		end := ele.preorder_idx + ele.subtree_size
+		idx, end := current.index + 1, current.index + current.subtree_size
 		for idx < end {
-			child_idx := UI_Element_Index(idx)
+			child_idx := idx
 			ui_debug_draw_tree(ctx, child_idx, cur_level + 1)
 			idx += ctx.elements[child_idx].subtree_size
 		}
@@ -758,22 +724,19 @@ ui_debug_draw_tree :: proc(ctx: UI_Context, index: UI_Element_Index = 0, cur_lev
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Context lifecycle
-// -----------------------------------------------------------------------------
-
 ui_context_make :: proc() -> UI_Context {
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 500),
-		open_element_stack = make([dynamic]UI_Element_Index, 0, 50),
+		open_element_stack = make([dynamic]UI_Index, 0, 50),
 		render_commands = make([dynamic]Render_Command, 0, 500),
-		growable_buffer = make([dynamic]UI_Element_Index, 0, 500),
+		growable_buffer = make([dynamic]UI_Index, 0, 500),
 		default_font = viewer_load_font(
 			16,
 			0,
 			"assets/fonts/NotoSansMono-SemiBold.ttf",
 			"assets/fonts/NotoSansMono-Regular.ttf",
 		),
+		child_iter = child_iter,
 	}
 }
 
@@ -785,17 +748,13 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	viewer_unload_font(ctx.default_font)
 }
 
-// -----------------------------------------------------------------------------
-// Root and layout entry
-// -----------------------------------------------------------------------------
-
 @(deferred_in_out = end_layout)
 begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) -> bool {
 	// Create the root element at index 0
 	root := root_layout(window_width, window_height)
 	append(&ctx.elements, root)
 	// Set its preorder_idx explicitly (it's 0)
-	ctx.elements[0].preorder_idx = 0
+	ctx.elements[0].index = 0
 	append(&ctx.open_element_stack, 0)
 	return true
 }
@@ -853,10 +812,6 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 	}
 }
 
-// -----------------------------------------------------------------------------
-// Default configs and helpers
-// -----------------------------------------------------------------------------
-
 @(private)
 default_layout :: proc() -> UI_LayoutConfig {
 	return UI_LayoutConfig {
@@ -879,13 +834,9 @@ default_text :: proc(ctx: UI_Context) -> UI_TextConfig {
 	}
 }
 
-ui_get_id :: proc(ctx: UI_Context, index: UI_Element_Index) -> string {
+ui_get_id :: proc(ctx: UI_Context, index: UI_Index) -> string {
 	return ctx.elements[index].id
 }
-
-// -----------------------------------------------------------------------------
-// Parsing helpers
-// -----------------------------------------------------------------------------
 
 @(private)
 set_if_set :: proc(dest: ^$T, src: Maybe(T)) {
@@ -951,10 +902,6 @@ parse_text_declare :: proc(
 	return config, limits
 }
 
-// -----------------------------------------------------------------------------
-// Convenience constructors
-// -----------------------------------------------------------------------------
-
 grow :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
 	return {mode = Grow_Size{}, min = min, max = max}
 }
@@ -981,4 +928,15 @@ percent :: #force_inline proc(
 
 pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
+}
+
+
+@(private)
+child_iter :: proc(ctx: ^UI_Context, index: UI_Index, child_index: ^UI_Index) -> bool {
+	if child_index == nil {
+		child_index^ = ctx.elements[index].index + 1
+		return true
+	}
+	child_index^ += ctx.elements[child_index^].subtree_size
+	return child_index^ < ctx.elements[index].index + ctx.elements[index].subtree_size
 }

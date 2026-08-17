@@ -1,13 +1,25 @@
 package demo
 
 import "core:fmt"
-import "core:math"
 
 main :: proc() {
-	a: f32 = 1.0
-	b: f32 = a + (math.F32_EPSILON - 1e-7)
+	// for i := 0; some_proc(); i += 1 {
+	// 	if i >= 10 do break
+	// }
 
-	fmt.println(a == b)
-	fmt.println(a)
-	fmt.println(b)
+	some_proc()
+	some_proc()
+	some_proc()
+	some_proc()
+}
+
+
+@(deferred_none = end_some_proc)
+some_proc :: proc() -> bool {
+	fmt.println("some")
+	return true
+}
+
+end_some_proc :: proc() {
+	fmt.println("end")
 }
