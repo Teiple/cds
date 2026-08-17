@@ -1,9 +1,36 @@
 package main
 
+import fmt "core:fmt"
+import "core:math/rand"
+import mem "core:mem"
 import rl "vendor:raylib"
+
+rand_palette_img: rl.Image
 
 
 main :: proc() {
+
+	when ODIN_DEBUG {
+		track: mem.Tracking_Allocator
+		mem.tracking_allocator_init(&track, context.allocator)
+		context.allocator = mem.tracking_allocator(&track)
+
+		defer {
+			if len(track.allocation_map) > 0 {
+				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+				for _, entry in track.allocation_map {
+					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+				}
+			}
+			if len(track.bad_free_array) > 0 {
+				fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+				for entry in track.bad_free_array {
+					fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
+				}
+			}
+			mem.tracking_allocator_destroy(&track)
+		}
+	}
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(960, 540, "Unnamed")
@@ -11,45 +38,46 @@ main :: proc() {
 
 	rl.SetTargetFPS(60)
 
-	viewer_font: Viewer_Font = viewer_load_font()
-	defer viewer_unload_font(&viewer_font)
 
-	cmds := [?]Render_Command {
-		Rect_Command {
-			x = f32(rl.GetScreenWidth()) * 0.5,
-			y = f32(rl.GetScreenHeight()) * 0.5,
-			color = rl.BLUE,
-			width = 200,
-			height = 200,
-		},
-		Text_Command {
-			content = "Hello World",
-			font_size = 32,
-			spacing = 2,
-			color = rl.BLACK,
-			font = viewer_font.font,
-			position = rl.Vector2{f32(rl.GetScreenWidth()) * 0.5, f32(rl.GetScreenHeight()) * 0.5},
-		},
-	}
+	ui_ctx: UI_Context = ui_context_make()
+	defer ui_context_delete(ui_ctx)
 
-	ui_ctx := init_ui_context()
-	defer deinit_ui_context(ui_ctx)
+	rand_palette_img = rl.LoadImage("assets/images/beleko.png")
+	defer rl.UnloadImage(rand_palette_img)
 
 	for !rl.WindowShouldClose() {
-		rl.BeginDrawing()
-		rl.ClearBackground(rl.RAYWHITE)
+		rand.reset(271)
 
+		rl.BeginDrawing()
 		defer rl.EndDrawing()
 
+		rl.ClearBackground(rl.RAYWHITE)
 
-		if open_element(&ui_ctx, {width = grow(), height = fixed(320)}) {
-			if open_element(&ui_ctx, {width = fixed(20), height = grow()}) {
+		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
+			if open_layout(&ui_ctx, {id = "Tiga", width = fixed(100)}) {
+				if open_text(&ui_ctx, {id = "TigaText", content = "Shuwatch"}) {}
+			}
+			if open_layout(
+				&ui_ctx,
+				{id = "Dyna", width = fixed(400), height = fixed(300), padding = pad_all(16)},
+			) {
+				if open_layout(&ui_ctx, {id = "Gaia", width = fixed(200), height = fixed(200)}) {
 
+				}
 			}
 		}
 
-		render_commands(cmds[:])
+		render_commands(ui_ctx.render_commands[:], get_random_color)
 
+		break
 	}
 
+}
+
+get_random_color :: proc() -> rl.Color {
+	return rl.GetImageColor(
+		rand_palette_img,
+		i32(rand.float32() * f32(rand_palette_img.width)),
+		i32(rand.float32() * f32(rand_palette_img.height)),
+	)
 }

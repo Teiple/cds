@@ -3,42 +3,14 @@ package main
 
 import "core:math"
 import rl "vendor:raylib"
-import "vendor:stb/rect_pack"
-
-Render_Command :: union {
-	Rect_Command,
-	Text_Command,
-	Push_Clip_Command,
-	Pop_Clip_Command,
-}
-
-Rect_Command :: struct {
-	using rect: rl.Rectangle,
-	color:      rl.Color,
-}
-
-Text_Command :: struct {
-	content:   string,
-	color:     rl.Color,
-	font:      rl.Font,
-	font_size: f32,
-	spacing:   f32,
-	position:  rl.Vector2,
-}
 
 
-Push_Clip_Command :: struct {
-	rect: rl.Rectangle,
-}
+render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() -> rl.Color) {
 
-Pop_Clip_Command :: struct {}
-
-
-render_commands :: proc(commands: []Render_Command) {
 	for variant in commands {
 		switch command in variant {
 		case Rect_Command:
-			rl.DrawRectangleRec(command.rect, command.color)
+			rl.DrawRectangleRec(command.rect, rl.ColorAlpha(debug_color_sampler(), 0.9))
 		case Text_Command:
 			draw_text_command(command)
 		case Push_Clip_Command:
@@ -55,7 +27,7 @@ render_commands :: proc(commands: []Render_Command) {
 	}
 }
 
-
+@(private)
 draw_text_command :: proc(command: Text_Command) {
 	pen := command.position
 	font_scale := command.font_size / f32(command.font.baseSize)
@@ -69,7 +41,7 @@ draw_text_command :: proc(command: Text_Command) {
 }
 
 
-@(require_results)
+@(private, require_results)
 draw_glyph :: proc(
 	font: rl.Font,
 	glyph_index: i32,
@@ -97,6 +69,24 @@ draw_glyph :: proc(
 
 	rl.DrawTexturePro(font.texture, source, dest, {}, 0, color)
 
-	// TODO: resolving combining accents - which can have zero advance on purpose
 	return glyph.advanceX == 0 ? dest.width : f32(glyph.advanceX) * font_scale
+}
+
+measure_text :: proc(input: UI_TextConfig) -> rl.Vector2 {
+	font_scale := input.font_size / f32(input.font.baseSize)
+
+	// approximate height by base font size
+	size: rl.Vector2 = {0, f32(input.font.baseSize) * font_scale}
+
+	for character in input.content {
+		glyph_index := rl.GetGlyphIndex(input.font, character)
+		rect_width := input.font.recs[glyph_index].width * font_scale
+		advance_x := f32(input.font.glyphs[glyph_index].advanceX) * font_scale
+
+		move_x := advance_x == 0 ? rect_width : f32(advance_x)
+
+		size.x += move_x + input.spacing
+	}
+
+	return size
 }
