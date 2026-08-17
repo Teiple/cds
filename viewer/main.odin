@@ -39,7 +39,7 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 
 
-	ui_ctx: UI_Context = ui_context_make()
+	ui_ctx: UI_Context = ui_context_make(measure_text)
 	defer ui_context_delete(ui_ctx)
 
 	rand_palette_img = rl.LoadImage("assets/images/beleko.png")
@@ -54,16 +54,8 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if open_layout(&ui_ctx, {id = "Tiga", width = fixed(100)}) {
+			if open_layout(&ui_ctx, {id = "Tiga"}) {
 				if open_text(&ui_ctx, {id = "TigaText", content = "Shuwatch"}) {}
-			}
-			if open_layout(
-				&ui_ctx,
-				{id = "Dyna", width = fixed(400), height = fixed(300), padding = pad_all(16)},
-			) {
-				if open_layout(&ui_ctx, {id = "Gaia", width = fixed(200), height = fixed(200)}) {
-
-				}
 			}
 		}
 

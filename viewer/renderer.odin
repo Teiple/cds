@@ -75,8 +75,8 @@ draw_glyph :: proc(
 measure_text :: proc(input: UI_TextConfig) -> rl.Vector2 {
 	font_scale := input.font_size / f32(input.font.baseSize)
 
-	// approximate height by base font size
-	size: rl.Vector2 = {0, f32(input.font.baseSize) * font_scale}
+	// base height is base font size
+	size: rl.Vector2 = {0, input.font_size}
 
 	for character in input.content {
 		glyph_index := rl.GetGlyphIndex(input.font, character)
