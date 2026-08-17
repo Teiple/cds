@@ -68,8 +68,6 @@ main :: proc() {
 		}
 
 		render_commands(ui_ctx.render_commands[:], get_random_color)
-
-		break
 	}
 
 }
