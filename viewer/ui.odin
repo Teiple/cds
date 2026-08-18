@@ -348,8 +348,6 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	if max_size, ok := current.limits.max_width.(f32); ok {
 		current.size.x = min(current.size.x, max_size)
 	}
-
-	fmt.println("index: ", index, current.size)
 }
 
 @(private)
@@ -409,12 +407,10 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_width := content_width
 	child_count := 0
 
-	idx, end := current.index + 1, current.index + current.subtree_size
-
-	for it := child_iter_start; child in child_iter_start(&it) {
+	for it := child_iter_start(ctx, index); child in child_iter_start(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_width -= child.size.x
-			if _, ok := child_layout.config.width.(Grow_Size); ok {
+			if is_grow_layout_or_text(child^) {
 				append(&growables, child_idx)
 			}
 		}
@@ -542,7 +538,7 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_height := content_height
 	child_count := 0
 
-	for it := child_iter_start; child in child_iter_start(&it) {
+	for it := child_iter_start(); child in child_iter_start(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
 			if _, ok := child_layout.config.height.(Grow_Size); ok {
@@ -930,4 +926,16 @@ child_iter_next :: proc(it: ^ChildIter) -> (child: ^UI_Element, cond: bool) {
 	child = &it.ctx.elements[it.current]
 	it.current += child.subtree_size // jump to next sibling
 	return child, true
+}
+
+@(private)
+is_grow_layout_or_text :: proc(ele : UI_Element) -> bool{
+  switch attr in ele.attributes {
+  case TextAttributes: {
+    return true
+  }
+  case LayoutAttributes: {
+    _, ok := attr.config.width.(GrowSize)
+    return ok
+  }
 }
