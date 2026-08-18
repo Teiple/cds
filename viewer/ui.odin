@@ -538,7 +538,7 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_height := content_height
 	child_count := 0
 
-	for it := child_iter_start(); child in child_iter_start(&it) {
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
 			if _, ok := child_layout.config.height.(Grow_Size); ok {
