@@ -411,9 +411,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	idx, end := current.index + 1, current.index + current.subtree_size
 
-	for idx < end {
-		child_idx := idx
-		child := ctx.elements[child_idx]
+	for it := child_iter_start; child in child_iter_start(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_width -= child.size.x
 			if _, ok := child_layout.config.width.(Grow_Size); ok {
@@ -421,7 +419,6 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 			}
 		}
 		child_count += 1
-		idx += child.subtree_size
 	}
 
 	if child_count > 0 {
@@ -528,12 +525,8 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	// Horizontal layout: all grow children expand to fill height
 	if layout.config.layout_direction == .Left_To_Right {
-		idx := current.index + 1
-		end := current.index + current.subtree_size
-		for idx < end {
-			child_idx := idx
-			child := &ctx.elements[child_idx]
-			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
+		
+    if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 				if _, ok := child_layout.config.height.(Grow_Size); ok {
 					child.size.y = content_height
 				}
@@ -549,11 +542,7 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_height := content_height
 	child_count := 0
 
-	idx, end := current.index + 1, current.index + current.subtree_size
-
-	for idx < end {
-		child_idx := idx
-		child := ctx.elements[child_idx]
+	for it := child_iter_start; child in child_iter_start(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
 			if _, ok := child_layout.config.height.(Grow_Size); ok {
