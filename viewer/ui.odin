@@ -2,7 +2,6 @@ package main
 
 import "core:fmt"
 import "core:math"
-import "core:reflect"
 import rl "vendor:raylib"
 
 MAX_CHILD_COUNT :: 50
@@ -407,13 +406,13 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_width := content_width
 	child_count := 0
 
-	for it := child_iter_start(ctx, index); child in child_iter_start(&it) {
-		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
-			remaining_width -= child.size.x
-			if is_grow_layout_or_text(child^) {
-				append(&growables, child_idx)
-			}
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		remaining_width -= child.size.x
+
+		if is_grow_layout_or_text(child^) {
+			append(&growables, child.index)
 		}
+
 		child_count += 1
 	}
 
@@ -425,7 +424,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	growable_count := len(growables)
 
-	// ---- Grow phase ----
+
 	for remaining_width > math.F32_EPSILON && len(growables) > 0 {
 		smallest := math.inf_f32(1)
 		second_smallest := math.inf_f32(1)
@@ -466,7 +465,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	non_zero_resize(&growables, growable_count) // keep capacity
 
-	// ---- Shrink phase (if overshoot) ----
+
 	shrinkables := growables
 	overshoot_width := -remaining_width
 
@@ -521,13 +520,12 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	// Horizontal layout: all grow children expand to fill height
 	if layout.config.layout_direction == .Left_To_Right {
-		
-    if child_layout, ok := child.attributes.(LayoutAttributes); ok {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 				if _, ok := child_layout.config.height.(Grow_Size); ok {
 					child.size.y = content_height
 				}
 			}
-			idx += child.subtree_size
 		}
 		return
 	}
@@ -538,15 +536,15 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	remaining_height := content_height
 	child_count := 0
 
+
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
 			if _, ok := child_layout.config.height.(Grow_Size); ok {
-				append(&growables, child_idx)
+				append(&growables, child.index)
 			}
 		}
 		child_count += 1
-		idx += child.subtree_size
 	}
 
 	if child_count > 0 {
@@ -929,13 +927,17 @@ child_iter_next :: proc(it: ^ChildIter) -> (child: ^UI_Element, cond: bool) {
 }
 
 @(private)
-is_grow_layout_or_text :: proc(ele : UI_Element) -> bool{
-  switch attr in ele.attributes {
-  case TextAttributes: {
-    return true
-  }
-  case LayoutAttributes: {
-    _, ok := attr.config.width.(GrowSize)
-    return ok
-  }
+is_grow_layout_or_text :: proc(ele: UI_Element) -> bool {
+	switch attr in ele.attributes {
+	case TextAttributes:
+		{
+			return true
+		}
+	case LayoutAttributes:
+		{
+			_, ok := attr.config.width.(Grow_Size)
+			return ok
+		}
+	}
+	return false
 }

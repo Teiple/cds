@@ -54,7 +54,7 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if open_layout(&ui_ctx, {id = "Tiga"}) {
+			if open_layout(&ui_ctx, {id = "Tiga", width = grow()}) {
 				if open_text(&ui_ctx, {id = "TigaText", content = "Shuwatch"}) {}
 			}
 		}
