@@ -1,6 +1,7 @@
 
 package main
 
+import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
@@ -10,19 +11,27 @@ render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() 
 	for variant in commands {
 		switch command in variant {
 		case Rect_Command:
-			rl.DrawRectangleRec(command.rect, rl.ColorAlpha(debug_color_sampler(), 0.9))
-		case Text_Command:
-			draw_text_command(command)
-		case Push_Clip_Command:
-			// expanding fractional rect
-			x := i32(math.floor(command.rect.x))
-			y := i32(math.floor(command.rect.y))
-			width := max(0, i32(math.ceil(command.rect.x + command.rect.width)) - x)
-			height := max(0, i32(math.ceil(command.rect.y + command.rect.height)) - y)
+			{
+				rl.DrawRectangleRec(command.rect, rl.ColorAlpha(debug_color_sampler(), 0.9))
 
-			rl.BeginScissorMode(x, y, width, height)
+			}
+		case Text_Command:
+			{
+				draw_text_command(command)
+			}
+		case Push_Clip_Command:
+			{ 	// expanding fractional rect
+				x := i32(math.floor(command.rect.x))
+				y := i32(math.floor(command.rect.y))
+				width := max(0, i32(math.ceil(command.rect.x + command.rect.width)) - x)
+				height := max(0, i32(math.ceil(command.rect.y + command.rect.height)) - y)
+
+				rl.BeginScissorMode(x, y, width, height)
+			}
 		case Pop_Clip_Command:
-			rl.EndScissorMode()
+			{
+				rl.EndScissorMode()
+			}
 		}
 	}
 }

@@ -54,20 +54,27 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if open_layout(&ui_ctx, {id = "Tiga", width = grow()}) {
-				if open_text(&ui_ctx, {id = "TigaText", content = "Shuwatch"}) {}
+			if open_layout(&ui_ctx, {id = "A", width = grow()}) {
+				if open_text(
+					&ui_ctx,
+					{
+						id = "B",
+						content = "Neque porro quisquam est qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit...",
+					},
+				) {
+
+				}
+			}
+			if open_layout(&ui_ctx, {id = "C", width = grow()}) {
 			}
 		}
 
 		render_commands(ui_ctx.render_commands[:], get_random_color)
+
 	}
 
 }
 
 get_random_color :: proc() -> rl.Color {
-	return rl.GetImageColor(
-		rand_palette_img,
-		i32(rand.float32() * f32(rand_palette_img.width)),
-		i32(rand.float32() * f32(rand_palette_img.height)),
-	)
+	return rl.GetImageColor(rand_palette_img, i32(rand.float32() * f32(rand_palette_img.width)), 0)
 }

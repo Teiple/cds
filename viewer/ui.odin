@@ -123,6 +123,7 @@ UI_TextDeclare :: struct {
 	font:      Maybe(rl.Font),
 	font_size: Maybe(f32),
 	spacing:   Maybe(f32),
+	color:     Maybe(rl.Color),
 }
 
 UI_LayoutConfig :: struct {
@@ -140,6 +141,7 @@ UI_TextConfig :: struct {
 	font:      rl.Font,
 	font_size: f32,
 	spacing:   f32,
+	color:     rl.Color,
 }
 
 UI_ElementDeclare :: union {
@@ -240,27 +242,20 @@ close_element :: proc(ctx: ^UI_Context) {
 	// Compute subtree size: everything appended after this node is in its subtree
 	ele.subtree_size = i32(len(ctx.elements)) - ele.index
 
-	// Calculate preferred size of text element
-	calculate_text_size(ctx, index)
+	calculate_text_width(ctx, index)
+	calculate_layout_width(ctx, index)
 
-	// Run sizing calculations (they use the jump‑loop to iterate children)
-	calculate_width(ctx, index)
 	fit_sizing_widths(ctx, index)
-	grow_and_shrink_sizing_widths(ctx, index)
-
-	calculate_height(ctx, index)
-	fit_sizing_heights(ctx, index)
-	grow_and_shrink_sizing_height(ctx, index)
 }
 
 @(private)
-calculate_text_size :: proc(ctx: ^UI_Context, index: UI_Index) {
+calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	current_text, ok := current.attributes.(TextAttributes)
 	if !ok do return
 
 	preferred_size := ctx.text_measurer(current_text.config)
-	current.size = preferred_size
+	current.size.x = preferred_size.x
 
 	// Min size is approximated, should have been the shortest english word in the sentence
 	min_size := 4 * current_text.config.font_size
@@ -270,7 +265,7 @@ calculate_text_size :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 
 @(private)
-calculate_width :: proc(ctx: ^UI_Context, index: UI_Index) {
+calculate_layout_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	if layout, ok := current.attributes.(LayoutAttributes); ok {
 		if mode, ok := layout.config.width.(Fixed_Size); ok {
@@ -285,7 +280,7 @@ calculate_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 @(private)
-calculate_height :: proc(ctx: ^UI_Context, index: UI_Index) {
+calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	if layout, ok := current.attributes.(LayoutAttributes); ok {
 		if mode, ok := layout.config.height.(Fixed_Size); ok {
@@ -380,6 +375,15 @@ fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 @(private)
+fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		fit_sizing_heights_tree(ctx, child.index)
+	}
+
+	fit_sizing_heights(ctx, index)
+}
+
+@(private)
 grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
@@ -390,10 +394,8 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	// Vertical layout: all grow children expand to fill width
 	if layout.config.layout_direction == .Top_To_Bottom {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
-				if _, ok := child_layout.config.width.(Grow_Size); ok {
-					child.size.x = content_width
-				}
+			if is_grow_layout_or_text(child^) {
+				child.size.x = content_width
 			}
 		}
 		return
@@ -511,7 +513,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 // Height version – analogous
 @(private)
-grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
+grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok || current.subtree_size <= 1 do return
@@ -521,10 +523,8 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	// Horizontal layout: all grow children expand to fill height
 	if layout.config.layout_direction == .Left_To_Right {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if child_layout, ok := child.attributes.(LayoutAttributes); ok {
-				if _, ok := child_layout.config.height.(Grow_Size); ok {
-					child.size.y = content_height
-				}
+			if is_grow_layout_or_text(child^) {
+				child.size.y = content_height
 			}
 		}
 		return
@@ -540,7 +540,7 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
 			remaining_height -= child.size.y
-			if _, ok := child_layout.config.height.(Grow_Size); ok {
+			if is_grow_layout_or_text(child^) {
 				append(&growables, child.index)
 			}
 		}
@@ -637,6 +637,31 @@ grow_and_shrink_sizing_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 			}
 			i += 1
 		}
+	}
+}
+
+@(private)
+grow_and_shrink_sizing_widths_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
+	grow_and_shrink_sizing_widths(ctx, index)
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		grow_and_shrink_sizing_widths_tree(ctx, child.index)
+	}
+}
+
+@(private)
+grow_and_shrink_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
+	grow_and_shrink_sizing_heights(ctx, index)
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		grow_and_shrink_sizing_heights_tree(ctx, child.index)
+	}
+}
+
+@(private)
+wrap_texts :: proc(ctx: ^UI_Context) {
+	// temporarily incomplete
+	for &ele in ctx.elements {
+		text_attr := ele.attributes.(TextAttributes) or_continue
+		ele.size.y = ctx.text_measurer(text_attr.config).y
 	}
 }
 
@@ -743,12 +768,20 @@ begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) ->
 	return true
 }
 
+
 @(private)
 end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	if !ok do return
 
 	// Close the root – this computes sizes and subtree_size
 	close_element(ctx)
+
+	// Top down, calculate grow sizing widths
+	grow_and_shrink_sizing_widths_tree(ctx, 0)
+	wrap_texts(ctx)
+
+	fit_sizing_heights_tree(ctx, 0)
+	grow_and_shrink_sizing_heights_tree(ctx, 0)
 
 	// Compute positions
 	calculate_position_x(ctx)
@@ -757,16 +790,36 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	// Generate render commands
 	clear(&ctx.render_commands)
 	for ele in ctx.elements {
-		append(
-			&ctx.render_commands,
-			Rect_Command {
-				x = ele.position.x,
-				y = ele.position.y,
-				width = ele.size.x,
-				height = ele.size.y,
-				color = rl.BLUE,
-			},
-		)
+		switch attr in ele.attributes {
+		case LayoutAttributes:
+			{
+				append(
+					&ctx.render_commands,
+					Rect_Command {
+						x = ele.position.x,
+						y = ele.position.y,
+						width = ele.size.x,
+						height = ele.size.y,
+						color = rl.BLUE,
+					},
+				)
+			}
+		case TextAttributes:
+			{
+				append(
+					&ctx.render_commands,
+					Text_Command {
+						content = attr.config.content,
+						font_size = attr.config.font_size,
+						spacing = attr.config.spacing,
+						font = attr.config.font,
+						position = ele.position,
+						color = attr.config.color,
+					},
+				)
+			}
+		}
+
 	}
 
 	// Clean up
@@ -788,7 +841,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 				child_gap = 8,
 				width = Fixed_Size{width},
 				height = Fixed_Size{height},
-				layout_direction = .Left_To_Right,
+				layout_direction = .Top_To_Bottom,
 				padding = pad_all(16),
 				background_color = rl.BLUE,
 			},
@@ -815,6 +868,7 @@ default_text :: proc(ctx: UI_Context) -> UI_TextConfig {
 		font_size = f32(ctx.default_font.font_size),
 		font = ctx.default_font.font,
 		spacing = ctx.default_font.spacing,
+		color = rl.BLACK,
 	}
 }
 
@@ -823,7 +877,7 @@ ui_get_id :: proc(ctx: UI_Context, index: UI_Index) -> string {
 }
 
 @(private)
-set_if_set :: proc(dest: ^$T, src: Maybe(T)) {
+set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
 	if v, ok := src.(T); ok {
 		dest^ = v
 	}
@@ -877,6 +931,7 @@ parse_text_declare :: proc(
 	set_if_set(&config.font_size, declare.font_size)
 	set_if_set(&config.spacing, declare.spacing)
 	set_if_set(&config.font, declare.font)
+	set_if_set(&config.color, declare.color)
 
 	return config, UI_Limits{}
 }
