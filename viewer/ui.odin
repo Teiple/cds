@@ -808,6 +808,16 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 			{
 				append(
 					&ctx.render_commands,
+					Rect_Command {
+						x = ele.position.x,
+						y = ele.position.y,
+						width = ele.size.x,
+						height = ele.size.y,
+						color = rl.BLUE,
+					},
+				)
+				append(
+					&ctx.render_commands,
 					Text_Command {
 						content = attr.config.content,
 						font_size = attr.config.font_size,
