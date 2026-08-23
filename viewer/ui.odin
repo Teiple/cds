@@ -2,10 +2,16 @@ package main
 
 import "core:fmt"
 import "core:math"
+import "core:unicode/utf8"
 import rl "vendor:raylib"
 
 MAX_CHILD_COUNT :: 50
-EPSILON :: 1e-20
+WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
+
+Axis :: enum {
+	X,
+	Y,
+}
 
 UI_Input :: struct {
 	mouse_position:      rl.Vector2,
@@ -15,7 +21,7 @@ UI_Input :: struct {
 	scroll:              rl.Vector2,
 }
 
-UI_TextMeasurer :: proc(text: UI_TextConfig) -> rl.Vector2
+UI_TextMeasurer :: proc(text: UI_TextConfig) -> (width: f32)
 
 Render_Command :: union {
 	Rect_Command,
@@ -30,12 +36,14 @@ Rect_Command :: struct {
 }
 
 Text_Command :: struct {
-	content:   string,
-	font:      rl.Font,
-	font_size: f32,
-	spacing:   f32,
-	color:     rl.Color,
-	position:  rl.Vector2,
+	content:       string,
+	font:          rl.Font,
+	font_size:     f32,
+	spacing:       f32,
+	line_spacing:  f32,
+	color:         rl.Color,
+	position:      rl.Vector2,
+	wrapped_lines: []string,
 }
 
 Push_Clip_Command :: struct {
@@ -48,6 +56,7 @@ UI_Context :: struct {
 	elements:           [dynamic]UI_Element,
 	open_element_stack: [dynamic]UI_Index,
 	growable_buffer:    [dynamic]UI_Index,
+	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]Render_Command,
 	text_measurer:      UI_TextMeasurer,
 	default_font:       Viewer_Font,
@@ -118,12 +127,13 @@ UI_LayoutDeclare :: struct {
 }
 
 UI_TextDeclare :: struct {
-	id:        string,
-	content:   Maybe(string),
-	font:      Maybe(rl.Font),
-	font_size: Maybe(f32),
-	spacing:   Maybe(f32),
-	color:     Maybe(rl.Color),
+	id:           string,
+	content:      Maybe(string),
+	font:         Maybe(rl.Font),
+	font_size:    Maybe(f32),
+	spacing:      Maybe(f32),
+	color:        Maybe(rl.Color),
+	line_spacing: Maybe(f32),
 }
 
 UI_LayoutConfig :: struct {
@@ -137,11 +147,12 @@ UI_LayoutConfig :: struct {
 }
 
 UI_TextConfig :: struct {
-	content:   string,
-	font:      rl.Font,
-	font_size: f32,
-	spacing:   f32,
-	color:     rl.Color,
+	content:      string,
+	font:         rl.Font,
+	font_size:    f32,
+	spacing:      f32,
+	color:        rl.Color,
+	line_spacing: f32,
 }
 
 UI_ElementDeclare :: union {
@@ -163,11 +174,14 @@ UI_Element :: struct {
 	},
 }
 
+UI_AxisLimits :: struct {
+	min: Maybe(f32),
+	max: Maybe(f32),
+}
+
 UI_Limits :: struct {
-	min_width:  Maybe(f32),
-	max_width:  Maybe(f32),
-	min_height: Maybe(f32),
-	max_height: Maybe(f32),
+	x: UI_AxisLimits,
+	y: UI_AxisLimits,
 }
 
 LayoutAttributes :: struct {
@@ -176,8 +190,10 @@ LayoutAttributes :: struct {
 }
 
 TextAttributes :: struct {
-	element: UI_Index,
-	config:  UI_TextConfig,
+	element:                  UI_Index,
+	config:                   UI_TextConfig,
+	wrapped_text_lines_start: i32,
+	wrapped_text_lines_count: i32,
 }
 
 ChildIter :: struct {
@@ -186,7 +202,7 @@ ChildIter :: struct {
 	end:     UI_Index, // exclusive end of this node's subtree
 }
 
-@(deferred_in_out = close_layout)
+@(deferred_in_out = close_layout_deferred)
 open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
@@ -198,6 +214,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 		index = i32(len(ctx.elements)), // set before append
 		attributes = LayoutAttributes{config = config, element = index},
 		limits = limits,
+		// layout sets its tree size when close
 	}
 
 	append(&ctx.elements, ui_ele)
@@ -205,8 +222,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 	return true
 }
 
-@(deferred_in_out = close_text)
-open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) -> bool {
+open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
@@ -217,33 +233,26 @@ open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) -> bool {
 		index = i32(len(ctx.elements)),
 		attributes = TextAttributes{config = config, element = index},
 		limits = limits,
+		subtree_size = 1,
 	}
 
 	append(&ctx.elements, ui_ele)
-	append(&ctx.open_element_stack, index)
-	return true
+	calculate_text_width(ctx, index)
 }
 
 @(private)
-close_layout :: proc(ctx: ^UI_Context, _: UI_LayoutDeclare, ok: bool) {
-	if ok do close_element(ctx)
+close_layout_deferred :: proc(ctx: ^UI_Context, _: UI_LayoutDeclare, ok: bool) {
+	if ok do close_layout(ctx)
 }
 
-@(private)
-close_text :: proc(ctx: ^UI_Context, _: UI_TextDeclare, ok: bool) {
-	if ok do close_element(ctx)
-}
 
 @(private)
-close_element :: proc(ctx: ^UI_Context) {
+close_layout :: proc(ctx: ^UI_Context) {
 	index := pop(&ctx.open_element_stack)
 	ele := &ctx.elements[index]
 
 	// Compute subtree size: everything appended after this node is in its subtree
 	ele.subtree_size = i32(len(ctx.elements)) - ele.index
-
-	calculate_text_width(ctx, index)
-	calculate_layout_width(ctx, index)
 
 	fit_sizing_widths(ctx, index)
 }
@@ -251,33 +260,63 @@ close_element :: proc(ctx: ^UI_Context) {
 @(private)
 calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	current_text, ok := current.attributes.(TextAttributes)
+	text_attr, ok := current.attributes.(TextAttributes)
 	if !ok do return
 
-	preferred_size := ctx.text_measurer(current_text.config)
-	current.size.x = preferred_size.x
+	// prefered size
+	current.size.x = ctx.text_measurer(text_attr.config)
 
-	// Min size is approximated, should have been the shortest english word in the sentence
-	min_size := 4 * current_text.config.font_size
+	// min size is the longest english word in the sentence
+	{
+		text := text_attr.config.content
+		config := text_attr.config
+		word_start := 0
+		largest_width := f32(0)
 
-	current.size.x = clamp_element_size(current.size.x, min_size, nil)
-}
+		byte_index := 0
+		for byte_index < len(text) {
+			whitespace_start := byte_index
 
+			// Skip whitespace / find word start.
+			for byte_index < len(text) {
+				r, size := utf8.decode_rune(text[byte_index:])
+				if !is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
 
-@(private)
-calculate_layout_width :: proc(ctx: ^UI_Context, index: UI_Index) {
-	current := &ctx.elements[index]
-	if layout, ok := current.attributes.(LayoutAttributes); ok {
-		if mode, ok := layout.config.width.(Fixed_Size); ok {
-			current.size.x = mode.value
+			word_start = byte_index
+
+			// Find end of word.
+			for byte_index < len(text) {
+				r, size := utf8.decode_rune(text[byte_index:])
+				if is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
+
+			word_end := byte_index
+
+			if word_start == word_end {
+				// Only whitespace remains.
+				break
+			}
+
+			config.content = text[word_start:word_end]
+			word_width := ctx.text_measurer(config)
+			if word_width > largest_width {
+				largest_width = word_width
+			}
 		}
+
+		current.limits.x.min = largest_width
 	}
-	current.size.x = clamp_element_size(
-		current.size.x,
-		current.limits.min_width,
-		current.limits.max_width,
-	)
+
+	current.size.x = clamp_element_size(current.size.x, current.limits.x)
 }
+
 
 @(private)
 calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
@@ -287,24 +326,15 @@ calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 			current.size.y = mode.value
 		}
 	}
-	current.size.y = clamp_element_size(
-		current.size.y,
-		current.limits.min_height,
-		current.limits.max_height,
-	)
 }
 
 @(private)
-clamp_element_size :: proc(
-	current_size: f32,
-	maybe_min_size: Maybe(f32),
-	maybe_max_size: Maybe(f32),
-) -> f32 {
+clamp_element_size :: proc(current_size: f32, limits: UI_AxisLimits) -> f32 {
 	res := current_size
-	if min_size, ok := maybe_min_size.(f32); ok && res < min_size {
+	if min_size, ok := limits.min.(f32); ok && res <= min_size {
 		res = min_size
 	}
-	if max_size, ok := maybe_max_size.(f32); ok && res > max_size {
+	if max_size, ok := limits.max.(f32); ok && res >= max_size {
 		res = max_size
 	}
 	return res
@@ -316,32 +346,49 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
 
-	if _, ok := layout.config.width.(Fixed_Size); ok do return
+
+	if fixed_size, ok := layout.config.width.(Fixed_Size); ok {
+		current.limits.x.min = fixed_size.value
+		current.limits.x.max = fixed_size.value
+		current.size.x = fixed_size.value
+		return
+	}
 
 	padding := layout.config.padding.left + layout.config.padding.right
-	current.size.x += padding
+	children_min_size := f32(0)
+	child_gap := f32(0)
 
 	if layout.config.layout_direction == .Left_To_Right {
 		// Jump‑loop over direct children
 		child_count := 0
 		// Sum widths of children + gaps
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			children_min_size += child.limits.x.min.? or_else 0
+
 			current.size.x += child.size.x
 			child_count += 1
 		}
 		if child_count > 0 {
-			current.size.x += f32(child_count - 1) * layout.config.child_gap
+			child_gap = f32(child_count - 1) * layout.config.child_gap
+			current.size.x += child_gap
+			children_min_size += child_gap
 		}
 	} else {
 		// Max width among children
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			children_min_size = max(children_min_size, child.limits.x.min.? or_else 0)
+
 			current.size.x = max(current.size.x, child.size.x + padding)
 		}
 	}
 
-	if max_size, ok := current.limits.max_width.(f32); ok {
-		current.size.x = min(current.size.x, max_size)
+	if children_min_size > (current.limits.x.min.? or_else 0) {
+		current.limits.x.min = children_min_size + padding
+	} else {
+		current.size.x += padding
 	}
+
+	current.size.x = clamp_element_size(current.size.x, current.limits.x)
 }
 
 @(private)
@@ -350,28 +397,49 @@ fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	layout, ok := current.attributes.(LayoutAttributes)
 	if !ok do return
 
-	if _, ok := layout.config.height.(Fixed_Size); ok do return
+	if fixed_size, ok := layout.config.height.(Fixed_Size); ok {
+		current.limits.y.min = fixed_size.value
+		current.limits.y.max = fixed_size.value
+		current.size.y = fixed_size.value
+		return
+	}
 
+
+	padding := layout.config.padding.top + layout.config.padding.bottom
+	children_min_size := f32(0)
+	child_gap := f32(0)
 
 	if layout.config.layout_direction == .Top_To_Bottom {
+		// Jump‑loop over direct children
 		child_count := 0
+		// Sum heights of children + gaps
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			children_min_size += child.limits.y.min.? or_else 0
+
 			current.size.y += child.size.y
 			child_count += 1
 		}
 		if child_count > 0 {
-			current.size.y += f32(child_count - 1) * layout.config.child_gap
+			child_gap = f32(child_count - 1) * layout.config.child_gap
+			current.size.y += child_gap
+			children_min_size += child_gap
 		}
 	} else {
-		padding := layout.config.padding.top + layout.config.padding.bottom
+		// Max height among children
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			children_min_size = max(children_min_size, child.limits.y.min.? or_else 0)
+
 			current.size.y = max(current.size.y, child.size.y + padding)
 		}
 	}
 
-	if max_size, ok := current.limits.max_height.(f32); ok {
-		current.size.y = min(current.size.y, max_size)
+	if children_min_size > (current.limits.y.min.? or_else 0) {
+		current.limits.y.min = children_min_size + padding
+	} else {
+		current.size.y += padding
 	}
+
+	current.size.y = clamp_element_size(current.size.y, current.limits.y)
 }
 
 @(private)
@@ -394,8 +462,8 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	// Vertical layout: all grow children expand to fill width
 	if layout.config.layout_direction == .Top_To_Bottom {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if is_grow_layout_or_text(child^) {
-				child.size.x = content_width
+			if is_grow_layout_or_text(child^, .X) {
+				child.size.x = clamp_element_size(content_width, child.limits.x)
 			}
 		}
 		return
@@ -404,6 +472,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	// Horizontal layout: distribute remaining space among grow children
 	growables := ctx.growable_buffer
 	clear(&growables)
+	defer clear(&growables)
 
 	remaining_width := content_width
 	child_count := 0
@@ -411,7 +480,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		remaining_width -= child.size.x
 
-		if is_grow_layout_or_text(child^) {
+		if is_grow_layout_or_text(child^, .X) {
 			append(&growables, child.index)
 		}
 
@@ -428,22 +497,27 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 
 	for remaining_width > math.F32_EPSILON && len(growables) > 0 {
-		smallest := math.inf_f32(1)
-		second_smallest := math.inf_f32(1)
+		smallest := ctx.elements[growables[0]].size.x
+		second_smallest := ctx.elements[growables[0]].size.x
 		width_to_add := remaining_width
 
-		for child in growables {
-			child_ele := ctx.elements[child]
+		for growable_index in 1 ..< len(growables) {
+			child_ele := ctx.elements[growables[growable_index]]
 			if child_ele.size.x < smallest {
 				second_smallest = smallest
 				smallest = child_ele.size.x
-			}
-			if child_ele.size.x > second_smallest {
+			} else if child_ele.size.x < second_smallest {
 				second_smallest = min(second_smallest, child_ele.size.x)
 				width_to_add = second_smallest - smallest
 			}
 		}
-		width_to_add = min(width_to_add, remaining_width / f32(len(growables)))
+
+		if width_to_add == 0 {
+			// all childs already equally expanded from the start
+			width_to_add = remaining_width / f32(len(growables))
+		} else {
+			width_to_add = min(width_to_add, remaining_width / f32(len(growables)))
+		}
 
 		for i := 0; i < len(growables); {
 			growable := growables[i]
@@ -452,7 +526,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := growable_ele.size.x
 				growable_ele.size.x += width_to_add
 
-				if max_size, ok := growable_ele.limits.max_width.(f32);
+				if max_size, ok := growable_ele.limits.x.max.(f32);
 				   ok && growable_ele.size.x >= max_size {
 					growable_ele.size.x = max_size
 					remaining_width -= max_size - prev_size
@@ -472,22 +546,26 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	overshoot_width := -remaining_width
 
 	for overshoot_width > math.F32_EPSILON && len(shrinkables) > 0 {
-		largest := math.inf_f32(-1)
-		second_largest := math.inf_f32(-1)
+		largest := ctx.elements[shrinkables[0]].size.x
+		second_largest := ctx.elements[shrinkables[0]].size.x
 		width_to_subtract := overshoot_width
 
-		for child in shrinkables {
-			child_ele := ctx.elements[child]
+		for shrinkable_index in 1 ..< len(shrinkables) {
+			child_ele := ctx.elements[shrinkables[shrinkable_index]]
 			if child_ele.size.x > largest {
 				second_largest = largest
 				largest = child_ele.size.x
-			}
-			if child_ele.size.x > second_largest {
+			} else if child_ele.size.x > second_largest {
 				second_largest = max(second_largest, child_ele.size.x)
 				width_to_subtract = largest - second_largest
 			}
 		}
-		width_to_subtract = max(width_to_subtract, overshoot_width / f32(len(shrinkables)))
+
+		if width_to_subtract == 0 {
+			width_to_subtract = remaining_width / f32(len(growables))
+		} else {
+			width_to_subtract = max(width_to_subtract, overshoot_width / f32(len(shrinkables)))
+		}
 
 		for i := 0; i < len(shrinkables); {
 			shrinkable := shrinkables[i]
@@ -496,7 +574,8 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := shrinkable_ele.size.x
 				shrinkable_ele.size.x -= width_to_subtract
 
-				min_size := shrinkable_ele.limits.min_width.(f32) or_else 0
+				min_size := shrinkable_ele.limits.x.min.(f32) or_else 0
+
 				if shrinkable_ele.size.x <= min_size {
 					shrinkable_ele.size.x = min_size
 					overshoot_width -= prev_size - min_size
@@ -523,8 +602,8 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	// Horizontal layout: all grow children expand to fill height
 	if layout.config.layout_direction == .Left_To_Right {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if is_grow_layout_or_text(child^) {
-				child.size.y = content_height
+			if is_grow_layout_or_text(child^, .Y) {
+				child.size.y = clamp_element_size(content_height, child.limits.y)
 			}
 		}
 		return
@@ -532,18 +611,19 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	growables := ctx.growable_buffer
 	clear(&growables)
+	defer clear(&growables)
 
 	remaining_height := content_height
 	child_count := 0
 
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		if child_layout, ok := child.attributes.(LayoutAttributes); ok {
-			remaining_height -= child.size.y
-			if is_grow_layout_or_text(child^) {
-				append(&growables, child.index)
-			}
+		remaining_height -= child.size.y
+
+		if is_grow_layout_or_text(child^, .Y) {
+			append(&growables, child.index)
 		}
+
 		child_count += 1
 	}
 
@@ -557,22 +637,26 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 	// Grow
 	for remaining_height > math.F32_EPSILON && len(growables) > 0 {
-		smallest := math.inf_f32(1)
-		second_smallest := math.inf_f32(1)
+		smallest := ctx.elements[growables[0]].size.y
+		second_smallest := ctx.elements[growables[0]].size.y
 		height_to_add := remaining_height
 
-		for child in growables {
-			child_ele := ctx.elements[child]
+		for growable_index in 1 ..< len(growables) {
+			child_ele := ctx.elements[growables[growable_index]]
 			if child_ele.size.y < smallest {
 				second_smallest = smallest
 				smallest = child_ele.size.y
-			}
-			if child_ele.size.y > second_smallest {
+			} else if child_ele.size.y < second_smallest {
 				second_smallest = min(second_smallest, child_ele.size.y)
 				height_to_add = second_smallest - smallest
 			}
 		}
-		height_to_add = min(height_to_add, remaining_height / f32(len(growables)))
+
+		if height_to_add == 0 {
+			height_to_add = remaining_height / f32(len(growables))
+		} else {
+			height_to_add = min(height_to_add, remaining_height / f32(len(growables)))
+		}
 
 		for i := 0; i < len(growables); {
 			growable := growables[i]
@@ -581,7 +665,7 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := growable_ele.size.y
 				growable_ele.size.y += height_to_add
 
-				if max_size, ok := growable_ele.limits.max_height.(f32);
+				if max_size, ok := growable_ele.limits.y.max.(f32);
 				   ok && growable_ele.size.y >= max_size {
 					growable_ele.size.y = max_size
 					remaining_height -= max_size - prev_size
@@ -601,12 +685,12 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	overshoot_height := -remaining_height
 
 	for overshoot_height > math.F32_EPSILON && len(shrinkables) > 0 {
-		largest := math.inf_f32(-1)
-		second_largest := math.inf_f32(-1)
+		largest := ctx.elements[shrinkables[0]].size.y
+		second_largest := ctx.elements[shrinkables[0]].size.y
 		height_to_subtract := overshoot_height
 
-		for child in shrinkables {
-			child_ele := ctx.elements[child]
+		for shrinkable_index in 1 ..< len(shrinkables) {
+			child_ele := ctx.elements[shrinkables[shrinkable_index]]
 			if child_ele.size.y > largest {
 				second_largest = largest
 				largest = child_ele.size.y
@@ -616,7 +700,12 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 				height_to_subtract = largest - second_largest
 			}
 		}
-		height_to_subtract = max(height_to_subtract, overshoot_height / f32(len(shrinkables)))
+
+		if height_to_subtract == 0 {
+			height_to_subtract = overshoot_height / f32(len(shrinkables))
+		} else {
+			height_to_subtract = max(height_to_subtract, overshoot_height / f32(len(shrinkables)))
+		}
 
 		for i := 0; i < len(shrinkables); {
 			shrinkable := shrinkables[i]
@@ -625,7 +714,7 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := shrinkable_ele.size.y
 				shrinkable_ele.size.y -= height_to_subtract
 
-				min_size := shrinkable_ele.limits.min_height.(f32) or_else 0
+				min_size := shrinkable_ele.limits.y.min.(f32) or_else 0
 				if shrinkable_ele.size.y <= min_size {
 					shrinkable_ele.size.y = min_size
 					overshoot_height -= prev_size - min_size
@@ -657,11 +746,99 @@ grow_and_shrink_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 @(private)
+is_separator :: #force_inline proc(r: rune) -> bool {
+	for sep in WORD_SEPARATION_CHARS {
+		if r == sep {
+			return true
+		}
+	}
+	return false
+}
+
+@(private)
 wrap_texts :: proc(ctx: ^UI_Context) {
-	// temporarily incomplete
 	for &ele in ctx.elements {
-		text_attr := ele.attributes.(TextAttributes) or_continue
-		ele.size.y = ctx.text_measurer(text_attr.config).y
+		text_attr := (&ele.attributes.(TextAttributes)) or_continue
+
+		text := text_attr.config.content
+		config := text_attr.config
+
+		line_start := 0
+		line_width := f32(0)
+
+		wrapped_start := len(ctx.wrapped_text_lines)
+		wrapped_count := 0
+
+		defer {
+			text_attr.wrapped_text_lines_start = i32(wrapped_start)
+			text_attr.wrapped_text_lines_count = i32(wrapped_count)
+
+			if wrapped_count > 0 {
+				ele.size.y =
+					config.font_size * f32(wrapped_count) +
+					f32(wrapped_count - 1) * config.line_spacing
+			} else {
+				ele.size.y = config.font_size
+			}
+			ele.limits.y.min = ele.size.y
+		}
+
+		byte_index := 0
+
+		for byte_index < len(text) {
+			whitespace_start := byte_index
+
+			// Skip whitespace / find word start.
+			for byte_index < len(text) {
+				r, size := utf8.decode_rune(text[byte_index:])
+				if !is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
+
+			word_start := byte_index
+
+			// Find end of word.
+			for byte_index < len(text) {
+				r, size := utf8.decode_rune(text[byte_index:])
+				if is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
+
+			word_end := byte_index
+
+			if word_start == word_end {
+				// Only whitespace remains.
+				break
+			}
+
+
+			config.content = text[whitespace_start:word_start]
+			whitespace_width := ctx.text_measurer(config)
+
+			config.content = text[word_start:word_end]
+			word_width := ctx.text_measurer(config)
+
+			candidate_width := whitespace_width + word_width
+
+			if line_width > 0 && line_width + candidate_width > ele.size.x {
+				append(&ctx.wrapped_text_lines, text[line_start:whitespace_start])
+				wrapped_count += 1
+
+				line_start = word_start
+				line_width = word_width
+			} else {
+				line_width += candidate_width
+			}
+		}
+
+		if wrapped_count > 0 {
+			append(&ctx.wrapped_text_lines, text[line_start:])
+			wrapped_count += 1
+		}
 	}
 }
 
@@ -740,12 +917,13 @@ ui_context_make :: proc(text_measurer: UI_TextMeasurer) -> UI_Context {
 		render_commands = make([dynamic]Render_Command, 0, 500),
 		growable_buffer = make([dynamic]UI_Index, 0, 500),
 		default_font = viewer_load_font(
-			16,
+			12,
 			0,
 			"assets/fonts/NotoSansMono-SemiBold.ttf",
 			"assets/fonts/NotoSansMono-Regular.ttf",
 		),
 		text_measurer = text_measurer,
+		wrapped_text_lines = make([dynamic]string, 0, 500),
 	}
 }
 
@@ -754,17 +932,26 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.open_element_stack)
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
+	delete(ctx.wrapped_text_lines)
 	viewer_unload_font(ctx.default_font)
 }
 
 @(deferred_in_out = end_layout)
 begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) -> bool {
+	clear(&ctx.elements)
+	clear(&ctx.open_element_stack)
+
 	// Create the root element at index 0
-	root := root_layout(window_width, window_height)
-	append(&ctx.elements, root)
+	append(&ctx.elements, root_layout(window_width, window_height))
+
 	// Set its preorder_idx explicitly (it's 0)
 	ctx.elements[0].index = 0
 	append(&ctx.open_element_stack, 0)
+
+	clear(&ctx.render_commands)
+	clear(&ctx.growable_buffer)
+	clear(&ctx.wrapped_text_lines)
+
 	return true
 }
 
@@ -774,7 +961,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	if !ok do return
 
 	// Close the root – this computes sizes and subtree_size
-	close_element(ctx)
+	close_layout(ctx)
 
 	// Top down, calculate grow sizing widths
 	grow_and_shrink_sizing_widths_tree(ctx, 0)
@@ -782,6 +969,8 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 
 	fit_sizing_heights_tree(ctx, 0)
 	grow_and_shrink_sizing_heights_tree(ctx, 0)
+
+	// ui_debug_draw_tree(ctx,)
 
 	// Compute positions
 	calculate_position_x(ctx)
@@ -806,6 +995,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 			}
 		case TextAttributes:
 			{
+				// debug rect
 				append(
 					&ctx.render_commands,
 					Rect_Command {
@@ -822,8 +1012,10 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 						content = attr.config.content,
 						font_size = attr.config.font_size,
 						spacing = attr.config.spacing,
+						line_spacing = attr.config.line_spacing,
 						font = attr.config.font,
 						position = ele.position,
+						wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
 						color = attr.config.color,
 					},
 				)
@@ -878,6 +1070,7 @@ default_text :: proc(ctx: UI_Context) -> UI_TextConfig {
 		font_size = f32(ctx.default_font.font_size),
 		font = ctx.default_font.font,
 		spacing = ctx.default_font.spacing,
+		line_spacing = 4,
 		color = rl.BLACK,
 	}
 }
@@ -911,10 +1104,8 @@ parse_layout_declare :: proc(
 	config.height = height.mode
 
 	limits := UI_Limits {
-		min_width  = width.min,
-		max_width  = width.max,
-		min_height = height.min,
-		max_height = height.max,
+		x = {min = width.min, max = width.max},
+		y = {min = height.min, max = height.max},
 	}
 
 	set_if_set(&config.padding, declare.padding)
@@ -942,6 +1133,7 @@ parse_text_declare :: proc(
 	set_if_set(&config.spacing, declare.spacing)
 	set_if_set(&config.font, declare.font)
 	set_if_set(&config.color, declare.color)
+	set_if_set(&config.line_spacing, declare.line_spacing)
 
 	return config, UI_Limits{}
 }
@@ -992,7 +1184,7 @@ child_iter_next :: proc(it: ^ChildIter) -> (child: ^UI_Element, cond: bool) {
 }
 
 @(private)
-is_grow_layout_or_text :: proc(ele: UI_Element) -> bool {
+is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
 	case TextAttributes:
 		{
@@ -1000,8 +1192,13 @@ is_grow_layout_or_text :: proc(ele: UI_Element) -> bool {
 		}
 	case LayoutAttributes:
 		{
-			_, ok := attr.config.width.(Grow_Size)
-			return ok
+			if axis == .X {
+				_, ok := attr.config.width.(Grow_Size)
+				return ok
+			} else {
+				_, ok := attr.config.height.(Grow_Size)
+				return ok
+			}
 		}
 	}
 	return false

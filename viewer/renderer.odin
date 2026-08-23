@@ -1,7 +1,6 @@
 
 package main
 
-import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
@@ -38,14 +37,34 @@ render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() 
 
 @(private)
 draw_text_command :: proc(command: Text_Command) {
+	draw_line :: proc(
+		pen: ^rl.Vector2,
+		text: string,
+		font: rl.Font,
+		font_scale: f32,
+		color: rl.Color,
+		spacing: f32,
+	) {
+		for character in text {
+			glyph_index := rl.GetGlyphIndex(font, character)
+
+			advance_x := draw_glyph(font, glyph_index, pen^, font_scale, color)
+			pen.x += advance_x + spacing
+		}
+	}
+
 	pen := command.position
 	font_scale := command.font_size / f32(command.font.baseSize)
 
-	for character in command.content {
-		glyph_index := rl.GetGlyphIndex(command.font, character)
+	if len(command.wrapped_lines) == 0 {
+		draw_line(&pen, command.content, command.font, font_scale, command.color, command.spacing)
+	} else {
+		for line in command.wrapped_lines {
+			draw_line(&pen, line, command.font, font_scale, command.color, command.spacing)
 
-		advance_x := draw_glyph(command.font, glyph_index, pen, font_scale, command.color)
-		pen.x += advance_x + command.spacing
+			pen.x = command.position.x
+			pen.y += command.font_size + command.line_spacing
+		}
 	}
 }
 
@@ -81,21 +100,31 @@ draw_glyph :: proc(
 	return glyph.advanceX == 0 ? dest.width : f32(glyph.advanceX) * font_scale
 }
 
-measure_text :: proc(input: UI_TextConfig) -> rl.Vector2 {
+measure_text :: proc(input: UI_TextConfig) -> (width: f32) {
 	font_scale := input.font_size / f32(input.font.baseSize)
 
-	// base height is base font size
-	size: rl.Vector2 = {0, input.font_size}
+	width = 0
 
-	for character in input.content {
-		glyph_index := rl.GetGlyphIndex(input.font, character)
+	// nic barker's hot path optimization
+
+	for character in input.content do if character & 0xc0 != 0x80 {
+
+		character_int := min(i32(character), 127)
+
+		if character_int == '\n' {
+			continue
+		}
+
+		// raylib only stores printable glyphs, for ascii the range is 32..126
+		glyph_index := character_int - 32
+
 		rect_width := input.font.recs[glyph_index].width * font_scale
 		advance_x := f32(input.font.glyphs[glyph_index].advanceX) * font_scale
 
 		move_x := advance_x == 0 ? rect_width : f32(advance_x)
 
-		size.x += move_x + input.spacing
+		width += move_x + input.spacing
 	}
 
-	return size
+	return width
 }
