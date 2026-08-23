@@ -1,5 +1,6 @@
 package main
 
+import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:unicode/utf8"
@@ -7,6 +8,9 @@ import rl "vendor:raylib"
 
 MAX_CHILD_COUNT :: 50
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
+
+@(private)
+current_context: ^UI_Context
 
 Axis :: enum {
 	X,
@@ -96,18 +100,20 @@ Layout_Padding :: struct {
 	left:   f32,
 }
 
-Child_Alignment :: struct {
-	x: Child_Alignment_X,
-	y: Child_Alignment_Y,
+
+Alignment :: struct {
+	x: Alignment_X,
+	y: Alignment_Y,
 }
 
-Child_Alignment_X :: enum {
+
+Alignment_X :: enum {
 	Left,
 	Center,
 	Right,
 }
 
-Child_Alignment_Y :: enum {
+Alignment_Y :: enum {
 	Top,
 	Center,
 	Bottom,
@@ -122,7 +128,7 @@ UI_LayoutDeclare :: struct {
 	padding:          Maybe(Layout_Padding),
 	child_gap:        Maybe(f32),
 	layout_direction: Maybe(Layout_Direction),
-	child_alignment:  Maybe(Child_Alignment),
+	child_alignment:  Maybe(Alignment),
 	background_color: Maybe(rl.Color),
 }
 
@@ -134,6 +140,7 @@ UI_TextDeclare :: struct {
 	spacing:      Maybe(f32),
 	color:        Maybe(rl.Color),
 	line_spacing: Maybe(f32),
+	alignment:    Maybe(Alignment),
 }
 
 UI_LayoutConfig :: struct {
@@ -142,7 +149,7 @@ UI_LayoutConfig :: struct {
 	padding:          Layout_Padding,
 	child_gap:        f32,
 	layout_direction: Layout_Direction,
-	child_alignment:  Child_Alignment,
+	child_alignment:  Alignment,
 	background_color: rl.Color,
 }
 
@@ -153,6 +160,7 @@ UI_TextConfig :: struct {
 	spacing:      f32,
 	color:        rl.Color,
 	line_spacing: f32,
+	alignment:    Alignment,
 }
 
 UI_ElementDeclare :: union {
@@ -192,6 +200,7 @@ LayoutAttributes :: struct {
 TextAttributes :: struct {
 	element:                  UI_Index,
 	config:                   UI_TextConfig,
+	preferred_size:           rl.Vector2,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
@@ -202,7 +211,7 @@ ChildIter :: struct {
 	end:     UI_Index, // exclusive end of this node's subtree
 }
 
-@(deferred_in_out = close_layout_deferred)
+@(private)
 open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
@@ -222,6 +231,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 	return true
 }
 
+@(private)
 open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
@@ -240,11 +250,6 @@ open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) {
 	calculate_text_width(ctx, index)
 }
 
-@(private)
-close_layout_deferred :: proc(ctx: ^UI_Context, _: UI_LayoutDeclare, ok: bool) {
-	if ok do close_layout(ctx)
-}
-
 
 @(private)
 close_layout :: proc(ctx: ^UI_Context) {
@@ -260,18 +265,21 @@ close_layout :: proc(ctx: ^UI_Context) {
 @(private)
 calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	text_attr, ok := current.attributes.(TextAttributes)
+	text_attr, ok := &current.attributes.(TextAttributes)
 	if !ok do return
 
 	// prefered size
-	current.size.x = ctx.text_measurer(text_attr.config)
+	text_attr.preferred_size.x = ctx.text_measurer(text_attr.config)
+	text_attr.preferred_size.y = text_attr.config.font_size
+
+	current.size.x = text_attr.preferred_size.x
 
 	// min size is the longest english word in the sentence
 	{
 		text := text_attr.config.content
 		config := text_attr.config
 		word_start := 0
-		largest_width := f32(0)
+		largest_word_width := f32(0)
 
 		byte_index := 0
 		for byte_index < len(text) {
@@ -306,12 +314,12 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			config.content = text[word_start:word_end]
 			word_width := ctx.text_measurer(config)
-			if word_width > largest_width {
-				largest_width = word_width
+			if word_width > largest_word_width {
+				largest_word_width = word_width
 			}
 		}
 
-		current.limits.x.min = largest_width
+		current.limits.x.min = largest_word_width
 	}
 
 	current.size.x = clamp_element_size(current.size.x, current.limits.x)
@@ -844,16 +852,72 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 @(private)
 calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
-	current := ctx.elements[index]
+	current := &ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
-	if !ok do return
+	if !ok {
+		text_attr, ok := current.attributes.(TextAttributes)
+		assert(ok)
+
+		if current.size.x > text_attr.preferred_size.x {
+			remaining_width := current.size.x - text_attr.preferred_size.x
+
+			switch text_attr.config.alignment.x {
+			case .Left:
+				break
+			case .Center:
+				current.position.x += remaining_width * 0.5
+			case .Right:
+				current.position.x += remaining_width
+			}
+		}
+
+		return
+	}
 
 	left_offset := current.position.x + layout.config.padding.left
+
+	if layout.config.layout_direction == .Left_To_Right {
+		// Find the remaining width
+		remaining_width :=
+			current.size.x - layout.config.padding.left - layout.config.padding.right
+		child_count := 0
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			remaining_width -= child.size.x
+			child_count += 1
+		}
+		remaining_width -= f32(child_count - 1) * layout.config.child_gap
+
+
+		switch layout.config.child_alignment.x {
+		case .Left:
+			break
+		case .Center:
+			left_offset += remaining_width * 0.5
+		case .Right:
+			left_offset += remaining_width
+		}
+	}
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		child.position.x = left_offset
 
-		if layout.config.layout_direction == .Left_To_Right {
+		if layout.config.layout_direction == .Top_To_Bottom {
+			// Find the remaining height
+			remaining_width :=
+				current.size.x -
+				layout.config.padding.left -
+				layout.config.padding.right -
+				child.size.x
+
+			switch layout.config.child_alignment.x {
+			case .Left:
+				break
+			case .Center:
+				child.position.x += remaining_width * 0.5
+			case .Right:
+				child.position.x += remaining_width
+			}
+		} else {
 			left_offset += child.size.x + layout.config.child_gap
 		}
 
@@ -863,16 +927,70 @@ calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 @(private)
 calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
-	current := ctx.elements[index]
+	current := &ctx.elements[index]
 	layout, ok := current.attributes.(LayoutAttributes)
-	if !ok do return
+	if !ok {
+		text_attr, ok := current.attributes.(TextAttributes)
+
+		if current.size.y > text_attr.preferred_size.y {
+			remaining_height := current.size.y - text_attr.preferred_size.y
+
+			switch text_attr.config.alignment.y {
+			case .Top:
+				break
+			case .Center:
+				current.position.y += remaining_height * 0.5
+			case .Bottom:
+				current.position.y += remaining_height
+			}
+		}
+
+		return
+	}
 
 	top_offset := current.position.y + layout.config.padding.top
+
+	if layout.config.layout_direction == .Top_To_Bottom {
+		// Find the remaining width
+		remaining_height :=
+			current.size.y - layout.config.padding.top - layout.config.padding.bottom
+		child_count := 0
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			remaining_height -= child.size.y
+			child_count += 1
+		}
+		remaining_height -= f32(child_count - 1) * layout.config.child_gap
+
+		switch layout.config.child_alignment.y {
+		case .Top:
+			break
+		case .Center:
+			top_offset += remaining_height * 0.5
+		case .Bottom:
+			top_offset += remaining_height
+		}
+	}
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		child.position.y = top_offset
 
-		if layout.config.layout_direction == .Top_To_Bottom {
+		if layout.config.layout_direction == .Left_To_Right {
+			// Find the remaining height
+			remaining_height :=
+				current.size.y -
+				layout.config.padding.top -
+				layout.config.padding.bottom -
+				child.size.y
+
+			switch layout.config.child_alignment.y {
+			case .Top:
+				break
+			case .Center:
+				child.position.y += remaining_height * 0.5
+			case .Bottom:
+				child.position.y += remaining_height
+			}
+		} else {
 			top_offset += child.size.y + layout.config.child_gap
 		}
 
@@ -938,6 +1056,8 @@ ui_context_delete :: proc(ctx: UI_Context) {
 
 @(deferred_in_out = end_layout)
 begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) -> bool {
+	current_context = ctx
+
 	clear(&ctx.elements)
 	clear(&ctx.open_element_stack)
 
@@ -1072,6 +1192,7 @@ default_text :: proc(ctx: UI_Context) -> UI_TextConfig {
 		spacing = ctx.default_font.spacing,
 		line_spacing = 4,
 		color = rl.BLACK,
+		alignment = {.Left, .Top},
 	}
 }
 
@@ -1134,6 +1255,7 @@ parse_text_declare :: proc(
 	set_if_set(&config.font, declare.font)
 	set_if_set(&config.color, declare.color)
 	set_if_set(&config.line_spacing, declare.line_spacing)
+	set_if_set(&config.alignment, declare.alignment)
 
 	return config, UI_Limits{}
 }
@@ -1164,6 +1286,14 @@ percent :: #force_inline proc(
 
 pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
+}
+
+pad :: #force_inline proc(value: Layout_Padding) -> Layout_Padding {
+	return value
+}
+
+align :: #force_inline proc(value: Alignment) -> Alignment {
+	return value
 }
 
 
@@ -1202,4 +1332,18 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 		}
 	}
 	return false
+}
+
+@(deferred_none = close_layout_deffered)
+layout :: proc(declare: UI_LayoutDeclare) -> bool {
+	return open_layout(current_context, declare)
+}
+
+@(private)
+close_layout_deffered :: proc() {
+	close_layout(current_context)
+}
+
+text_config :: proc(declare: UI_TextDeclare) {
+	open_text(current_context, declare)
 }
