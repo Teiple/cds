@@ -3,6 +3,7 @@ package main
 import fmt "core:fmt"
 import "core:math/rand"
 import mem "core:mem"
+import ui "ui"
 import rl "vendor:raylib"
 
 rand_palette_img: rl.Image
@@ -39,11 +40,18 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 
 
-	ui_ctx: UI_Context = ui_context_make(measure_text)
-	defer ui_context_delete(ui_ctx)
+	ui_ctx: ui.UI_Context = ui.context_make(
+		ui.measure_text,
+		{{base_size = 24, font_path = "assets/fonts/NotoSans-Regular.ttf", spacing = 0}},
+		"shaders/sdf.fs",
+	)
+
+	defer ui.context_delete(ui_ctx)
 
 	rand_palette_img = rl.LoadImage("assets/images/beleko.png")
+
 	defer rl.UnloadImage(rand_palette_img)
+
 
 	for !rl.WindowShouldClose() {
 		rand.reset(0)
@@ -54,37 +62,38 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 
-		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if layout(
+		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
+
+			if ui.layout(
 				{
-					width = grow(),
-					height = grow(),
-					padding = pad_all(16),
+					width = ui.grow(),
+					height = ui.grow(),
+					padding = ui.pad_all(16),
 					child_gap = 12,
 					layout_direction = .Top_To_Bottom,
-					border = border({thickness = 2}),
+					border = ui.border({thickness = 2}),
 				},
 			) {
-				text_config(
-					{content = "Profile", font_size = 22, alignment = align({x = .Center})},
-				)
+				ui.text({content = "Profile", alignment = ui.align({x = .Center})})
 
-				layout(
+				ui.layout(
 					{
-						width = grow(),
-						height = fixed(48),
-						padding = pad_all(8),
+						width = ui.grow(),
+						height = ui.fixed(48),
+						padding = ui.pad_all(8),
 						child_gap = 12,
 						layout_direction = .Left_To_Right,
 					},
 				)
 
-				text_config({content = "Status: Online"})
-				text_config({content = "Details"})
+
+				ui.text({content = "Details"})
+				ui.text({content = "Status: Online"})
 			}
 		}
 
-		render_commands(ui_ctx.render_commands[:], get_random_color)
+
+		ui.render_commands(ui_ctx.render_commands[:], get_random_color)
 	}
 
 

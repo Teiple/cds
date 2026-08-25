@@ -1,5 +1,5 @@
 
-package main
+package ui
 
 import "core:math"
 import rl "vendor:raylib"
@@ -40,14 +40,7 @@ render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() 
 
 @(private)
 draw_text_command :: proc(command: Text_Command) {
-	draw_line :: proc(
-		pen: ^rl.Vector2,
-		text: string,
-		font: rl.Font,
-		font_scale: f32,
-		color: rl.Color,
-		spacing: f32,
-	) {
+	draw_line :: proc(pen: ^rl.Vector2, text: string, font: rl.Font, font_scale: f32, color: rl.Color, spacing: f32) {
 		for character in text {
 			glyph_index := rl.GetGlyphIndex(font, character)
 
@@ -58,6 +51,9 @@ draw_text_command :: proc(command: Text_Command) {
 
 	pen := command.position
 	font_scale := command.font_size / f32(command.font.baseSize)
+
+	rl.BeginShaderMode(command.shader)
+	defer rl.EndShaderMode()
 
 	if len(command.wrapped_lines) == 0 {
 		draw_line(&pen, command.content, command.font, font_scale, command.color, command.spacing)
@@ -78,12 +74,7 @@ draw_rect_command :: proc(command: Rect_Command, debug_color_sampler: proc() -> 
 
 @(private)
 draw_border_command :: proc(command: Border_Command, debug_color_sampler: proc() -> rl.Color) {
-	draw_rounded_border(
-		command.rect,
-		command.border_radius,
-		command.border_width,
-		debug_color_sampler(),
-	)
+	draw_rounded_border(command.rect, command.border_radius, command.border_width, debug_color_sampler())
 }
 
 @(private, require_results)
@@ -117,8 +108,8 @@ draw_glyph :: proc(
 	return glyph.advanceX == 0 ? dest.width : f32(glyph.advanceX) * font_scale
 }
 
-measure_text :: proc(input: UI_Text_Config) -> (width: f32) {
-	font_scale := input.font_size / f32(input.font.baseSize)
+measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) {
+	font_scale := input.font_size / f32(font_info.font.baseSize)
 
 	width = 0
 
@@ -135,58 +126,61 @@ measure_text :: proc(input: UI_Text_Config) -> (width: f32) {
 		// raylib only stores printable glyphs, for ascii the range is 32..126
 		glyph_index := character_int - 32
 
-		rect_width := input.font.recs[glyph_index].width * font_scale
-		advance_x := f32(input.font.glyphs[glyph_index].advanceX) * font_scale
+		rect_width := font_info.font.recs[glyph_index].width * font_scale
+		advance_x := f32(font_info.font.glyphs[glyph_index].advanceX) * font_scale
 
 		move_x := advance_x == 0 ? rect_width : f32(advance_x)
 
-		width += move_x + input.spacing
+		width += move_x + font_info.spacing
 	}
 
 	return width
 }
 
-
+@(private)
 draw_rounded_rect :: proc(rect: rl.Rectangle, radius: f32, color: rl.Color) {
-	x := rect.x
-	y := rect.y
-	w := rect.width
-	h := rect.height
-
-	r := min(radius, min(w, h) * 0.5)
+	radius := min(radius, min(rect.width, rect.height) * 0.5)
 
 	// Center
-	rl.DrawRectangle(i32(x + r), i32(y), i32(w - 2 * r), i32(h), color)
+	rl.DrawRectangle(i32(rect.x + radius), i32(rect.y), i32(rect.width - 2 * radius), i32(rect.height), color)
 
 	// Middle
-	rl.DrawRectangle(i32(x), i32(y + r), i32(w), i32(h - 2 * r), color)
+	rl.DrawRectangle(i32(rect.x), i32(rect.y + radius), i32(rect.width), i32(rect.height - 2 * radius), color)
 
 	// Corners
-	rl.DrawCircleV(rl.Vector2{x + r, y + r}, r, color)
-	rl.DrawCircleV(rl.Vector2{x + w - r, y + r}, r, color)
-	rl.DrawCircleV(rl.Vector2{x + r, y + h - r}, r, color)
-	rl.DrawCircleV(rl.Vector2{x + w - r, y + h - r}, r, color)
+	rl.DrawCircleV({rect.x + radius, rect.y + radius}, radius, color)
+	rl.DrawCircleV({rect.x + rect.width - radius, rect.y + radius}, radius, color)
+	rl.DrawCircleV({rect.x + radius, rect.y + rect.height - radius}, radius, color)
+	rl.DrawCircleV({rect.x + rect.width - radius, rect.y + rect.height - radius}, radius, color)
 }
 
+@(private)
 draw_rounded_border :: proc(rect: rl.Rectangle, radius: f32, thickness: f32, color: rl.Color) {
-	x := rect.x
-	y := rect.y
-	w := rect.width
-	h := rect.height
-
-	r := min(radius, min(w, h) * 0.5)
+	radius := min(radius, min(rect.width, rect.height) * 0.5)
 
 	// Straight sections
-	rl.DrawRectangle(i32(x), i32(y + r), i32(thickness), i32(h - 2 * r), color)
-	rl.DrawRectangle(i32(x + w - thickness), i32(y + r), i32(thickness), i32(h - 2 * r), color)
-	rl.DrawRectangle(i32(x + r), i32(y), i32(w - 2 * r), i32(thickness), color)
-	rl.DrawRectangle(i32(x + r), i32(y + h - thickness), i32(w - 2 * r), i32(thickness), color)
+	rl.DrawRectangle(i32(rect.x), i32(rect.y + radius), i32(thickness), i32(rect.height - 2 * radius), color)
+	rl.DrawRectangle(
+		i32(rect.x + rect.width - thickness),
+		i32(rect.y + radius),
+		i32(thickness),
+		i32(rect.height - 2 * radius),
+		color,
+	)
+	rl.DrawRectangle(i32(rect.x + radius), i32(rect.y), i32(rect.width - 2 * radius), i32(thickness), color)
+	rl.DrawRectangle(
+		i32(rect.x + radius),
+		i32(rect.y + rect.height - thickness),
+		i32(rect.width - 2 * radius),
+		i32(thickness),
+		color,
+	)
 
 	// Corner rings
-	inner_r := max(0, r - thickness)
+	inner_radius := max(0, radius - thickness)
 
-	rl.DrawRing(rl.Vector2{x + r, y + r}, inner_r, r, 180, 270, 12, color)
-	rl.DrawRing(rl.Vector2{x + w - r, y + r}, inner_r, r, 270, 360, 12, color)
-	rl.DrawRing(rl.Vector2{x + w - r, y + h - r}, inner_r, r, 0, 90, 12, color)
-	rl.DrawRing(rl.Vector2{x + r, y + h - r}, inner_r, r, 90, 180, 12, color)
+	rl.DrawRing({rect.x + radius, rect.y + radius}, inner_radius, radius, 180, 270, 12, color)
+	rl.DrawRing({rect.x + rect.width - radius, rect.y + radius}, inner_radius, radius, 270, 360, 12, color)
+	rl.DrawRing({rect.x + rect.width - radius, rect.y + rect.height - radius}, inner_radius, radius, 0, 90, 12, color)
+	rl.DrawRing({rect.x + radius, rect.y + rect.height - radius}, inner_radius, radius, 90, 180, 12, color)
 }

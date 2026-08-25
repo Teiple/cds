@@ -1,7 +1,8 @@
-package main
+package ui
 
 import "core:fmt"
 import "core:math"
+import "core:os"
 import "core:unicode/utf8"
 import rl "vendor:raylib"
 
@@ -24,7 +25,7 @@ UI_Input :: struct {
 	scroll:              rl.Vector2,
 }
 
-UI_TextMeasurer :: proc(text: UI_Text_Config) -> (width: f32)
+UI_Measure_Text :: proc(text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
 
 Render_Command :: union {
 	Rect_Command,
@@ -56,6 +57,7 @@ Text_Command :: struct {
 	color:         rl.Color,
 	position:      rl.Vector2,
 	wrapped_lines: []string,
+	shader:        rl.Shader,
 }
 
 Push_Clip_Command :: struct {
@@ -64,14 +66,27 @@ Push_Clip_Command :: struct {
 
 Pop_Clip_Command :: struct {}
 
+UI_Font :: struct {
+	font:    rl.Font,
+	spacing: f32,
+}
+
+UI_Font_Config :: struct {
+	font_path: cstring,
+	base_size: f32,
+	spacing:   f32,
+}
+
+
 UI_Context :: struct {
 	elements:           [dynamic]UI_Element,
 	open_element_stack: [dynamic]UI_Index,
 	growable_buffer:    [dynamic]UI_Index,
 	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]Render_Command,
-	text_measurer:      UI_TextMeasurer,
-	default_font:       Viewer_Font,
+	measure_text:       UI_Measure_Text,
+	fonts:              []UI_Font,
+	font_shader:        rl.Shader,
 }
 
 Sizing_Axis :: struct {
@@ -128,6 +143,7 @@ Alignment_Y :: enum {
 }
 
 UI_Index :: i32
+Font_Index :: i32
 
 UI_Layout_Declare :: struct {
 	id:               string,
@@ -150,7 +166,7 @@ UI_Border_Declare :: struct {
 UI_Text_Declare :: struct {
 	id:           string,
 	content:      Maybe(string),
-	font:         Maybe(rl.Font),
+	font_index:   Font_Index,
 	font_size:    Maybe(f32),
 	spacing:      Maybe(f32),
 	color:        Maybe(rl.Color),
@@ -177,9 +193,8 @@ UI_Layout_Config :: struct {
 
 UI_Text_Config :: struct {
 	content:      string,
-	font:         rl.Font,
+	font_index:   Font_Index,
 	font_size:    f32,
-	spacing:      f32,
 	color:        rl.Color,
 	line_spacing: f32,
 	alignment:    Alignment,
@@ -291,25 +306,25 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	if !ok do return
 
 	// prefered size
-	text_attr.preferred_size.x = ctx.text_measurer(text_attr.config)
+	text_attr.preferred_size.x = ctx.measure_text(text_attr.config, ctx.fonts[text_attr.config.font_index])
 	text_attr.preferred_size.y = text_attr.config.font_size
 
 	current.size.x = text_attr.preferred_size.x
 
 	// min size is the longest english word in the sentence
 	{
-		text := text_attr.config.content
+		content := text_attr.config.content
 		config := text_attr.config
 		word_start := 0
 		largest_word_width := f32(0)
 
 		byte_index := 0
-		for byte_index < len(text) {
+		for byte_index < len(content) {
 			whitespace_start := byte_index
 
 			// Skip whitespace / find word start.
-			for byte_index < len(text) {
-				r, size := utf8.decode_rune(text[byte_index:])
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
 				if !is_separator(r) {
 					break
 				}
@@ -319,8 +334,8 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 			word_start = byte_index
 
 			// Find end of word.
-			for byte_index < len(text) {
-				r, size := utf8.decode_rune(text[byte_index:])
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
 				if is_separator(r) {
 					break
 				}
@@ -334,8 +349,10 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 				break
 			}
 
-			config.content = text[word_start:word_end]
-			word_width := ctx.text_measurer(config)
+			config.content = content[word_start:word_end]
+
+			word_width := ctx.measure_text(config, ctx.fonts[config.font_index])
+
 			if word_width > largest_word_width {
 				largest_word_width = word_width
 			}
@@ -556,8 +573,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := growable_ele.size.x
 				growable_ele.size.x += width_to_add
 
-				if max_size, ok := growable_ele.limits.x.max.(f32);
-				   ok && growable_ele.size.x >= max_size {
+				if max_size, ok := growable_ele.limits.x.max.(f32); ok && growable_ele.size.x >= max_size {
 					growable_ele.size.x = max_size
 					remaining_width -= max_size - prev_size
 					unordered_remove(&growables, i)
@@ -695,8 +711,7 @@ grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 				prev_size := growable_ele.size.y
 				growable_ele.size.y += height_to_add
 
-				if max_size, ok := growable_ele.limits.y.max.(f32);
-				   ok && growable_ele.size.y >= max_size {
+				if max_size, ok := growable_ele.limits.y.max.(f32); ok && growable_ele.size.y >= max_size {
 					growable_ele.size.y = max_size
 					remaining_height -= max_size - prev_size
 					unordered_remove(&growables, i)
@@ -790,7 +805,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 	for &ele in ctx.elements {
 		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
 
-		text := text_attr.config.content
+		content := text_attr.config.content
 		config := text_attr.config
 
 		line_start := 0
@@ -804,9 +819,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 			text_attr.wrapped_text_lines_count = i32(wrapped_count)
 
 			if wrapped_count > 0 {
-				ele.size.y =
-					config.font_size * f32(wrapped_count) +
-					f32(wrapped_count - 1) * config.line_spacing
+				ele.size.y = config.font_size * f32(wrapped_count) + f32(wrapped_count - 1) * config.line_spacing
 			} else {
 				ele.size.y = config.font_size
 			}
@@ -815,12 +828,12 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 		byte_index := 0
 
-		for byte_index < len(text) {
+		for byte_index < len(content) {
 			whitespace_start := byte_index
 
 			// Skip whitespace / find word start.
-			for byte_index < len(text) {
-				r, size := utf8.decode_rune(text[byte_index:])
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
 				if !is_separator(r) {
 					break
 				}
@@ -830,8 +843,8 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 			word_start := byte_index
 
 			// Find end of word.
-			for byte_index < len(text) {
-				r, size := utf8.decode_rune(text[byte_index:])
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
 				if is_separator(r) {
 					break
 				}
@@ -846,16 +859,16 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 			}
 
 
-			config.content = text[whitespace_start:word_start]
-			whitespace_width := ctx.text_measurer(config)
+			config.content = content[whitespace_start:word_start]
+			whitespace_width := ctx.measure_text(config, ctx.fonts[config.font_index])
 
-			config.content = text[word_start:word_end]
-			word_width := ctx.text_measurer(config)
+			config.content = content[word_start:word_end]
+			word_width := ctx.measure_text(config, ctx.fonts[config.font_index])
 
 			candidate_width := whitespace_width + word_width
 
 			if line_width > 0 && line_width + candidate_width > ele.size.x {
-				append(&ctx.wrapped_text_lines, text[line_start:whitespace_start])
+				append(&ctx.wrapped_text_lines, content[line_start:whitespace_start])
 				wrapped_count += 1
 
 				line_start = word_start
@@ -866,7 +879,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 		}
 
 		if wrapped_count > 0 {
-			append(&ctx.wrapped_text_lines, text[line_start:])
+			append(&ctx.wrapped_text_lines, content[line_start:])
 			wrapped_count += 1
 		}
 	}
@@ -900,8 +913,7 @@ calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 	if layout.config.layout_direction == .Left_To_Right {
 		// Find the remaining width
-		remaining_width :=
-			current.size.x - layout.config.padding.left - layout.config.padding.right
+		remaining_width := current.size.x - layout.config.padding.left - layout.config.padding.right
 		child_count := 0
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			remaining_width -= child.size.x
@@ -925,11 +937,7 @@ calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 		if layout.config.layout_direction == .Top_To_Bottom {
 			// Find the remaining height
-			remaining_width :=
-				current.size.x -
-				layout.config.padding.left -
-				layout.config.padding.right -
-				child.size.x
+			remaining_width := current.size.x - layout.config.padding.left - layout.config.padding.right - child.size.x
 
 			switch layout.config.child_alignment.x {
 			case .Left:
@@ -974,8 +982,7 @@ calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 	if layout.config.layout_direction == .Top_To_Bottom {
 		// Find the remaining width
-		remaining_height :=
-			current.size.y - layout.config.padding.top - layout.config.padding.bottom
+		remaining_height := current.size.y - layout.config.padding.top - layout.config.padding.bottom
 		child_count := 0
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			remaining_height -= child.size.y
@@ -999,10 +1006,7 @@ calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 		if layout.config.layout_direction == .Left_To_Right {
 			// Find the remaining height
 			remaining_height :=
-				current.size.y -
-				layout.config.padding.top -
-				layout.config.padding.bottom -
-				child.size.y
+				current.size.y - layout.config.padding.top - layout.config.padding.bottom - child.size.y
 
 			switch layout.config.child_alignment.y {
 			case .Top:
@@ -1050,30 +1054,63 @@ ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32
 	}
 }
 
-ui_context_make :: proc(text_measurer: UI_TextMeasurer) -> UI_Context {
+@(private)
+load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
+	assert(os.exists(string(font_path)))
+
+	font := rl.LoadFontEx(font_path, i32(base_size), nil, 0)
+
+	assert(rl.IsFontValid(font))
+
+	rl.GenTextureMipmaps(&font.texture)
+	rl.SetTextureFilter(font.texture, rl.TextureFilter.BILINEAR)
+
+	return {font = font, spacing = spacing}
+}
+
+@(private)
+load_font_shader :: proc(shader_path: cstring) -> rl.Shader {
+	assert(os.exists(string(shader_path)))
+
+	return rl.LoadShader(nil, shader_path)
+}
+
+context_make :: proc(
+	measure_text_proc: UI_Measure_Text,
+	font_configs: []UI_Font_Config,
+	font_shader: cstring,
+) -> UI_Context {
+	fonts := make([dynamic]UI_Font, 0, 16)
+	for config in font_configs {
+		append(&fonts, load_font(config.base_size, config.spacing, config.font_path))
+	}
+
+	font_shader := load_font_shader(font_shader)
+
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 500),
 		open_element_stack = make([dynamic]UI_Index, 0, 50),
 		render_commands = make([dynamic]Render_Command, 0, 500),
 		growable_buffer = make([dynamic]UI_Index, 0, 500),
-		default_font = viewer_load_font(
-			12,
-			0,
-			"assets/fonts/NotoSansMono-SemiBold.ttf",
-			"assets/fonts/NotoSansMono-Regular.ttf",
-		),
-		text_measurer = text_measurer,
 		wrapped_text_lines = make([dynamic]string, 0, 500),
+		measure_text = measure_text_proc,
+		fonts = fonts[:],
+		font_shader = font_shader,
 	}
 }
 
-ui_context_delete :: proc(ctx: UI_Context) {
+context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.elements)
 	delete(ctx.open_element_stack)
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
-	viewer_unload_font(ctx.default_font)
+	delete(ctx.fonts)
+
+	for f in ctx.fonts {
+		rl.UnloadFont(f.font)
+	}
+	rl.UnloadShader(ctx.font_shader)
 }
 
 @(require_results, deferred_in_out = end_layout)
@@ -1127,12 +1164,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 				append(
 					&ctx.render_commands,
 					Rect_Command {
-						rect = {
-							x = ele.position.x,
-							y = ele.position.y,
-							width = ele.size.x,
-							height = ele.size.y,
-						},
+						rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
 						color = attr.config.background_color,
 						corner_radius = attr.config.corner_radius,
 					},
@@ -1141,12 +1173,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 					append(
 						&ctx.render_commands,
 						Border_Command {
-							rect = {
-								x = ele.position.x,
-								y = ele.position.y,
-								width = ele.size.x,
-								height = ele.size.y,
-							},
+							rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
 							color = attr.config.border.color,
 							border_width = attr.config.border.thickness,
 							border_radius = attr.config.corner_radius,
@@ -1161,12 +1188,13 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 					Text_Command {
 						content = attr.config.content,
 						font_size = attr.config.font_size,
-						spacing = attr.config.spacing,
+						spacing = ctx.fonts[attr.config.font_index].spacing,
 						line_spacing = attr.config.line_spacing,
-						font = attr.config.font,
+						font = ctx.fonts[attr.config.font_index].font,
 						position = ele.position,
 						wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
 						color = attr.config.color,
+						shader = ctx.font_shader,
 					},
 				)
 			}
@@ -1219,9 +1247,8 @@ default_layout :: proc() -> UI_Layout_Config {
 @(private)
 default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
 	return UI_Text_Config {
-		font_size = f32(ctx.default_font.font_size),
-		font = ctx.default_font.font,
-		spacing = ctx.default_font.spacing,
+		font_index = 0,
+		font_size = f32(ctx.fonts[0].font.baseSize),
 		line_spacing = 4,
 		color = rl.BLACK,
 		alignment = {.Left, .Top},
@@ -1289,8 +1316,7 @@ parse_text_declare :: proc(
 
 	set_if_set(&config.content, declare.content)
 	set_if_set(&config.font_size, declare.font_size)
-	set_if_set(&config.spacing, declare.spacing)
-	set_if_set(&config.font, declare.font)
+	set_if_set(&config.font_index, declare.font_index)
 	set_if_set(&config.color, declare.color)
 	set_if_set(&config.line_spacing, declare.line_spacing)
 	set_if_set(&config.alignment, declare.alignment)
@@ -1302,11 +1328,7 @@ grow :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizi
 	return {mode = Grow_Size{}, min = min, max = max}
 }
 
-fixed :: #force_inline proc(
-	value: f32 = 0,
-	min: Maybe(f32) = nil,
-	max: Maybe(f32) = nil,
-) -> Sizing_Axis {
+fixed :: #force_inline proc(value: f32 = 0, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
 	return {mode = Fixed_Size{value = value}, min = min, max = max}
 }
 
@@ -1314,11 +1336,7 @@ fit :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizin
 	return {mode = Fit_Size{}, min = min, max = max}
 }
 
-percent :: #force_inline proc(
-	value: f32,
-	min: Maybe(f32) = nil,
-	max: Maybe(f32) = nil,
-) -> Sizing_Axis {
+percent :: #force_inline proc(value: f32, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
 	return {mode = Percent_Size{value = value}, min = min, max = max}
 }
 
@@ -1378,8 +1396,7 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 
 @(deferred_none = close_layout_deffered)
 layout :: proc(declare: UI_Layout_Declare) -> bool {
-	open_layout(current_context, declare)
-	return true
+	return open_layout(current_context, declare)
 }
 
 @(private)
@@ -1387,7 +1404,8 @@ close_layout_deffered :: proc() {
 	close_layout(current_context)
 }
 
-text_config :: proc(declare: UI_Text_Declare) -> bool {
+@(export)
+text :: proc(declare: UI_Text_Declare) -> bool {
 	open_text(current_context, declare)
 	return true
 }
