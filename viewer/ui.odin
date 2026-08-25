@@ -1,6 +1,5 @@
 package main
 
-import "core:c"
 import "core:fmt"
 import "core:math"
 import "core:unicode/utf8"
@@ -25,18 +24,27 @@ UI_Input :: struct {
 	scroll:              rl.Vector2,
 }
 
-UI_TextMeasurer :: proc(text: UI_TextConfig) -> (width: f32)
+UI_TextMeasurer :: proc(text: UI_Text_Config) -> (width: f32)
 
 Render_Command :: union {
 	Rect_Command,
+	Border_Command,
 	Text_Command,
 	Push_Clip_Command,
 	Pop_Clip_Command,
 }
 
 Rect_Command :: struct {
-	using rect: rl.Rectangle,
-	color:      rl.Color,
+	rect:          rl.Rectangle,
+	color:         rl.Color,
+	corner_radius: f32,
+}
+
+Border_Command :: struct {
+	rect:          rl.Rectangle,
+	color:         rl.Color,
+	border_radius: f32,
+	border_width:  f32,
 }
 
 Text_Command :: struct {
@@ -121,7 +129,7 @@ Alignment_Y :: enum {
 
 UI_Index :: i32
 
-UI_LayoutDeclare :: struct {
+UI_Layout_Declare :: struct {
 	id:               string,
 	width:            Maybe(Sizing_Axis),
 	height:           Maybe(Sizing_Axis),
@@ -130,9 +138,16 @@ UI_LayoutDeclare :: struct {
 	layout_direction: Maybe(Layout_Direction),
 	child_alignment:  Maybe(Alignment),
 	background_color: Maybe(rl.Color),
+	corner_radius:    Maybe(f32),
+	border:           Maybe(UI_Border_Config),
 }
 
-UI_TextDeclare :: struct {
+UI_Border_Declare :: struct {
+	width: Maybe(f32),
+	color: Maybe(rl.Color),
+}
+
+UI_Text_Declare :: struct {
 	id:           string,
 	content:      Maybe(string),
 	font:         Maybe(rl.Font),
@@ -143,7 +158,12 @@ UI_TextDeclare :: struct {
 	alignment:    Maybe(Alignment),
 }
 
-UI_LayoutConfig :: struct {
+UI_Border_Config :: struct {
+	thickness: f32,
+	color:     rl.Color,
+}
+
+UI_Layout_Config :: struct {
 	width:            Size_Mode,
 	height:           Size_Mode,
 	padding:          Layout_Padding,
@@ -151,9 +171,11 @@ UI_LayoutConfig :: struct {
 	layout_direction: Layout_Direction,
 	child_alignment:  Alignment,
 	background_color: rl.Color,
+	corner_radius:    f32,
+	border:           UI_Border_Config,
 }
 
-UI_TextConfig :: struct {
+UI_Text_Config :: struct {
 	content:      string,
 	font:         rl.Font,
 	font_size:    f32,
@@ -163,9 +185,9 @@ UI_TextConfig :: struct {
 	alignment:    Alignment,
 }
 
-UI_ElementDeclare :: union {
-	UI_LayoutDeclare,
-	UI_TextDeclare,
+UI_Element_Declare :: union {
+	UI_Layout_Declare,
+	UI_Text_Declare,
 }
 
 UI_Element :: struct {
@@ -177,42 +199,42 @@ UI_Element :: struct {
 	subtree_size: i32, // number of nodes in this subtree (set on close)
 	limits:       UI_Limits,
 	attributes:   union {
-		LayoutAttributes,
-		TextAttributes,
+		Layout_Attributes,
+		Text_Attributes,
 	},
 }
 
-UI_AxisLimits :: struct {
+UI_Axis_Limits :: struct {
 	min: Maybe(f32),
 	max: Maybe(f32),
 }
 
 UI_Limits :: struct {
-	x: UI_AxisLimits,
-	y: UI_AxisLimits,
+	x: UI_Axis_Limits,
+	y: UI_Axis_Limits,
 }
 
-LayoutAttributes :: struct {
+Layout_Attributes :: struct {
 	element: UI_Index,
-	config:  UI_LayoutConfig,
+	config:  UI_Layout_Config,
 }
 
-TextAttributes :: struct {
+Text_Attributes :: struct {
 	element:                  UI_Index,
-	config:                   UI_TextConfig,
+	config:                   UI_Text_Config,
 	preferred_size:           rl.Vector2,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
 
-ChildIter :: struct {
+Child_Iter :: struct {
 	ctx:     ^UI_Context,
 	current: UI_Index, // next child index to visit
 	end:     UI_Index, // exclusive end of this node's subtree
 }
 
 @(private)
-open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
+open_layout :: proc(ctx: ^UI_Context, declare: UI_Layout_Declare) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
@@ -221,7 +243,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 		id = declare.id,
 		parent = parent,
 		index = i32(len(ctx.elements)), // set before append
-		attributes = LayoutAttributes{config = config, element = index},
+		attributes = Layout_Attributes{config = config, element = index},
 		limits = limits,
 		// layout sets its tree size when close
 	}
@@ -232,7 +254,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_LayoutDeclare) -> bool {
 }
 
 @(private)
-open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) {
+open_text :: proc(ctx: ^UI_Context, declare: UI_Text_Declare) {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
@@ -241,7 +263,7 @@ open_text :: proc(ctx: ^UI_Context, declare: UI_TextDeclare) {
 		id = declare.id,
 		parent = parent_idx,
 		index = i32(len(ctx.elements)),
-		attributes = TextAttributes{config = config, element = index},
+		attributes = Text_Attributes{config = config, element = index},
 		limits = limits,
 		subtree_size = 1,
 	}
@@ -265,7 +287,7 @@ close_layout :: proc(ctx: ^UI_Context) {
 @(private)
 calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	text_attr, ok := &current.attributes.(TextAttributes)
+	text_attr, ok := &current.attributes.(Text_Attributes)
 	if !ok do return
 
 	// prefered size
@@ -329,7 +351,7 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 @(private)
 calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	if layout, ok := current.attributes.(LayoutAttributes); ok {
+	if layout, ok := current.attributes.(Layout_Attributes); ok {
 		if mode, ok := layout.config.height.(Fixed_Size); ok {
 			current.size.y = mode.value
 		}
@@ -337,7 +359,7 @@ calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 @(private)
-clamp_element_size :: proc(current_size: f32, limits: UI_AxisLimits) -> f32 {
+clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	res := current_size
 	if min_size, ok := limits.min.(f32); ok && res <= min_size {
 		res = min_size
@@ -351,7 +373,7 @@ clamp_element_size :: proc(current_size: f32, limits: UI_AxisLimits) -> f32 {
 @(private)
 fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok do return
 
 
@@ -402,7 +424,7 @@ fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 @(private)
 fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok do return
 
 	if fixed_size, ok := layout.config.height.(Fixed_Size); ok {
@@ -462,7 +484,7 @@ fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
 @(private)
 grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.subtree_size <= 1 do return
 
 	content_width := current.size.x - layout.config.padding.left - layout.config.padding.right
@@ -602,7 +624,7 @@ grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
 @(private)
 grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.subtree_size <= 1 do return
 
 	content_height := current.size.y - layout.config.padding.top - layout.config.padding.bottom
@@ -766,7 +788,7 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 @(private)
 wrap_texts :: proc(ctx: ^UI_Context) {
 	for &ele in ctx.elements {
-		text_attr := (&ele.attributes.(TextAttributes)) or_continue
+		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
 
 		text := text_attr.config.content
 		config := text_attr.config
@@ -853,9 +875,9 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 @(private)
 calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
-		text_attr, ok := current.attributes.(TextAttributes)
+		text_attr, ok := current.attributes.(Text_Attributes)
 		assert(ok)
 
 		if current.size.x > text_attr.preferred_size.x {
@@ -928,9 +950,9 @@ calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 @(private)
 calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
-		text_attr, ok := current.attributes.(TextAttributes)
+		text_attr, ok := current.attributes.(Text_Attributes)
 
 		if current.size.y > text_attr.preferred_size.y {
 			remaining_height := current.size.y - text_attr.preferred_size.y
@@ -1005,7 +1027,7 @@ ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32
 		fmt.print(" . ")
 	}
 
-	layout, ok := current.attributes.(LayoutAttributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 
 	fmt.printf(
 		"%v (%v) %vx%v (pre=%v, sub=%v)",
@@ -1054,7 +1076,7 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	viewer_unload_font(ctx.default_font)
 }
 
-@(deferred_in_out = end_layout)
+@(require_results, deferred_in_out = end_layout)
 begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) -> bool {
 	current_context = ctx
 
@@ -1100,32 +1122,40 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	clear(&ctx.render_commands)
 	for ele in ctx.elements {
 		switch attr in ele.attributes {
-		case LayoutAttributes:
+		case Layout_Attributes:
 			{
 				append(
 					&ctx.render_commands,
 					Rect_Command {
-						x = ele.position.x,
-						y = ele.position.y,
-						width = ele.size.x,
-						height = ele.size.y,
-						color = rl.BLUE,
+						rect = {
+							x = ele.position.x,
+							y = ele.position.y,
+							width = ele.size.x,
+							height = ele.size.y,
+						},
+						color = attr.config.background_color,
+						corner_radius = attr.config.corner_radius,
 					},
 				)
+				if attr.config.border.thickness > 0 {
+					append(
+						&ctx.render_commands,
+						Border_Command {
+							rect = {
+								x = ele.position.x,
+								y = ele.position.y,
+								width = ele.size.x,
+								height = ele.size.y,
+							},
+							color = attr.config.border.color,
+							border_width = attr.config.border.thickness,
+							border_radius = attr.config.corner_radius,
+						},
+					)
+				}
 			}
-		case TextAttributes:
+		case Text_Attributes:
 			{
-				// debug rect
-				append(
-					&ctx.render_commands,
-					Rect_Command {
-						x = ele.position.x,
-						y = ele.position.y,
-						width = ele.size.x,
-						height = ele.size.y,
-						color = rl.BLUE,
-					},
-				)
 				append(
 					&ctx.render_commands,
 					Text_Command {
@@ -1157,8 +1187,8 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 		position = {0, 0},
 		size = {width, height},
 		limits = {}, // no limits
-		attributes = LayoutAttributes {
-			config = UI_LayoutConfig {
+		attributes = Layout_Attributes {
+			config = UI_Layout_Config {
 				child_alignment = {x = .Left, y = .Top},
 				child_gap = 8,
 				width = Fixed_Size{width},
@@ -1172,8 +1202,8 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 }
 
 @(private)
-default_layout :: proc() -> UI_LayoutConfig {
-	return UI_LayoutConfig {
+default_layout :: proc() -> UI_Layout_Config {
+	return UI_Layout_Config {
 		child_alignment = {x = .Left, y = .Top},
 		child_gap = 8,
 		width = Fit_Size{},
@@ -1181,12 +1211,14 @@ default_layout :: proc() -> UI_LayoutConfig {
 		layout_direction = .Left_To_Right,
 		padding = pad_all(8),
 		background_color = rl.RAYWHITE,
+		corner_radius = 4,
+		border = {0, rl.BLACK},
 	}
 }
 
 @(private)
-default_text :: proc(ctx: UI_Context) -> UI_TextConfig {
-	return UI_TextConfig {
+default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
+	return UI_Text_Config {
 		font_size = f32(ctx.default_font.font_size),
 		font = ctx.default_font.font,
 		spacing = ctx.default_font.spacing,
@@ -1209,10 +1241,10 @@ set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
 
 @(private)
 parse_layout_declare :: proc(
-	default_config: UI_LayoutConfig,
-	declare: UI_LayoutDeclare,
+	default_config: UI_Layout_Config,
+	declare: UI_Layout_Declare,
 ) -> (
-	UI_LayoutConfig,
+	UI_Layout_Config,
 	UI_Limits,
 ) {
 	config := default_config
@@ -1234,6 +1266,12 @@ parse_layout_declare :: proc(
 	set_if_set(&config.layout_direction, declare.layout_direction)
 	set_if_set(&config.child_alignment, declare.child_alignment)
 	set_if_set(&config.background_color, declare.background_color)
+	set_if_set(&config.corner_radius, declare.corner_radius)
+
+	if border, ok := declare.border.(UI_Border_Config); ok {
+		set_if_set(&config.border.thickness, border.thickness)
+		set_if_set(&config.border.color, border.color)
+	}
 
 	return config, limits
 }
@@ -1241,10 +1279,10 @@ parse_layout_declare :: proc(
 @(private)
 parse_text_declare :: proc(
 	ctx: UI_Context,
-	default_config: UI_TextConfig,
-	declare: UI_TextDeclare,
+	default_config: UI_Text_Config,
+	declare: UI_Text_Declare,
 ) -> (
-	UI_TextConfig,
+	UI_Text_Config,
 	UI_Limits,
 ) {
 	config := default_config
@@ -1296,15 +1334,19 @@ align :: #force_inline proc(value: Alignment) -> Alignment {
 	return value
 }
 
+border :: #force_inline proc(value: UI_Border_Config) -> UI_Border_Config {
+	return value
+}
+
 
 @(private)
-child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> ChildIter {
+child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
-	return ChildIter{ctx = ctx, current = start.index + 1, end = start.index + start.subtree_size}
+	return Child_Iter{ctx = ctx, current = start.index + 1, end = start.index + start.subtree_size}
 }
 
 @(private)
-child_iter_next :: proc(it: ^ChildIter) -> (child: ^UI_Element, cond: bool) {
+child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, cond: bool) {
 	if it.current >= it.end {
 		return nil, false
 	}
@@ -1316,11 +1358,11 @@ child_iter_next :: proc(it: ^ChildIter) -> (child: ^UI_Element, cond: bool) {
 @(private)
 is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
-	case TextAttributes:
+	case Text_Attributes:
 		{
 			return true
 		}
-	case LayoutAttributes:
+	case Layout_Attributes:
 		{
 			if axis == .X {
 				_, ok := attr.config.width.(Grow_Size)
@@ -1335,8 +1377,9 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 }
 
 @(deferred_none = close_layout_deffered)
-layout :: proc(declare: UI_LayoutDeclare) -> bool {
-	return open_layout(current_context, declare)
+layout :: proc(declare: UI_Layout_Declare) -> bool {
+	open_layout(current_context, declare)
+	return true
 }
 
 @(private)
@@ -1344,6 +1387,7 @@ close_layout_deffered :: proc() {
 	close_layout(current_context)
 }
 
-text_config :: proc(declare: UI_TextDeclare) {
+text_config :: proc(declare: UI_Text_Declare) -> bool {
 	open_text(current_context, declare)
+	return true
 }

@@ -54,24 +54,39 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 
-		{
-			begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight()))
-			{
-				layout(
-					{width = grow(), height = grow(), child_alignment = align({.Left, .Bottom})},
-				)
+		if begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
+			if layout(
 				{
-					layout({width = fixed(120), height = fixed(120)})
+					width = grow(),
+					height = grow(),
+					padding = pad_all(16),
+					child_gap = 12,
+					layout_direction = .Top_To_Bottom,
+					border = border({thickness = 2}),
+				},
+			) {
+				text_config(
+					{content = "Profile", font_size = 22, alignment = align({x = .Center})},
+				)
+
+				layout(
 					{
-						text_config({content = "Hello World", alignment = align({.Left, .Center})})
-					}
-				}
+						width = grow(),
+						height = fixed(48),
+						padding = pad_all(8),
+						child_gap = 12,
+						layout_direction = .Left_To_Right,
+					},
+				)
+
+				text_config({content = "Status: Online"})
+				text_config({content = "Details"})
 			}
 		}
 
-
 		render_commands(ui_ctx.render_commands[:], get_random_color)
 	}
+
 
 }
 

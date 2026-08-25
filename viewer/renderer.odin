@@ -11,8 +11,11 @@ render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() 
 		switch command in variant {
 		case Rect_Command:
 			{
-				rl.DrawRectangleRec(command.rect, rl.ColorAlpha(debug_color_sampler(), 0.9))
-
+				draw_rect_command(command, debug_color_sampler)
+			}
+		case Border_Command:
+			{
+				draw_border_command(command, debug_color_sampler)
 			}
 		case Text_Command:
 			{
@@ -68,6 +71,20 @@ draw_text_command :: proc(command: Text_Command) {
 	}
 }
 
+@(private)
+draw_rect_command :: proc(command: Rect_Command, debug_color_sampler: proc() -> rl.Color) {
+	draw_rounded_rect(command.rect, command.corner_radius, debug_color_sampler())
+}
+
+@(private)
+draw_border_command :: proc(command: Border_Command, debug_color_sampler: proc() -> rl.Color) {
+	draw_rounded_border(
+		command.rect,
+		command.border_radius,
+		command.border_width,
+		debug_color_sampler(),
+	)
+}
 
 @(private, require_results)
 draw_glyph :: proc(
@@ -100,7 +117,7 @@ draw_glyph :: proc(
 	return glyph.advanceX == 0 ? dest.width : f32(glyph.advanceX) * font_scale
 }
 
-measure_text :: proc(input: UI_TextConfig) -> (width: f32) {
+measure_text :: proc(input: UI_Text_Config) -> (width: f32) {
 	font_scale := input.font_size / f32(input.font.baseSize)
 
 	width = 0
@@ -127,4 +144,49 @@ measure_text :: proc(input: UI_TextConfig) -> (width: f32) {
 	}
 
 	return width
+}
+
+
+draw_rounded_rect :: proc(rect: rl.Rectangle, radius: f32, color: rl.Color) {
+	x := rect.x
+	y := rect.y
+	w := rect.width
+	h := rect.height
+
+	r := min(radius, min(w, h) * 0.5)
+
+	// Center
+	rl.DrawRectangle(i32(x + r), i32(y), i32(w - 2 * r), i32(h), color)
+
+	// Middle
+	rl.DrawRectangle(i32(x), i32(y + r), i32(w), i32(h - 2 * r), color)
+
+	// Corners
+	rl.DrawCircleV(rl.Vector2{x + r, y + r}, r, color)
+	rl.DrawCircleV(rl.Vector2{x + w - r, y + r}, r, color)
+	rl.DrawCircleV(rl.Vector2{x + r, y + h - r}, r, color)
+	rl.DrawCircleV(rl.Vector2{x + w - r, y + h - r}, r, color)
+}
+
+draw_rounded_border :: proc(rect: rl.Rectangle, radius: f32, thickness: f32, color: rl.Color) {
+	x := rect.x
+	y := rect.y
+	w := rect.width
+	h := rect.height
+
+	r := min(radius, min(w, h) * 0.5)
+
+	// Straight sections
+	rl.DrawRectangle(i32(x), i32(y + r), i32(thickness), i32(h - 2 * r), color)
+	rl.DrawRectangle(i32(x + w - thickness), i32(y + r), i32(thickness), i32(h - 2 * r), color)
+	rl.DrawRectangle(i32(x + r), i32(y), i32(w - 2 * r), i32(thickness), color)
+	rl.DrawRectangle(i32(x + r), i32(y + h - thickness), i32(w - 2 * r), i32(thickness), color)
+
+	// Corner rings
+	inner_r := max(0, r - thickness)
+
+	rl.DrawRing(rl.Vector2{x + r, y + r}, inner_r, r, 180, 270, 12, color)
+	rl.DrawRing(rl.Vector2{x + w - r, y + r}, inner_r, r, 270, 360, 12, color)
+	rl.DrawRing(rl.Vector2{x + w - r, y + h - r}, inner_r, r, 0, 90, 12, color)
+	rl.DrawRing(rl.Vector2{x + r, y + h - r}, inner_r, r, 90, 180, 12, color)
 }
