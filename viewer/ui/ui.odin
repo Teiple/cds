@@ -1084,38 +1084,6 @@ parse_text_declare :: proc(
 	return config, UI_Limits{}
 }
 
-grow :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
-	return {mode = Grow_Size{}, min = min, max = max}
-}
-
-fixed :: #force_inline proc(value: f32 = 0, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
-	return {mode = Fixed_Size{value = value}, min = min, max = max}
-}
-
-fit :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
-	return {mode = Fit_Size{}, min = min, max = max}
-}
-
-percent :: #force_inline proc(value: f32, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
-	return {mode = Percent_Size{value = value}, min = min, max = max}
-}
-
-pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
-	return Layout_Padding{value, value, value, value}
-}
-
-pad :: #force_inline proc(value: Layout_Padding) -> Layout_Padding {
-	return value
-}
-
-align :: #force_inline proc(value: Alignment) -> Alignment {
-	return value
-}
-
-border :: #force_inline proc(value: UI_Border_Config) -> UI_Border_Config {
-	return value
-}
-
 
 @(private = "file")
 child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
@@ -1154,22 +1122,8 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	return false
 }
 
-@(deferred_none = close_layout_deffered)
-layout :: proc(declare: UI_Layout_Declare) -> bool {
-	return open_layout(current_context, declare)
-}
-
-@(private = "file")
-close_layout_deffered :: proc() {
-	close_layout(current_context)
-}
-
-@(export)
-text :: proc(declare: UI_Text_Declare) -> bool {
-	open_text(current_context, declare)
-	return true
-}
-
+// Axis independant internal ultilities
+// Layout
 @(private = "file")
 layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return(
@@ -1184,14 +1138,26 @@ layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: Normalized
 	)
 }
 
-
-// new ultilities for refactoring
-
 @(private = "file")
 layout_get_mode :: proc(layout: Layout_Attributes, axis: Axis) -> Size_Mode {
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
+@(private = "file")
+layout_is_along :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
+	return(
+		axis == .X ? layout.config.layout_direction == .Left_To_Right : layout.config.layout_direction == .Top_To_Bottom \
+	)
+}
+
+@(private = "file")
+layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
+	return(
+		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
+	)
+}
+
+// Elements
 @(private = "file")
 ele_set_size :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.size.x = value
@@ -1215,24 +1181,6 @@ ele_get_size :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	return axis == .X ? element.size.x : element.size.y
 }
 
-@(private = "file")
-layout_is_along :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
-	return(
-		axis == .X ? layout.config.layout_direction == .Left_To_Right : layout.config.layout_direction == .Top_To_Bottom \
-	)
-}
-
-@(private = "file")
-text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
-	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
-}
-
-@(private = "file")
-layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
-	return(
-		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
-	)
-}
 
 @(private = "file")
 ele_get_min :: proc(element: ^UI_Element, axis: Axis) -> f32 {
@@ -1249,6 +1197,26 @@ ele_get_lims :: proc(element: ^UI_Element, axis: Axis) -> UI_Axis_Limits {
 	return axis == .X ? element.limits.x : element.limits.y
 }
 
+
+@(private = "file")
+ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: Axis) {
+	if axis == .X do element.position.x = value
+	else do element.position.y = value
+}
+
+@(private = "file")
+ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
+	if axis == .X do return element.position.x
+	else do return element.position.y
+}
+
+// Text
+@(private = "file")
+text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
+	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
+}
+
+// Alignment
 @(private = "file")
 align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 	if axis == .X {
@@ -1273,14 +1241,52 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 	return .Start
 }
 
-@(private = "file")
-ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: Axis) {
-	if axis == .X do element.position.x = value
-	else do element.position.y = value
+// Public layout declaration ultilities
+// Elements
+@(deferred_none = close_layout_deffered)
+layout :: proc(declare: UI_Layout_Declare) -> bool {
+	return open_layout(current_context, declare)
 }
 
 @(private = "file")
-ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
-	if axis == .X do return element.position.x
-	else do return element.position.y
+close_layout_deffered :: proc() {
+	close_layout(current_context)
+}
+
+text :: proc(declare: UI_Text_Declare) -> bool {
+	open_text(current_context, declare)
+	return true
+}
+
+// Config shorthands
+grow :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
+	return {mode = Grow_Size{}, min = min, max = max}
+}
+
+fixed :: #force_inline proc(value: f32 = 0, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
+	return {mode = Fixed_Size{value = value}, min = min, max = max}
+}
+
+fit :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
+	return {mode = Fit_Size{}, min = min, max = max}
+}
+
+percent :: #force_inline proc(value: f32, min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
+	return {mode = Percent_Size{value = value}, min = min, max = max}
+}
+
+pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
+	return Layout_Padding{value, value, value, value}
+}
+
+pad :: #force_inline proc(value: Layout_Padding) -> Layout_Padding {
+	return value
+}
+
+align :: #force_inline proc(value: Alignment) -> Alignment {
+	return value
+}
+
+border :: #force_inline proc(value: UI_Border_Config) -> UI_Border_Config {
+	return value
 }
