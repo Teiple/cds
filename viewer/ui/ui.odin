@@ -9,7 +9,7 @@ import rl "vendor:raylib"
 MAX_CHILD_COUNT :: 50
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
-@(private)
+@(private = "file")
 current_context: ^UI_Context
 
 Axis :: enum {
@@ -127,6 +127,17 @@ Layout_Padding :: struct {
 Alignment :: struct {
 	x: Alignment_X,
 	y: Alignment_Y,
+}
+
+NormalizedAlignment :: enum {
+	Start,
+	Center,
+	End,
+}
+
+NormalizedEnd :: enum {
+	Start,
+	End,
 }
 
 
@@ -248,7 +259,7 @@ Child_Iter :: struct {
 	end:     UI_Index, // exclusive end of this node's subtree
 }
 
-@(private)
+@(private = "file")
 open_layout :: proc(ctx: ^UI_Context, declare: UI_Layout_Declare) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
@@ -268,7 +279,7 @@ open_layout :: proc(ctx: ^UI_Context, declare: UI_Layout_Declare) -> bool {
 	return true
 }
 
-@(private)
+@(private = "file")
 open_text :: proc(ctx: ^UI_Context, declare: UI_Text_Declare) {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
@@ -288,7 +299,7 @@ open_text :: proc(ctx: ^UI_Context, declare: UI_Text_Declare) {
 }
 
 
-@(private)
+@(private = "file")
 close_layout :: proc(ctx: ^UI_Context) {
 	index := pop(&ctx.open_element_stack)
 	ele := &ctx.elements[index]
@@ -296,10 +307,11 @@ close_layout :: proc(ctx: ^UI_Context) {
 	// Compute subtree size: everything appended after this node is in its subtree
 	ele.subtree_size = i32(len(ctx.elements)) - ele.index
 
-	fit_sizing_widths(ctx, index)
+	fit_sizing(ctx, index, .X)
+	// fit_sizing_widths(ctx, index)
 }
 
-@(private)
+@(private = "file")
 calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	text_attr, ok := &current.attributes.(Text_Attributes)
@@ -365,7 +377,7 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 
-@(private)
+@(private = "file")
 calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	if layout, ok := current.attributes.(Layout_Attributes); ok {
@@ -375,7 +387,7 @@ calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
 	}
 }
 
-@(private)
+@(private = "file")
 clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	res := current_size
 	if min_size, ok := limits.min.(f32); ok && res <= min_size {
@@ -387,410 +399,223 @@ clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	return res
 }
 
-@(private)
-fit_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
+@(private = "file")
+fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok do return
 
-
-	if fixed_size, ok := layout.config.width.(Fixed_Size); ok {
-		current.limits.x.min = fixed_size.value
-		current.limits.x.max = fixed_size.value
-		current.size.x = fixed_size.value
+	if fixed, ok := layout_get_mode(layout, axis).(Fixed_Size); ok {
+		ele_set_min(current, fixed.value, axis)
+		ele_set_max(current, fixed.value, axis)
+		ele_set_size(current, fixed.value, axis)
 		return
 	}
 
-	padding := layout.config.padding.left + layout.config.padding.right
+	padding := layout_get_pad(layout, axis)
+
+	children_size := f32(0)
 	children_min_size := f32(0)
-	child_gap := f32(0)
+	child_count := 0
 
-	if layout.config.layout_direction == .Left_To_Right {
-		// Jump‑loop over direct children
-		child_count := 0
-		// Sum widths of children + gaps
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			children_min_size += child.limits.x.min.? or_else 0
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		child_size := ele_get_size(child, axis)
+		child_min := ele_get_min(child, axis)
 
-			current.size.x += child.size.x
+		if layout_is_along(layout, axis) {
+			children_size += child_size
+			children_min_size += child_min
 			child_count += 1
-		}
-		if child_count > 0 {
-			child_gap = f32(child_count - 1) * layout.config.child_gap
-			current.size.x += child_gap
-			children_min_size += child_gap
-		}
-	} else {
-		// Max width among children
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			children_min_size = max(children_min_size, child.limits.x.min.? or_else 0)
-
-			current.size.x = max(current.size.x, child.size.x + padding)
+		} else {
+			children_size = max(children_size, child_size)
+			children_min_size = max(children_min_size, child_min)
 		}
 	}
 
-	if children_min_size > (current.limits.x.min.? or_else 0) {
-		current.limits.x.min = children_min_size + padding
-	} else {
-		current.size.x += padding
+	if layout_is_along(layout, axis) && child_count > 1 {
+		gap := f32(child_count - 1) * layout.config.child_gap
+		children_size += gap
+		children_min_size += gap
 	}
 
-	current.size.x = clamp_element_size(current.size.x, current.limits.x)
+	children_size += padding
+	children_min_size += padding
+
+	ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
+	ele_set_size(current, clamp_element_size(children_size, ele_get_lims(current, axis)), axis)
 }
 
-@(private)
-fit_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
-	current := &ctx.elements[index]
-	layout, ok := current.attributes.(Layout_Attributes)
-	if !ok do return
-
-	if fixed_size, ok := layout.config.height.(Fixed_Size); ok {
-		current.limits.y.min = fixed_size.value
-		current.limits.y.max = fixed_size.value
-		current.size.y = fixed_size.value
-		return
-	}
-
-
-	padding := layout.config.padding.top + layout.config.padding.bottom
-	children_min_size := f32(0)
-	child_gap := f32(0)
-
-	if layout.config.layout_direction == .Top_To_Bottom {
-		// Jump‑loop over direct children
-		child_count := 0
-		// Sum heights of children + gaps
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			children_min_size += child.limits.y.min.? or_else 0
-
-			current.size.y += child.size.y
-			child_count += 1
-		}
-		if child_count > 0 {
-			child_gap = f32(child_count - 1) * layout.config.child_gap
-			current.size.y += child_gap
-			children_min_size += child_gap
-		}
-	} else {
-		// Max height among children
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			children_min_size = max(children_min_size, child.limits.y.min.? or_else 0)
-
-			current.size.y = max(current.size.y, child.size.y + padding)
-		}
-	}
-
-	if children_min_size > (current.limits.y.min.? or_else 0) {
-		current.limits.y.min = children_min_size + padding
-	} else {
-		current.size.y += padding
-	}
-
-	current.size.y = clamp_element_size(current.size.y, current.limits.y)
-}
-
-@(private)
+@(private = "file")
 fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		fit_sizing_heights_tree(ctx, child.index)
 	}
 
-	fit_sizing_heights(ctx, index)
+	fit_sizing(ctx, index, .Y)
 }
 
-@(private)
-grow_and_shrink_sizing_widths :: proc(ctx: ^UI_Context, index: UI_Index) {
-	current := ctx.elements[index]
+@(private = "file")
+grow_and_shrink_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+	// Grow and Shrink phases, not gonna merge them because of readability
+	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.subtree_size <= 1 do return
 
-	content_width := current.size.x - layout.config.padding.left - layout.config.padding.right
+	// Content space available to children.
+	available := ele_get_size(current, axis) - layout_get_pad(layout, axis)
 
-	// Vertical layout: all grow children expand to fill width
-	if layout.config.layout_direction == .Top_To_Bottom {
+	// Cross-axis: grow children simply fill the available space
+	if layout_is_across(layout, axis) {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if is_grow_layout_or_text(child^, .X) {
-				child.size.x = clamp_element_size(content_width, child.limits.x)
+			if is_grow_layout_or_text(child^, axis) {
+				ele_set_size(child, clamp_element_size(available, ele_get_lims(child, axis)), axis)
 			}
 		}
 		return
 	}
 
-	// Horizontal layout: distribute remaining space among grow children
+	// Along-axis: distribute remaining/overshoot space among grow children
 	growables := ctx.growable_buffer
 	clear(&growables)
 	defer clear(&growables)
 
-	remaining_width := content_width
+	remaining := available
 	child_count := 0
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		remaining_width -= child.size.x
+		remaining -= ele_get_size(child, axis)
 
-		if is_grow_layout_or_text(child^, .X) {
+		if is_grow_layout_or_text(child^, axis) {
 			append(&growables, child.index)
 		}
 
 		child_count += 1
 	}
 
-	if child_count > 0 {
-		remaining_width -= f32(child_count - 1) * layout.config.child_gap
+	if child_count > 1 {
+		remaining -= f32(child_count - 1) * layout.config.child_gap
 	}
 
 	if len(growables) == 0 do return
 
 	growable_count := len(growables)
 
+	// Grow phase
+	for remaining > math.F32_EPSILON && len(growables) > 0 {
+		smallest := ele_get_size(&ctx.elements[growables[0]], axis)
+		second_smallest := smallest
+		size_to_add := remaining
 
-	for remaining_width > math.F32_EPSILON && len(growables) > 0 {
-		smallest := ctx.elements[growables[0]].size.x
-		second_smallest := ctx.elements[growables[0]].size.x
-		width_to_add := remaining_width
+		for i in 1 ..< len(growables) {
+			child := &ctx.elements[growables[i]]
+			child_size := ele_get_size(child, axis)
 
-		for growable_index in 1 ..< len(growables) {
-			child_ele := ctx.elements[growables[growable_index]]
-			if child_ele.size.x < smallest {
+			if child_size < smallest {
 				second_smallest = smallest
-				smallest = child_ele.size.x
-			} else if child_ele.size.x < second_smallest {
-				second_smallest = min(second_smallest, child_ele.size.x)
-				width_to_add = second_smallest - smallest
+				smallest = child_size
+			} else if child_size < second_smallest {
+				second_smallest = child_size
 			}
 		}
 
-		if width_to_add == 0 {
-			// all childs already equally expanded from the start
-			width_to_add = remaining_width / f32(len(growables))
+		if second_smallest > smallest {
+			size_to_add = min(second_smallest - smallest, remaining / f32(len(growables)))
 		} else {
-			width_to_add = min(width_to_add, remaining_width / f32(len(growables)))
+			size_to_add = remaining / f32(len(growables))
 		}
 
 		for i := 0; i < len(growables); {
-			growable := growables[i]
-			if ctx.elements[growable].size.x == smallest {
-				growable_ele := &ctx.elements[growable]
-				prev_size := growable_ele.size.x
-				growable_ele.size.x += width_to_add
+			child_index := growables[i]
+			child := &ctx.elements[child_index]
 
-				if max_size, ok := growable_ele.limits.x.max.(f32); ok && growable_ele.size.x >= max_size {
-					growable_ele.size.x = max_size
-					remaining_width -= max_size - prev_size
+			if ele_get_size(child, axis) == smallest {
+				previous := ele_get_size(child, axis)
+				new_size := previous + size_to_add
+
+				if max_size, ok := ele_get_max(child, axis).(f32); ok && new_size >= max_size {
+					new_size = max_size
+					ele_set_size(child, new_size, axis)
+
+					remaining -= new_size - previous
 					unordered_remove(&growables, i)
 					continue
 				}
-				remaining_width -= width_to_add
+
+				ele_set_size(child, new_size, axis)
+				remaining -= size_to_add
 			}
+
 			i += 1
 		}
 	}
 
-	non_zero_resize(&growables, growable_count) // keep capacity
-
-
-	shrinkables := growables
-	overshoot_width := -remaining_width
-
-	for overshoot_width > math.F32_EPSILON && len(shrinkables) > 0 {
-		largest := ctx.elements[shrinkables[0]].size.x
-		second_largest := ctx.elements[shrinkables[0]].size.x
-		width_to_subtract := overshoot_width
-
-		for shrinkable_index in 1 ..< len(shrinkables) {
-			child_ele := ctx.elements[shrinkables[shrinkable_index]]
-			if child_ele.size.x > largest {
-				second_largest = largest
-				largest = child_ele.size.x
-			} else if child_ele.size.x > second_largest {
-				second_largest = max(second_largest, child_ele.size.x)
-				width_to_subtract = largest - second_largest
-			}
-		}
-
-		if width_to_subtract == 0 {
-			width_to_subtract = remaining_width / f32(len(growables))
-		} else {
-			width_to_subtract = max(width_to_subtract, overshoot_width / f32(len(shrinkables)))
-		}
-
-		for i := 0; i < len(shrinkables); {
-			shrinkable := shrinkables[i]
-			if ctx.elements[shrinkable].size.x == largest {
-				shrinkable_ele := &ctx.elements[shrinkable]
-				prev_size := shrinkable_ele.size.x
-				shrinkable_ele.size.x -= width_to_subtract
-
-				min_size := shrinkable_ele.limits.x.min.(f32) or_else 0
-
-				if shrinkable_ele.size.x <= min_size {
-					shrinkable_ele.size.x = min_size
-					overshoot_width -= prev_size - min_size
-					unordered_remove(&shrinkables, i)
-					continue
-				} else {
-					overshoot_width -= width_to_subtract
-				}
-			}
-			i += 1
-		}
-	}
-}
-
-// Height version – analogous
-@(private)
-grow_and_shrink_sizing_heights :: proc(ctx: ^UI_Context, index: UI_Index) {
-	current := ctx.elements[index]
-	layout, ok := current.attributes.(Layout_Attributes)
-	if !ok || current.subtree_size <= 1 do return
-
-	content_height := current.size.y - layout.config.padding.top - layout.config.padding.bottom
-
-	// Horizontal layout: all grow children expand to fill height
-	if layout.config.layout_direction == .Left_To_Right {
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			if is_grow_layout_or_text(child^, .Y) {
-				child.size.y = clamp_element_size(content_height, child.limits.y)
-			}
-		}
-		return
-	}
-
-	growables := ctx.growable_buffer
-	clear(&growables)
-	defer clear(&growables)
-
-	remaining_height := content_height
-	child_count := 0
-
-
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		remaining_height -= child.size.y
-
-		if is_grow_layout_or_text(child^, .Y) {
-			append(&growables, child.index)
-		}
-
-		child_count += 1
-	}
-
-	if child_count > 0 {
-		remaining_height -= f32(child_count - 1) * layout.config.child_gap
-	}
-
-	if len(growables) == 0 do return
-
-	growable_count := len(growables)
-
-	// Grow
-	for remaining_height > math.F32_EPSILON && len(growables) > 0 {
-		smallest := ctx.elements[growables[0]].size.y
-		second_smallest := ctx.elements[growables[0]].size.y
-		height_to_add := remaining_height
-
-		for growable_index in 1 ..< len(growables) {
-			child_ele := ctx.elements[growables[growable_index]]
-			if child_ele.size.y < smallest {
-				second_smallest = smallest
-				smallest = child_ele.size.y
-			} else if child_ele.size.y < second_smallest {
-				second_smallest = min(second_smallest, child_ele.size.y)
-				height_to_add = second_smallest - smallest
-			}
-		}
-
-		if height_to_add == 0 {
-			height_to_add = remaining_height / f32(len(growables))
-		} else {
-			height_to_add = min(height_to_add, remaining_height / f32(len(growables)))
-		}
-
-		for i := 0; i < len(growables); {
-			growable := growables[i]
-			if ctx.elements[growable].size.y == smallest {
-				growable_ele := &ctx.elements[growable]
-				prev_size := growable_ele.size.y
-				growable_ele.size.y += height_to_add
-
-				if max_size, ok := growable_ele.limits.y.max.(f32); ok && growable_ele.size.y >= max_size {
-					growable_ele.size.y = max_size
-					remaining_height -= max_size - prev_size
-					unordered_remove(&growables, i)
-					continue
-				}
-				remaining_height -= height_to_add
-			}
-			i += 1
-		}
-	}
-
+	// Hacking the growables array back to original size
 	non_zero_resize(&growables, growable_count)
 
-	// Shrink
+	// Shrink phase
 	shrinkables := growables
-	overshoot_height := -remaining_height
+	overshoot := -remaining
 
-	for overshoot_height > math.F32_EPSILON && len(shrinkables) > 0 {
-		largest := ctx.elements[shrinkables[0]].size.y
-		second_largest := ctx.elements[shrinkables[0]].size.y
-		height_to_subtract := overshoot_height
+	for overshoot > math.F32_EPSILON && len(shrinkables) > 0 {
+		largest := ele_get_size(&ctx.elements[shrinkables[0]], axis)
+		second_largest := largest
+		size_to_subtract := overshoot
 
-		for shrinkable_index in 1 ..< len(shrinkables) {
-			child_ele := ctx.elements[shrinkables[shrinkable_index]]
-			if child_ele.size.y > largest {
+		for i in 1 ..< len(shrinkables) {
+			child := &ctx.elements[shrinkables[i]]
+			child_size := ele_get_size(child, axis)
+
+			if child_size > largest {
 				second_largest = largest
-				largest = child_ele.size.y
-			}
-			if child_ele.size.y > second_largest {
-				second_largest = max(second_largest, child_ele.size.y)
-				height_to_subtract = largest - second_largest
+				largest = child_size
+			} else if child_size > second_largest {
+				second_largest = child_size
 			}
 		}
 
-		if height_to_subtract == 0 {
-			height_to_subtract = overshoot_height / f32(len(shrinkables))
+		if second_largest < largest {
+			size_to_subtract = min(largest - second_largest, overshoot / f32(len(shrinkables)))
 		} else {
-			height_to_subtract = max(height_to_subtract, overshoot_height / f32(len(shrinkables)))
+			size_to_subtract = overshoot / f32(len(shrinkables))
 		}
 
 		for i := 0; i < len(shrinkables); {
-			shrinkable := shrinkables[i]
-			if ctx.elements[shrinkable].size.y == largest {
-				shrinkable_ele := &ctx.elements[shrinkable]
-				prev_size := shrinkable_ele.size.y
-				shrinkable_ele.size.y -= height_to_subtract
+			child_index := shrinkables[i]
+			child := &ctx.elements[child_index]
 
-				min_size := shrinkable_ele.limits.y.min.(f32) or_else 0
-				if shrinkable_ele.size.y <= min_size {
-					shrinkable_ele.size.y = min_size
-					overshoot_height -= prev_size - min_size
+			if ele_get_size(child, axis) == largest {
+				previous := ele_get_size(child, axis)
+				new_size := previous - size_to_subtract
+
+				min_size := ele_get_min(child, axis)
+
+				if new_size <= min_size {
+					new_size = min_size
+					ele_set_size(child, new_size, axis)
+
+					overshoot -= previous - new_size
 					unordered_remove(&shrinkables, i)
 					continue
-				} else {
-					overshoot_height -= height_to_subtract
 				}
+
+				ele_set_size(child, new_size, axis)
+				overshoot -= size_to_subtract
 			}
+
 			i += 1
 		}
 	}
 }
 
-@(private)
-grow_and_shrink_sizing_widths_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
-	grow_and_shrink_sizing_widths(ctx, index)
+@(private = "file")
+grow_and_shrink_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+	grow_and_shrink_sizing(ctx, index, axis)
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		grow_and_shrink_sizing_widths_tree(ctx, child.index)
+		grow_and_shrink_sizing_tree(ctx, child.index, axis)
 	}
 }
 
-@(private)
-grow_and_shrink_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
-	grow_and_shrink_sizing_heights(ctx, index)
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		grow_and_shrink_sizing_heights_tree(ctx, child.index)
-	}
-}
-
-@(private)
+@(private = "file")
 is_separator :: #force_inline proc(r: rune) -> bool {
 	for sep in WORD_SEPARATION_CHARS {
 		if r == sep {
@@ -800,7 +625,7 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 	return false
 }
 
-@(private)
+@(private = "file")
 wrap_texts :: proc(ctx: ^UI_Context) {
 	for &ele in ctx.elements {
 		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
@@ -885,142 +710,76 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 	}
 }
 
-@(private)
-calculate_position_x :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+@(private = "file")
+calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
 		text_attr, ok := current.attributes.(Text_Attributes)
 		assert(ok)
 
-		if current.size.x > text_attr.preferred_size.x {
-			remaining_width := current.size.x - text_attr.preferred_size.x
+		if ele_get_size(current, axis) > text_get_preferred(text_attr, axis) {
+			remaining := ele_get_size(current, axis) - text_get_preferred(text_attr, axis)
 
-			switch text_attr.config.alignment.x {
-			case .Left:
+			switch align_get_norm(text_attr.config.alignment, axis) {
+			case .Start:
 				break
 			case .Center:
-				current.position.x += remaining_width * 0.5
-			case .Right:
-				current.position.x += remaining_width
+				ele_set_pos(current, ele_get_pos(current, axis) + remaining * 0.5, axis)
+			case .End:
+				ele_set_pos(current, ele_get_pos(current, axis) + remaining, axis)
 			}
 		}
 
 		return
 	}
 
-	left_offset := current.position.x + layout.config.padding.left
+	offset := ele_get_pos(current, axis) + layout_get_pad_at(layout, axis, .Start)
 
-	if layout.config.layout_direction == .Left_To_Right {
-		// Find the remaining width
-		remaining_width := current.size.x - layout.config.padding.left - layout.config.padding.right
+	if layout_is_along(layout, axis) {
+		// Find the remaining size
+		remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis)
+
 		child_count := 0
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			remaining_width -= child.size.x
+			remaining -= ele_get_size(child, axis)
 			child_count += 1
 		}
-		remaining_width -= f32(child_count - 1) * layout.config.child_gap
 
+		if child_count > 0 {
+			remaining -= f32(child_count - 1) * layout.config.child_gap
+		}
 
-		switch layout.config.child_alignment.x {
-		case .Left:
+		switch align_get_norm(layout.config.child_alignment, axis) {
+		case .Start:
 			break
 		case .Center:
-			left_offset += remaining_width * 0.5
-		case .Right:
-			left_offset += remaining_width
+			offset += remaining * 0.5
+		case .End:
+			offset += remaining
 		}
 	}
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		child.position.x = left_offset
+		ele_set_pos(child, offset, axis)
 
-		if layout.config.layout_direction == .Top_To_Bottom {
-			// Find the remaining height
-			remaining_width := current.size.x - layout.config.padding.left - layout.config.padding.right - child.size.x
+		if layout_is_across(layout, axis) {
+			// Find the remaining size
+			remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis) - ele_get_size(child, axis)
 
-			switch layout.config.child_alignment.x {
-			case .Left:
+			switch align_get_norm(layout.config.child_alignment, axis) {
+			case .Start:
 				break
 			case .Center:
-				child.position.x += remaining_width * 0.5
-			case .Right:
-				child.position.x += remaining_width
+				ele_set_pos(child, ele_get_pos(child, axis) + remaining * 0.5, axis)
+			case .End:
+				ele_set_pos(child, ele_get_pos(child, axis) + remaining, axis)
 			}
 		} else {
-			left_offset += child.size.x + layout.config.child_gap
+			offset += ele_get_size(child, axis) + layout.config.child_gap
 		}
 
-		calculate_position_x(ctx, child.index)
-	}
-}
-
-@(private)
-calculate_position_y :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
-	current := &ctx.elements[index]
-	layout, ok := current.attributes.(Layout_Attributes)
-	if !ok {
-		text_attr, ok := current.attributes.(Text_Attributes)
-
-		if current.size.y > text_attr.preferred_size.y {
-			remaining_height := current.size.y - text_attr.preferred_size.y
-
-			switch text_attr.config.alignment.y {
-			case .Top:
-				break
-			case .Center:
-				current.position.y += remaining_height * 0.5
-			case .Bottom:
-				current.position.y += remaining_height
-			}
-		}
-
-		return
-	}
-
-	top_offset := current.position.y + layout.config.padding.top
-
-	if layout.config.layout_direction == .Top_To_Bottom {
-		// Find the remaining width
-		remaining_height := current.size.y - layout.config.padding.top - layout.config.padding.bottom
-		child_count := 0
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			remaining_height -= child.size.y
-			child_count += 1
-		}
-		remaining_height -= f32(child_count - 1) * layout.config.child_gap
-
-		switch layout.config.child_alignment.y {
-		case .Top:
-			break
-		case .Center:
-			top_offset += remaining_height * 0.5
-		case .Bottom:
-			top_offset += remaining_height
-		}
-	}
-
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		child.position.y = top_offset
-
-		if layout.config.layout_direction == .Left_To_Right {
-			// Find the remaining height
-			remaining_height :=
-				current.size.y - layout.config.padding.top - layout.config.padding.bottom - child.size.y
-
-			switch layout.config.child_alignment.y {
-			case .Top:
-				break
-			case .Center:
-				child.position.y += remaining_height * 0.5
-			case .Bottom:
-				child.position.y += remaining_height
-			}
-		} else {
-			top_offset += child.size.y + layout.config.child_gap
-		}
-
-		calculate_position_y(ctx, child.index)
+		calculate_position(ctx, child.index, axis)
 	}
 }
 
@@ -1054,7 +813,7 @@ ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32
 	}
 }
 
-@(private)
+@(private = "file")
 load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	assert(os.exists(string(font_path)))
 
@@ -1068,7 +827,7 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	return {font = font, spacing = spacing}
 }
 
-@(private)
+@(private = "file")
 load_font_shader :: proc(shader_path: cstring) -> rl.Shader {
 	assert(os.exists(string(shader_path)))
 
@@ -1135,7 +894,7 @@ begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) ->
 }
 
 
-@(private)
+@(private = "file")
 end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	if !ok do return
 
@@ -1143,17 +902,18 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	close_layout(ctx)
 
 	// Top down, calculate grow sizing widths
-	grow_and_shrink_sizing_widths_tree(ctx, 0)
+	grow_and_shrink_sizing_tree(ctx, 0, .X)
 	wrap_texts(ctx)
 
+	// Calculate heights
 	fit_sizing_heights_tree(ctx, 0)
-	grow_and_shrink_sizing_heights_tree(ctx, 0)
+	grow_and_shrink_sizing_tree(ctx, 0, .Y)
 
 	// ui_debug_draw_tree(ctx,)
 
 	// Compute positions
-	calculate_position_x(ctx)
-	calculate_position_y(ctx)
+	calculate_position(ctx, 0, .X)
+	calculate_position(ctx, 0, .Y)
 
 	// Generate render commands
 	clear(&ctx.render_commands)
@@ -1207,7 +967,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	clear(&ctx.open_element_stack)
 }
 
-@(private)
+@(private = "file")
 root_layout :: proc(width: f32, height: f32) -> UI_Element {
 	return UI_Element {
 		id = "root",
@@ -1229,7 +989,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 	}
 }
 
-@(private)
+@(private = "file")
 default_layout :: proc() -> UI_Layout_Config {
 	return UI_Layout_Config {
 		child_alignment = {x = .Left, y = .Top},
@@ -1244,7 +1004,7 @@ default_layout :: proc() -> UI_Layout_Config {
 	}
 }
 
-@(private)
+@(private = "file")
 default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
 	return UI_Text_Config {
 		font_index = 0,
@@ -1259,14 +1019,14 @@ ui_get_id :: proc(ctx: UI_Context, index: UI_Index) -> string {
 	return ctx.elements[index].id
 }
 
-@(private)
+@(private = "file")
 set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
 	if v, ok := src.(T); ok {
 		dest^ = v
 	}
 }
 
-@(private)
+@(private = "file")
 parse_layout_declare :: proc(
 	default_config: UI_Layout_Config,
 	declare: UI_Layout_Declare,
@@ -1303,7 +1063,7 @@ parse_layout_declare :: proc(
 	return config, limits
 }
 
-@(private)
+@(private = "file")
 parse_text_declare :: proc(
 	ctx: UI_Context,
 	default_config: UI_Text_Config,
@@ -1357,13 +1117,13 @@ border :: #force_inline proc(value: UI_Border_Config) -> UI_Border_Config {
 }
 
 
-@(private)
+@(private = "file")
 child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
 	return Child_Iter{ctx = ctx, current = start.index + 1, end = start.index + start.subtree_size}
 }
 
-@(private)
+@(private = "file")
 child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, cond: bool) {
 	if it.current >= it.end {
 		return nil, false
@@ -1373,7 +1133,7 @@ child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, cond: bool) {
 	return child, true
 }
 
-@(private)
+@(private = "file")
 is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
 	case Text_Attributes:
@@ -1399,7 +1159,7 @@ layout :: proc(declare: UI_Layout_Declare) -> bool {
 	return open_layout(current_context, declare)
 }
 
-@(private)
+@(private = "file")
 close_layout_deffered :: proc() {
 	close_layout(current_context)
 }
@@ -1408,4 +1168,119 @@ close_layout_deffered :: proc() {
 text :: proc(declare: UI_Text_Declare) -> bool {
 	open_text(current_context, declare)
 	return true
+}
+
+@(private = "file")
+layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
+	return(
+		axis == .X ? layout.config.padding.left + layout.config.padding.right : layout.config.padding.top + layout.config.padding.bottom \
+	)
+}
+
+@(private = "file")
+layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: NormalizedEnd) -> f32 {
+	return(
+		axis == .X ? (end == .Start ? layout.config.padding.left : layout.config.padding.right) : (end == .Start ? layout.config.padding.top : layout.config.padding.bottom) \
+	)
+}
+
+
+// new ultilities for refactoring
+
+@(private = "file")
+layout_get_mode :: proc(layout: Layout_Attributes, axis: Axis) -> Size_Mode {
+	return axis == .X ? layout.config.width : layout.config.height
+}
+
+@(private = "file")
+ele_set_size :: proc(element: ^UI_Element, value: f32, axis: Axis) {
+	if axis == .X do element.size.x = value
+	else do element.size.y = value
+}
+
+@(private = "file")
+ele_set_min :: proc(element: ^UI_Element, value: f32, axis: Axis) {
+	if axis == .X do element.limits.x.min = value
+	else do element.limits.y.min = value
+}
+
+@(private = "file")
+ele_set_max :: proc(element: ^UI_Element, value: f32, axis: Axis) {
+	if axis == .X do element.limits.x.max = value
+	else do element.limits.y.max = value
+}
+
+@(private = "file")
+ele_get_size :: proc(element: ^UI_Element, axis: Axis) -> f32 {
+	return axis == .X ? element.size.x : element.size.y
+}
+
+@(private = "file")
+layout_is_along :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
+	return(
+		axis == .X ? layout.config.layout_direction == .Left_To_Right : layout.config.layout_direction == .Top_To_Bottom \
+	)
+}
+
+@(private = "file")
+text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
+	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
+}
+
+@(private = "file")
+layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
+	return(
+		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
+	)
+}
+
+@(private = "file")
+ele_get_min :: proc(element: ^UI_Element, axis: Axis) -> f32 {
+	return axis == .X ? element.limits.x.min.? or_else 0 : element.limits.y.min.? or_else 0
+}
+
+@(private = "file")
+ele_get_max :: proc(element: ^UI_Element, axis: Axis) -> Maybe(f32) {
+	return axis == .X ? element.limits.x.max : element.limits.y.max
+}
+
+@(private = "file")
+ele_get_lims :: proc(element: ^UI_Element, axis: Axis) -> UI_Axis_Limits {
+	return axis == .X ? element.limits.x : element.limits.y
+}
+
+@(private = "file")
+align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
+	if axis == .X {
+		switch aligment.x {
+		case .Left:
+			return .Start
+		case .Center:
+			return .Center
+		case .Right:
+			return .End
+		}
+	} else {
+		switch aligment.y {
+		case .Top:
+			return .Start
+		case .Center:
+			return .Center
+		case .Bottom:
+			return .End
+		}
+	}
+	return .Start
+}
+
+@(private = "file")
+ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: Axis) {
+	if axis == .X do element.position.x = value
+	else do element.position.y = value
+}
+
+@(private = "file")
+ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
+	if axis == .X do return element.position.x
+	else do return element.position.y
 }

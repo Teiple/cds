@@ -63,7 +63,6 @@ main :: proc() {
 
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-
 			if ui.layout(
 				{
 					width = ui.grow(),
@@ -85,7 +84,6 @@ main :: proc() {
 						layout_direction = .Left_To_Right,
 					},
 				)
-
 
 				ui.text({content = "Details"})
 				ui.text({content = "Status: Online"})
