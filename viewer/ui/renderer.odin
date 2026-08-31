@@ -5,17 +5,12 @@ import "core:math"
 import rl "vendor:raylib"
 
 
-render_commands :: proc(commands: []Render_Command, debug_color_sampler: proc() -> rl.Color) {
-
+render_commands :: proc(commands: []Render_Command) {
 	for variant in commands {
 		switch command in variant {
 		case Rect_Command:
 			{
-				draw_rect_command(command, debug_color_sampler)
-			}
-		case Border_Command:
-			{
-				draw_border_command(command, debug_color_sampler)
+				draw_rect_command(command)
 			}
 		case Text_Command:
 			{
@@ -68,13 +63,15 @@ draw_text_command :: proc(command: Text_Command) {
 }
 
 @(private)
-draw_rect_command :: proc(command: Rect_Command, debug_color_sampler: proc() -> rl.Color) {
-	draw_rounded_rect(command.rect, command.corner_radius, debug_color_sampler())
-}
+draw_rect_command :: proc(command: Rect_Command) {
+	command := command
+	setup_rect_shader(&command)
 
-@(private)
-draw_border_command :: proc(command: Border_Command, debug_color_sampler: proc() -> rl.Color) {
-	draw_rounded_border(command.rect, command.border_radius, command.border_width, debug_color_sampler())
+	rl.BeginShaderMode(command.rect_shader.shader)
+	rl.DrawRectangle(0, 0, rl.GetScreenWidth(), rl.GetScreenHeight(), rl.WHITE)
+	rl.EndShaderMode()
+
+	// draw_rounded_rect(command.rect, 4, command.color)
 }
 
 @(private, require_results)
@@ -137,50 +134,30 @@ measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) 
 	return width
 }
 
-@(private)
-draw_rounded_rect :: proc(rect: rl.Rectangle, radius: f32, color: rl.Color) {
-	radius := min(radius, min(rect.width, rect.height) * 0.5)
+setup_rect_shader :: proc(command: ^Rect_Command) {
+	rect := command.rect
+	rect.y = f32(rl.GetScreenHeight()) - rect.y - rect.height
 
-	// Center
-	rl.DrawRectangle(i32(rect.x + radius), i32(rect.y), i32(rect.width - 2 * radius), i32(rect.height), color)
+	rect_data: [4]f32 = {rect.x, rect.y, rect.width, rect.height}
+	rect_shader := command.rect_shader
 
-	// Middle
-	rl.DrawRectangle(i32(rect.x), i32(rect.y + radius), i32(rect.width), i32(rect.height - 2 * radius), color)
+	color := to_shader_color_data(command.color)
+	shadow_color := to_shader_color_data(command.shadow.color)
+	border_color := to_shader_color_data(command.border.color)
 
-	// Corners
-	rl.DrawCircleV({rect.x + radius, rect.y + radius}, radius, color)
-	rl.DrawCircleV({rect.x + rect.width - radius, rect.y + radius}, radius, color)
-	rl.DrawCircleV({rect.x + radius, rect.y + rect.height - radius}, radius, color)
-	rl.DrawCircleV({rect.x + rect.width - radius, rect.y + rect.height - radius}, radius, color)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.radius_loc, &command.corner_radius, .VEC4)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_radius_loc, &command.shadow.radius, .FLOAT)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &command.shadow.offset, .VEC2)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_scale_loc, &command.shadow.scale, .FLOAT)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_thickness_loc, &command.border.thickness, .FLOAT)
+
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.rectangle_loc, &rect_data, .VEC4)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.color_loc, &color, .VEC4)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_color_loc, &shadow_color, .VEC4)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_color_loc, &border_color, .VEC4)
 }
 
-@(private)
-draw_rounded_border :: proc(rect: rl.Rectangle, radius: f32, thickness: f32, color: rl.Color) {
-	radius := min(radius, min(rect.width, rect.height) * 0.5)
 
-	// Straight sections
-	rl.DrawRectangle(i32(rect.x), i32(rect.y + radius), i32(thickness), i32(rect.height - 2 * radius), color)
-	rl.DrawRectangle(
-		i32(rect.x + rect.width - thickness),
-		i32(rect.y + radius),
-		i32(thickness),
-		i32(rect.height - 2 * radius),
-		color,
-	)
-	rl.DrawRectangle(i32(rect.x + radius), i32(rect.y), i32(rect.width - 2 * radius), i32(thickness), color)
-	rl.DrawRectangle(
-		i32(rect.x + radius),
-		i32(rect.y + rect.height - thickness),
-		i32(rect.width - 2 * radius),
-		i32(thickness),
-		color,
-	)
-
-	// Corner rings
-	inner_radius := max(0, radius - thickness)
-
-	rl.DrawRing({rect.x + radius, rect.y + radius}, inner_radius, radius, 180, 270, 12, color)
-	rl.DrawRing({rect.x + rect.width - radius, rect.y + radius}, inner_radius, radius, 270, 360, 12, color)
-	rl.DrawRing({rect.x + rect.width - radius, rect.y + rect.height - radius}, inner_radius, radius, 0, 90, 12, color)
-	rl.DrawRing({rect.x + radius, rect.y + rect.height - radius}, inner_radius, radius, 90, 180, 12, color)
+to_shader_color_data :: #force_inline proc(color: rl.Color) -> [4]f32 {
+	return {f32(color.r) / 255.0, f32(color.g) / 255.0, f32(color.b) / 255.0, f32(color.a) / 255.0}
 }

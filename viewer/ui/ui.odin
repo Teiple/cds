@@ -17,19 +17,28 @@ Axis :: enum {
 	Y,
 }
 
+UI_MouseState :: enum {
+	None,
+	Pressed,
+	Down,
+	Released,
+	Hover,
+}
+
 UI_Input :: struct {
-	mouse_position:      rl.Vector2,
-	mouse_pressed:       bool,
-	mouse_just_pressed:  bool,
-	mouse_just_released: bool,
-	scroll:              rl.Vector2,
+	mouse_position: rl.Vector2,
+	mouse_state:    UI_MouseState,
+	scroll:         rl.Vector2,
+}
+
+UI_InputEvent :: struct {
+	hovered_element: UI_Index,
 }
 
 UI_Measure_Text :: proc(text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
 
 Render_Command :: union {
 	Rect_Command,
-	Border_Command,
 	Text_Command,
 	Push_Clip_Command,
 	Pop_Clip_Command,
@@ -38,14 +47,10 @@ Render_Command :: union {
 Rect_Command :: struct {
 	rect:          rl.Rectangle,
 	color:         rl.Color,
-	corner_radius: f32,
-}
-
-Border_Command :: struct {
-	rect:          rl.Rectangle,
-	color:         rl.Color,
-	border_radius: f32,
-	border_width:  f32,
+	corner_radius: rl.Vector4,
+	shadow:        Shadow_Config,
+	border:        Border_Config,
+	rect_shader:   Rect_Shader,
 }
 
 Text_Command :: struct {
@@ -87,6 +92,9 @@ UI_Context :: struct {
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
 	font_shader:        rl.Shader,
+	rect_shader:        Rect_Shader,
+	input:              UI_Input,
+	input_event:        UI_InputEvent,
 }
 
 Sizing_Axis :: struct {
@@ -166,7 +174,8 @@ UI_Layout_Declare :: struct {
 	child_alignment:  Maybe(Alignment),
 	background_color: Maybe(rl.Color),
 	corner_radius:    Maybe(f32),
-	border:           Maybe(UI_Border_Config),
+	border:           Maybe(Border_Declare),
+	shadow:           Maybe(Shadow_Declare),
 }
 
 UI_Border_Declare :: struct {
@@ -185,9 +194,28 @@ UI_Text_Declare :: struct {
 	alignment:    Maybe(Alignment),
 }
 
-UI_Border_Config :: struct {
+Border_Config :: struct {
 	thickness: f32,
 	color:     rl.Color,
+}
+
+Border_Declare :: struct {
+	thickness: Maybe(f32),
+	color:     Maybe(rl.Color),
+}
+
+Shadow_Config :: struct {
+	color:  rl.Color,
+	radius: f32,
+	offset: rl.Vector2,
+	scale:  f32,
+}
+
+Shadow_Declare :: struct {
+	color:  Maybe(rl.Color),
+	radius: Maybe(f32),
+	offset: Maybe(rl.Vector2),
+	scale:  Maybe(f32),
 }
 
 UI_Layout_Config :: struct {
@@ -199,7 +227,8 @@ UI_Layout_Config :: struct {
 	child_alignment:  Alignment,
 	background_color: rl.Color,
 	corner_radius:    f32,
-	border:           UI_Border_Config,
+	border:           Border_Config,
+	shadow:           Shadow_Config,
 }
 
 UI_Text_Config :: struct {
@@ -308,7 +337,6 @@ close_layout :: proc(ctx: ^UI_Context) {
 	ele.subtree_size = i32(len(ctx.elements)) - ele.index
 
 	fit_sizing(ctx, index, .X)
-	// fit_sizing_widths(ctx, index)
 }
 
 @(private = "file")
@@ -804,7 +832,6 @@ ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32
 
 	if ok {
 		fmt.println(layout.config.layout_direction == .Left_To_Right ? " LTR" : " TTB")
-		// print direct children
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			ui_debug_draw_tree(ctx, child.index, cur_level + 1)
 		}
@@ -834,6 +861,7 @@ load_font_shader :: proc(shader_path: cstring) -> rl.Shader {
 	return rl.LoadShader(nil, shader_path)
 }
 
+
 context_make :: proc(
 	measure_text_proc: UI_Measure_Text,
 	font_configs: []UI_Font_Config,
@@ -845,6 +873,7 @@ context_make :: proc(
 	}
 
 	font_shader := load_font_shader(font_shader)
+	rect_shader := load_rect_shader()
 
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 500),
@@ -855,6 +884,7 @@ context_make :: proc(
 		measure_text = measure_text_proc,
 		fonts = fonts[:],
 		font_shader = font_shader,
+		rect_shader = rect_shader,
 	}
 }
 
@@ -864,12 +894,15 @@ context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
-	delete(ctx.fonts)
 
 	for f in ctx.fonts {
 		rl.UnloadFont(f.font)
 	}
 	rl.UnloadShader(ctx.font_shader)
+
+	delete(ctx.fonts)
+
+	rl.UnloadShader(ctx.rect_shader.shader)
 }
 
 @(require_results, deferred_in_out = end_layout)
@@ -909,11 +942,12 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	fit_sizing_heights_tree(ctx, 0)
 	grow_and_shrink_sizing_tree(ctx, 0, .Y)
 
-	// ui_debug_draw_tree(ctx,)
-
 	// Compute positions
 	calculate_position(ctx, 0, .X)
 	calculate_position(ctx, 0, .Y)
+
+	// Mouse input, forward to next frame
+	detect_mouse(ctx)
 
 	// Generate render commands
 	clear(&ctx.render_commands)
@@ -927,19 +961,11 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 						rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
 						color = attr.config.background_color,
 						corner_radius = attr.config.corner_radius,
+						border = attr.config.border,
+						shadow = attr.config.shadow,
+						rect_shader = ctx.rect_shader,
 					},
 				)
-				if attr.config.border.thickness > 0 {
-					append(
-						&ctx.render_commands,
-						Border_Command {
-							rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
-							color = attr.config.border.color,
-							border_width = attr.config.border.thickness,
-							border_radius = attr.config.corner_radius,
-						},
-					)
-				}
 			}
 		case Text_Attributes:
 			{
@@ -965,6 +991,42 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	// Clean up
 	clear(&ctx.elements)
 	clear(&ctx.open_element_stack)
+}
+
+detect_mouse :: proc(ctx: ^UI_Context) {
+	ctx.input = {
+		mouse_position = rl.GetMousePosition(),
+		mouse_state    = rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ? .Pressed : (rl.IsMouseButtonDown(rl.MouseButton.LEFT) ? .Down : (rl.IsMouseButtonReleased(rl.MouseButton.LEFT) ? .Released : .Hover)),
+	}
+
+	ctx.input_event = {}
+
+	travel_bottom_up(ctx, proc(ctx: ^UI_Context, index: i32) {
+		if ctx.input_event.hovered_element > 0 do return
+		ele := ctx.elements[index]
+
+		if _, ok := ele.attributes.(Layout_Attributes); !ok do return
+
+		mouse_position := ctx.input.mouse_position
+
+		is_rect_hovered := mouse_position.x >= ele.position.x && mouse_position.x <= ele.position.x + ele.size.x && mouse_position.y >= ele.position.y && mouse_position.y <= ele.position.y + ele.size.y
+
+		if is_rect_hovered {
+			ctx.input_event.hovered_element = index
+		}
+	})
+}
+
+travel_bottom_up :: proc(
+	ctx: ^UI_Context,
+	do_proc: proc(ctx: ^UI_Context, index: UI_Index) = nil,
+	index: UI_Index = 0,
+) {
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		travel_bottom_up(ctx, do_proc, child.index)
+	}
+
+	if do_proc != nil do do_proc(ctx, index)
 }
 
 @(private = "file")
@@ -999,8 +1061,9 @@ default_layout :: proc() -> UI_Layout_Config {
 		layout_direction = .Left_To_Right,
 		padding = pad_all(8),
 		background_color = rl.RAYWHITE,
-		corner_radius = 4,
-		border = {0, rl.BLACK},
+		corner_radius = 8,
+		border = {thickness = 0, color = rl.BLACK},
+		shadow = {radius = 4, scale = 1.0, color = rl.ColorAlpha(rl.BLACK, 0.5), offset = {4, -4}},
 	}
 }
 
@@ -1055,9 +1118,16 @@ parse_layout_declare :: proc(
 	set_if_set(&config.background_color, declare.background_color)
 	set_if_set(&config.corner_radius, declare.corner_radius)
 
-	if border, ok := declare.border.(UI_Border_Config); ok {
+	if border, ok := declare.border.(Border_Declare); ok {
 		set_if_set(&config.border.thickness, border.thickness)
 		set_if_set(&config.border.color, border.color)
+	}
+
+	if shadow, ok := declare.shadow.(Shadow_Declare); ok {
+		set_if_set(&config.shadow.radius, shadow.radius)
+		set_if_set(&config.shadow.scale, shadow.scale)
+		set_if_set(&config.shadow.offset, shadow.offset)
+		set_if_set(&config.shadow.color, shadow.color)
 	}
 
 	return config, limits
@@ -1287,6 +1357,64 @@ align :: #force_inline proc(value: Alignment) -> Alignment {
 	return value
 }
 
-border :: #force_inline proc(value: UI_Border_Config) -> UI_Border_Config {
+border :: #force_inline proc(value: Border_Declare) -> Border_Declare {
 	return value
+}
+
+// Inout queries
+// Input
+
+mouse_state :: proc() -> UI_MouseState {
+	return get_layout_mouse_state(current_context^)
+}
+
+mouse_state_ahead :: proc() -> UI_MouseState {
+	return get_layout_mouse_state_ahead(current_context^)
+}
+
+@(private = "file")
+get_layout_mouse_state :: proc(ctx: UI_Context) -> UI_MouseState {
+	open_ele := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
+	return ctx.input_event.hovered_element == open_ele ? ctx.input.mouse_state : .None
+}
+
+@(private = "file")
+get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_MouseState {
+	return ctx.input_event.hovered_element == UI_Index(len(ctx.elements)) ? ctx.input.mouse_state : .None
+}
+
+// Shapes
+Rect_Shader :: struct {
+	shader: rl.Shader,
+	locs:   struct {
+		shadow_scale:         f32,
+		border_thickness:     f32,
+		rectangle_loc:        i32,
+		radius_loc:           i32,
+		color_loc:            i32,
+		shadow_radius_loc:    i32,
+		shadow_offset_loc:    i32,
+		shadow_scale_loc:     i32,
+		shadow_color_loc:     i32,
+		border_thickness_loc: i32,
+		border_color_loc:     i32,
+	},
+}
+
+load_rect_shader :: proc() -> Rect_Shader {
+	shader := rl.LoadShader("./shaders/base.vs", "./shaders/rounded_rect.fs")
+	return {
+		shader = shader,
+		locs = {
+			rectangle_loc = rl.GetShaderLocation(shader, "rectangle"),
+			radius_loc = rl.GetShaderLocation(shader, "radius"),
+			color_loc = rl.GetShaderLocation(shader, "color"),
+			shadow_radius_loc = rl.GetShaderLocation(shader, "shadowRadius"),
+			shadow_offset_loc = rl.GetShaderLocation(shader, "shadowOffset"),
+			shadow_scale_loc = rl.GetShaderLocation(shader, "shadowScale"),
+			shadow_color_loc = rl.GetShaderLocation(shader, "shadowColor"),
+			border_thickness_loc = rl.GetShaderLocation(shader, "borderThickness"),
+			border_color_loc = rl.GetShaderLocation(shader, "borderColor"),
+		},
+	}
 }

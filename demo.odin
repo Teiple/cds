@@ -1,97 +1,255 @@
 package main
 
-import b3 "vendor:box3d"
 import rl "vendor:raylib"
-import gl "vendor:raylib/rlgl"
 
-NUM_BOXES :: 25
+
+Rounded_Rectangle :: struct {
+	corner_radius:        rl.Vector4,
+	shadow_radius:        f32,
+	shadow_offset:        rl.Vector2,
+	shadow_scale:         f32,
+	border_thickness:     f32,
+	rectangle_loc:        i32,
+	radius_loc:           i32,
+	color_loc:            i32,
+	shadow_radius_loc:    i32,
+	shadow_offset_loc:    i32,
+	shadow_scale_loc:     i32,
+	shadow_color_loc:     i32,
+	border_thickness_loc: i32,
+	border_color_loc:     i32,
+}
+
 
 main :: proc() {
-	rl.InitWindow(1024, 768, "Box3D + Raylib 6 sample")
+	screen_width: i32 = 800
+	screen_height: i32 = 450
 
-	camera := rl.Camera3D {
-		position   = {25, 15, 25},
-		up         = {0, 1, 0},
-		fovy       = 45,
-		projection = .PERSPECTIVE,
-	}
+	rl.InitWindow(screen_width, screen_height, "raylib [shaders] example - rounded rectangle")
+	defer rl.CloseWindow()
+
+	// Load shader
+	shader := rl.LoadShader("./shaders/base.vs", "./shaders/rounded_rect.fs")
+	defer rl.UnloadShader(shader)
+
+	// Create rounded rectangle
+	rounded_rectangle := create_rounded_rectangle({5.0, 10.0, 15.0, 20.0}, 20.0, {0.0, -5.0}, 0.95, 5.0, shader)
+
+	rectangle_color :: rl.BLUE
+	shadow_color :: rl.DARKBLUE
+	border_color :: rl.SKYBLUE
 
 	rl.SetTargetFPS(60)
 
-	world_def := b3.DefaultWorldDef()
-	world_def.gravity = {0, -10, 0}
-	world_id := b3.CreateWorld(world_def)
-
-	ground_body_def := b3.DefaultBodyDef()
-	ground_body_def.position = {0, -10, 0}
-	ground_id := b3.CreateBody(world_id, ground_body_def)
-
-	ground_box := b3.MakeBoxHull(50, 10, 50)
-	ground_shape_def := b3.DefaultShapeDef()
-	_ = b3.CreateHullShape(ground_id, ground_shape_def, &ground_box.base)
-
-	boxes: [NUM_BOXES]b3.BodyId
-	for i in 0 ..< len(boxes) {
-		body_def := b3.DefaultBodyDef()
-		body_def.type = .dynamicBody
-
-		offset_x := f32((i % 2 == 0) ? .05 : -.05)
-		body_def.position = {offset_x, 2. + f32(i) * 2.5, 0}
-		boxes[i] = b3.CreateBody(world_id, body_def)
-
-		dynamic_box := b3.MakeCubeHull(1)
-		shape_def := b3.DefaultShapeDef()
-		shape_def.density = 1
-		shape_def.baseMaterial.friction = .3
-
-		_ = b3.CreateHullShape(boxes[i], shape_def, &dynamic_box.base)
-	}
-
-	time_step: f32 = 1. / 60.
-	sub_step_count: i32 = 4
-
 	for !rl.WindowShouldClose() {
-		b3.World_Step(world_id, time_step, sub_step_count)
-
 		rl.BeginDrawing()
-		{
-			defer rl.EndDrawing()
 
-			rl.ClearBackground(rl.RAYWHITE)
+		rl.ClearBackground(rl.RAYWHITE)
 
-			rl.BeginMode3D(camera)
-			{
-				defer rl.EndMode3D()
+		// ------------------------------------------------------------
+		// Rounded rectangle
+		// ------------------------------------------------------------
 
-				rl.DrawCube({0, -2, 0}, 100, 4, 100, rl.LIGHTGRAY)
-				rl.DrawCubeWires({0, -2, 0}, 100, 4, 100, rl.GRAY)
-
-				for box in boxes {
-					pos := b3.Body_GetPosition(box)
-					rot := b3.Body_GetRotation(box)
-
-					angle, axis := b3.GetAxisAngle(rot)
-
-					gl.PushMatrix()
-					{
-						defer gl.PopMatrix()
-
-						gl.Translatef(pos.x, pos.y, pos.z)
-						gl.Rotatef(angle * rl.RAD2DEG, axis.x, axis.y, axis.z)
-
-						rl.DrawCube(0, 2, 2, 2, rl.BLUE)
-						rl.DrawCubeWires(0, 2, 2, 2, rl.DARKBLUE)
-					}
-				}
-
-				rl.DrawGrid(20, 5)
-			}
-
-			rl.DrawFPS(10, 10)
-			rl.DrawText("Box3D + Raylib 6 sample", 10, 35, 20, rl.DARKGRAY)
+		rec := rl.Rectangle {
+			x      = 50,
+			y      = 70,
+			width  = 110,
+			height = 60,
 		}
+
+		rl.DrawRectangleLines(i32(rec.x) - 20, i32(rec.y) - 20, i32(rec.width) + 40, i32(rec.height) + 40, rl.DARKGRAY)
+
+		rl.DrawText("Rounded rectangle", i32(rec.x) - 20, i32(rec.y) - 35, 10, rl.DARKGRAY)
+
+		// Flip Y axis to match shader coordinate system
+		rec.y = f32(screen_height) - rec.y - rec.height
+
+		rectangle_data := [4]f32{rec.x, rec.y, rec.width, rec.height}
+
+		rectangle_color_data := [4]f32 {
+			f32(rectangle_color.r) / 255.0,
+			f32(rectangle_color.g) / 255.0,
+			f32(rectangle_color.b) / 255.0,
+			f32(rectangle_color.a) / 255.0,
+		}
+
+		transparent := [4]f32{0, 0, 0, 0}
+
+		rl.SetShaderValue(shader, rounded_rectangle.rectangle_loc, &rectangle_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.color_loc, &rectangle_color_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.shadow_color_loc, &transparent, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.border_color_loc, &transparent, .VEC4)
+
+		rl.BeginShaderMode(shader)
+		rl.DrawRectangle(0, 0, screen_width, screen_height, rl.WHITE)
+		rl.EndShaderMode()
+
+
+		// ------------------------------------------------------------
+		// Shadow
+		// ------------------------------------------------------------
+
+		rec = rl.Rectangle {
+			x      = 50,
+			y      = 200,
+			width  = 110,
+			height = 60,
+		}
+
+		rl.DrawRectangleLines(i32(rec.x) - 20, i32(rec.y) - 20, i32(rec.width) + 40, i32(rec.height) + 40, rl.DARKGRAY)
+
+		rl.DrawText("Rounded rectangle shadow", i32(rec.x) - 20, i32(rec.y) - 35, 10, rl.DARKGRAY)
+
+		rec.y = f32(screen_height) - rec.y - rec.height
+
+		rectangle_data = [4]f32{rec.x, rec.y, rec.width, rec.height}
+
+		shadow_color_data := [4]f32 {
+			f32(shadow_color.r) / 255.0,
+			f32(shadow_color.g) / 255.0,
+			f32(shadow_color.b) / 255.0,
+			f32(shadow_color.a) / 255.0,
+		}
+
+		rl.SetShaderValue(shader, rounded_rectangle.rectangle_loc, &rectangle_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.color_loc, &transparent, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.shadow_color_loc, &shadow_color_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.border_color_loc, &transparent, .VEC4)
+
+		rl.BeginShaderMode(shader)
+		rl.DrawRectangle(0, 0, screen_width, screen_height, rl.WHITE)
+		rl.EndShaderMode()
+
+
+		// ------------------------------------------------------------
+		// Border
+		// ------------------------------------------------------------
+
+		rec = rl.Rectangle {
+			x      = 50,
+			y      = 330,
+			width  = 110,
+			height = 60,
+		}
+
+		rl.DrawRectangleLines(i32(rec.x) - 20, i32(rec.y) - 20, i32(rec.width) + 40, i32(rec.height) + 40, rl.DARKGRAY)
+
+		rl.DrawText("Rounded rectangle border", i32(rec.x) - 20, i32(rec.y) - 35, 10, rl.DARKGRAY)
+
+		rec.y = f32(screen_height) - rec.y - rec.height
+
+		rectangle_data = [4]f32{rec.x, rec.y, rec.width, rec.height}
+
+		border_color_data := [4]f32 {
+			f32(border_color.r) / 255.0,
+			f32(border_color.g) / 255.0,
+			f32(border_color.b) / 255.0,
+			f32(border_color.a) / 255.0,
+		}
+
+		rl.SetShaderValue(shader, rounded_rectangle.rectangle_loc, &rectangle_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.color_loc, &transparent, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.shadow_color_loc, &transparent, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.border_color_loc, &border_color_data, .VEC4)
+
+		rl.BeginShaderMode(shader)
+		rl.DrawRectangle(0, 0, screen_width, screen_height, rl.WHITE)
+		rl.EndShaderMode()
+
+
+		// ------------------------------------------------------------
+		// All three combined
+		// ------------------------------------------------------------
+
+		rec = rl.Rectangle {
+			x      = 240,
+			y      = 80,
+			width  = 500,
+			height = 300,
+		}
+
+		rl.DrawRectangleLines(i32(rec.x) - 30, i32(rec.y) - 30, i32(rec.width) + 60, i32(rec.height) + 60, rl.DARKGRAY)
+
+		rl.DrawText("Rectangle with all three combined", i32(rec.x) - 30, i32(rec.y) - 45, 10, rl.DARKGRAY)
+
+		rec.y = f32(screen_height) - rec.y - rec.height
+
+		rectangle_data = [4]f32{rec.x, rec.y, rec.width, rec.height}
+
+		rl.SetShaderValue(shader, rounded_rectangle.rectangle_loc, &rectangle_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.color_loc, &rectangle_color_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.shadow_color_loc, &shadow_color_data, .VEC4)
+
+		rl.SetShaderValue(shader, rounded_rectangle.border_color_loc, &border_color_data, .VEC4)
+
+		rl.BeginShaderMode(shader)
+		rl.DrawRectangle(0, 0, screen_width, screen_height, rl.WHITE)
+		rl.EndShaderMode()
+
+
+		rl.DrawText(
+			"(c) Rounded rectangle SDF by Iñigo Quilez. MIT License.",
+			screen_width - 300,
+			screen_height - 20,
+			10,
+			rl.BLACK,
+		)
+
+		rl.EndDrawing()
+	}
+}
+
+
+create_rounded_rectangle :: proc(
+	corner_radius: rl.Vector4,
+	shadow_radius: f32,
+	shadow_offset: rl.Vector2,
+	shadow_scale: f32,
+	border_thickness: f32,
+	shader: rl.Shader,
+) -> Rounded_Rectangle {
+	rec := Rounded_Rectangle {
+		corner_radius        = corner_radius,
+		shadow_radius        = shadow_radius,
+		shadow_offset        = shadow_offset,
+		shadow_scale         = shadow_scale,
+		border_thickness     = border_thickness,
+		rectangle_loc        = rl.GetShaderLocation(shader, "rectangle"),
+		radius_loc           = rl.GetShaderLocation(shader, "radius"),
+		color_loc            = rl.GetShaderLocation(shader, "color"),
+		shadow_radius_loc    = rl.GetShaderLocation(shader, "shadowRadius"),
+		shadow_offset_loc    = rl.GetShaderLocation(shader, "shadowOffset"),
+		shadow_scale_loc     = rl.GetShaderLocation(shader, "shadowScale"),
+		shadow_color_loc     = rl.GetShaderLocation(shader, "shadowColor"),
+		border_thickness_loc = rl.GetShaderLocation(shader, "borderThickness"),
+		border_color_loc     = rl.GetShaderLocation(shader, "borderColor"),
 	}
 
-	b3.DestroyWorld(world_id)
-	rl.CloseWindow()
+	update_rounded_rectangle(&rec, shader)
+
+	return rec
+}
+
+
+update_rounded_rectangle :: proc(rec: ^Rounded_Rectangle, shader: rl.Shader) {
+	rl.SetShaderValue(shader, rec.radius_loc, &rec.corner_radius, .VEC4)
+
+	rl.SetShaderValue(shader, rec.shadow_radius_loc, &rec.shadow_radius, .FLOAT)
+
+	rl.SetShaderValue(shader, rec.shadow_offset_loc, &rec.shadow_offset, .VEC2)
+
+	rl.SetShaderValue(shader, rec.shadow_scale_loc, &rec.shadow_scale, .FLOAT)
+
+	rl.SetShaderValue(shader, rec.border_thickness_loc, &rec.border_thickness, .FLOAT)
 }

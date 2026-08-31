@@ -48,19 +48,17 @@ main :: proc() {
 
 	defer ui.context_delete(ui_ctx)
 
-	rand_palette_img = rl.LoadImage("assets/images/beleko.png")
+	rand_palette_img = rl.LoadImage("assets/images/colors.png")
 
 	defer rl.UnloadImage(rand_palette_img)
 
-
 	for !rl.WindowShouldClose() {
-		rand.reset(0)
+		rand.reset(2)
 
 		rl.BeginDrawing()
 		defer rl.EndDrawing()
 
 		rl.ClearBackground(rl.RAYWHITE)
-
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
 			if ui.layout(
@@ -70,10 +68,10 @@ main :: proc() {
 					padding = ui.pad_all(16),
 					child_gap = 12,
 					layout_direction = .Top_To_Bottom,
-					border = ui.border({thickness = 2}),
+					background_color = get_random_color(),
 				},
 			) {
-				ui.text({content = "Profile", alignment = ui.align({x = .Center})})
+				ui.text({content = "Hello World", alignment = ui.align({x = .Center})})
 
 				ui.layout(
 					{
@@ -82,6 +80,7 @@ main :: proc() {
 						padding = ui.pad_all(8),
 						child_gap = 12,
 						layout_direction = .Left_To_Right,
+						background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.5 : 0),
 					},
 				)
 
@@ -91,12 +90,13 @@ main :: proc() {
 		}
 
 
-		ui.render_commands(ui_ctx.render_commands[:], get_random_color)
+		ui.render_commands(ui_ctx.render_commands[:])
 	}
-
-
 }
 
-get_random_color :: proc() -> rl.Color {
-	return rl.GetImageColor(rand_palette_img, i32(rand.float32() * f32(rand_palette_img.width)), 0)
+get_random_color :: proc(brightness: f32 = 0) -> rl.Color {
+	return rl.ColorBrightness(
+		rl.GetImageColor(rand_palette_img, i32(rand.float32() * f32(rand_palette_img.width)), 0),
+		brightness,
+	)
 }
