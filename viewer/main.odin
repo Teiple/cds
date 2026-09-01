@@ -7,7 +7,11 @@ import ui "ui"
 import rl "vendor:raylib"
 
 debug_palette: [dynamic; 120]rl.Color
+debug_palette_prev_index: int = 0
 
+wrap :: proc(some: $T) -> Maybe(T) {
+	return some
+}
 
 main :: proc() {
 
@@ -33,10 +37,10 @@ main :: proc() {
 		}
 	}
 
-
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(960, 540, "Unnamed")
 	defer rl.CloseWindow()
+
 
 	// rl.SetTargetFPS(60)
 
@@ -84,57 +88,53 @@ main :: proc() {
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
 			if ui.layout(
-				{
-					corner_radius = 8,
-					border = ui.border({color = rl.RAYWHITE, thickness = 2}),
-					shadow = ui.shadow({radius = 8, offset = {0, 0}}),
-					width = ui.grow(),
-					background_color = get_random_color(),
-				},
+				corner_radius = 8,
+				border = {color = rl.RAYWHITE, thickness = 2},
+				shadow = {radius = 0.5},
+				width = ui.grow(),
+				background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 			) {
-				if ui.layout({corner_radius = 8, width = ui.grow(), background_color = get_random_color()}) {
+				if ui.layout(
+					corner_radius = 8,
+					width = ui.grow(),
+					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
+					mouse_mode = .Passthrough,
+				) {
 					ui.text({content = "Hello World", font_size = 32})
 				}
 				if ui.layout(
-					{
-						corner_radius = 8,
-						width = ui.percent(.2),
-						height = ui.grow(),
-						background_color = get_random_color(),
-					},
+					corner_radius = 8,
+					width = ui.percent(.2),
+					height = ui.grow(),
+					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 				) {
 				}
 				if ui.layout(
-					{
-						corner_radius = 8,
-						width = ui.percent(.2),
-						height = ui.grow(),
-						background_color = get_random_color(),
-					},
+					corner_radius = 8,
+					width = ui.percent(.2),
+					height = ui.grow(),
+					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 				) {
 				}
 			}
 			when ODIN_DEBUG {
 				if ui.layout(
-					{
-						corner_radius = 8,
-						border = ui.border({color = rl.RAYWHITE, thickness = 2}),
-						shadow = ui.shadow({radius = 8, offset = {0, 0}}),
-						background_color = get_random_color(),
-					},
+					corner_radius = 8,
+					shadow = {radius = 8, offset = {0, 0}},
+					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
+					border = {color = get_random_color(-0.1, true), thickness = 2},
 				) {
-					ui.text(
-						{content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated), font_size = 32},
-					)
+					ui.text({
+						content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated),
+						font_size = 32,
+					})
 				}
 
 				if ui.layout(
-					{
-						corner_radius = 8,
-						border = ui.border({color = rl.RAYWHITE, thickness = 2}),
-						shadow = ui.shadow({radius = 8, offset = {0, 0}}),
-						background_color = get_random_color(),
-					},
+					corner_radius = 8,
+					shadow = {radius = 8, offset = {0, 0}},
+					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
+					border = {color = get_random_color(-0.1, true), thickness = 2},
 				) {
 					ui.text({content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps), font_size = 32})
 				}
@@ -165,6 +165,9 @@ fetch_pallete_colors :: proc(palette: ^[dynamic; $N]rl.Color, image_path: cstrin
 	}
 }
 
-get_random_color :: proc(brightness: f32 = 0) -> rl.Color {
-	return rl.ColorBrightness(debug_palette[rand.int_range(0, len(debug_palette))], brightness)
+get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false) -> rl.Color {
+	if !use_prev {
+		debug_palette_prev_index = rand.int_range(0, len(debug_palette))
+	}
+	return rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness)
 }

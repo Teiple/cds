@@ -3,6 +3,7 @@ package ui
 import "core:fmt"
 import "core:math"
 import "core:os"
+import "core:slice"
 import "core:unicode/utf8"
 import rl "vendor:raylib"
 
@@ -25,6 +26,12 @@ UI_MouseState :: enum {
 	Hover,
 }
 
+UI_LayoutMouseMode :: enum {
+	Capture,
+	Passthrough,
+	Ignore,
+}
+
 UI_Input :: struct {
 	mouse_position: rl.Vector2,
 	mouse_state:    UI_MouseState,
@@ -32,7 +39,8 @@ UI_Input :: struct {
 }
 
 UI_InputEvent :: struct {
-	hovered_element: UI_Index,
+	mouse_captured:   bool,
+	hovered_elements: [dynamic]UI_Index,
 }
 
 UI_Measure_Text :: proc(text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
@@ -176,6 +184,7 @@ UI_Layout_Declare :: struct {
 	corner_radius:    Maybe(f32),
 	border:           Maybe(Border_Declare),
 	shadow:           Maybe(Shadow_Declare),
+	mouse_mode:       Maybe(UI_LayoutMouseMode),
 }
 
 UI_Border_Declare :: struct {
@@ -230,6 +239,7 @@ UI_Layout_Config :: struct {
 	corner_radius:    f32,
 	border:           Border_Config,
 	shadow:           Shadow_Config,
+	mouse_mode:       UI_LayoutMouseMode,
 }
 
 UI_Text_Config :: struct {
@@ -291,12 +301,17 @@ Child_Iter :: struct {
 
 @(private = "file")
 open_layout :: proc(ctx: ^UI_Context, declare: UI_Layout_Declare) -> bool {
+	config, limits := parse_layout_declare(default_layout(), declare)
+	return open_layout_by_config(ctx, declare.id, config, limits)
+}
+
+@(private = "file")
+open_layout_by_config :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limits: UI_Limits) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
-	config, limits := parse_layout_declare(default_layout(), declare)
 	ui_ele := UI_Element {
-		id = declare.id,
+		id = id,
 		parent = parent,
 		index = i32(len(ctx.elements)), // set before append
 		attributes = Layout_Attributes{config = config, element = index},
@@ -540,8 +555,6 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 		remaining -= ele_get_size(child, axis)
 	}
-
-	remaining -= child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
 
 	if len(growables) == 0 do return
 
@@ -916,6 +929,7 @@ context_make :: proc(
 		fonts = fonts[:],
 		font_shader = font_shader,
 		rect_shader = rect_shader,
+		input_event = {mouse_captured = false, hovered_elements = make([dynamic]i32, 0, 4)},
 	}
 }
 
@@ -934,6 +948,8 @@ context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.fonts)
 
 	rl.UnloadShader(ctx.rect_shader.shader)
+
+	delete(ctx.input_event.hovered_elements)
 }
 
 @(require_results, deferred_in_out = end_layout)
@@ -988,7 +1004,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 			{
 				append(
 					&ctx.render_commands,
-					Rect_Command {
+					Rect_Command{
 						rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
 						color = attr.config.background_color,
 						corner_radius = attr.config.corner_radius,
@@ -1002,7 +1018,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 			{
 				append(
 					&ctx.render_commands,
-					Text_Command {
+					Text_Command{
 						content = attr.config.content,
 						font_size = attr.config.font_size,
 						spacing = ctx.fonts[attr.config.font_index].spacing,
@@ -1025,27 +1041,41 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 }
 
 detect_mouse :: proc(ctx: ^UI_Context) {
-	ctx.input = {
-		mouse_position = rl.GetMousePosition(),
-		mouse_state    = rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ? .Pressed : (rl.IsMouseButtonDown(rl.MouseButton.LEFT) ? .Down : (rl.IsMouseButtonReleased(rl.MouseButton.LEFT) ? .Released : .Hover)),
-	}
+	ctx.input.mouse_position = rl.GetMousePosition()
+	ctx.input.mouse_state =
+		rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ? .Pressed : (rl.IsMouseButtonDown(rl.MouseButton.LEFT) ? .Down : (rl.IsMouseButtonReleased(rl.MouseButton.LEFT) ? .Released : .Hover))
 
-	ctx.input_event = {}
+	ctx.input_event.mouse_captured = false
+	clear(&ctx.input_event.hovered_elements)
 
-	travel_bottom_up(ctx, proc(ctx: ^UI_Context, index: i32) {
-		if ctx.input_event.hovered_element > 0 do return
-		ele := ctx.elements[index]
+	travel_bottom_up(
+		ctx,
+		proc(ctx: ^UI_Context, index: i32) {
+			if ctx.input_event.mouse_captured do return
 
-		if _, ok := ele.attributes.(Layout_Attributes); !ok do return
+			ele := ctx.elements[index]
 
-		mouse_position := ctx.input.mouse_position
+			layout, ok := ele.attributes.(Layout_Attributes)
+			if !ok || layout.config.mouse_mode == .Ignore do return
 
-		is_rect_hovered := mouse_position.x >= ele.position.x && mouse_position.x <= ele.position.x + ele.size.x && mouse_position.y >= ele.position.y && mouse_position.y <= ele.position.y + ele.size.y
+			mouse_position := ctx.input.mouse_position
 
-		if is_rect_hovered {
-			ctx.input_event.hovered_element = index
-		}
-	})
+			is_rect_hovered :=
+				mouse_position.x >= ele.position.x &&
+				mouse_position.x <= ele.position.x + ele.size.x &&
+				mouse_position.y >= ele.position.y &&
+				mouse_position.y <= ele.position.y + ele.size.y
+
+			if is_rect_hovered {
+				append(&ctx.input_event.hovered_elements, index)
+
+				if layout.config.mouse_mode == .Capture {
+					ctx.input_event.mouse_captured = true
+				}
+				// else it passed through
+			}
+		},
+	)
 }
 
 travel_bottom_up :: proc(
@@ -1161,6 +1191,8 @@ parse_layout_declare :: proc(
 		set_if_set(&config.shadow.offset.y, shadow.offset.y)
 		set_if_set(&config.shadow.color, shadow.color)
 	}
+
+	set_if_set(&config.mouse_mode, declare.mouse_mode)
 
 	return config, limits
 }
@@ -1360,8 +1392,43 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 // Public layout declaration ultilities
 // Elements
 @(deferred_none = close_layout_deffered)
-layout :: proc(declare: UI_Layout_Declare) -> bool {
+layout_func :: proc(declare: UI_Layout_Declare) -> bool {
 	return open_layout(current_context, declare)
+}
+
+@(deferred_none = close_layout_deffered)
+layout :: proc(
+	id: string = "",
+	width: Sizing_Axis = {mode = Fit_Size{}},
+	height: Sizing_Axis = {mode = Fit_Size{}},
+	padding: Layout_Padding = {8, 8, 8, 8},
+	child_gap: f32 = 8,
+	layout_direction: Layout_Direction = .Left_To_Right,
+	child_alignment: Alignment = {x = .Left, y = .Top},
+	background_color: rl.Color = {},
+	corner_radius: f32 = 8,
+	border: Border_Config = {thickness = 2, color = {0, 0, 0, 255}},
+	shadow: Shadow_Config = {enabled = false, radius = 8, color = {0, 0, 0, 100}},
+	mouse_mode: UI_LayoutMouseMode = .Capture,
+) -> bool {
+	return open_layout_by_config(
+		current_context,
+		id,
+		{
+			width = width.mode,
+			height = height.mode,
+			padding = padding,
+			child_gap = child_gap,
+			layout_direction = layout_direction,
+			child_alignment = child_alignment,
+			background_color = background_color,
+			corner_radius = corner_radius,
+			mouse_mode = mouse_mode,
+			border = border,
+			shadow = shadow,
+		},
+		{x = {min = width.min, max = width.max}, y = {min = width.min, max = width.max}},
+	)
 }
 
 @(private = "file")
@@ -1419,6 +1486,10 @@ color :: #force_inline proc(value: rl.Color) -> rl.Color {
 	return value
 }
 
+mouse_mode :: #force_inline proc(value: UI_LayoutMouseMode) -> UI_LayoutMouseMode {
+	return value
+}
+
 // Input queries
 // Input
 
@@ -1433,12 +1504,12 @@ mouse_state_ahead :: proc() -> UI_MouseState {
 @(private = "file")
 get_layout_mouse_state :: proc(ctx: UI_Context) -> UI_MouseState {
 	open_ele := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
-	return ctx.input_event.hovered_element == open_ele ? ctx.input.mouse_state : .None
+	return slice.contains(ctx.input_event.hovered_elements[:], open_ele) ? ctx.input.mouse_state : .None
 }
 
 @(private = "file")
 get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_MouseState {
-	return ctx.input_event.hovered_element == UI_Index(len(ctx.elements)) ? ctx.input.mouse_state : .None
+	return slice.contains(ctx.input_event.hovered_elements[:], i32(len(ctx.elements))) ? ctx.input.mouse_state : .None
 }
 
 // Shapes
