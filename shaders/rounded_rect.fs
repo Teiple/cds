@@ -25,7 +25,7 @@ uniform vec4 shadowColor;
 
 // Border parameters
 uniform float borderThickness;
-uniform vec4 borderColor;
+uniform vec4 borderColor;       
 
 // Create a rounded rectangle using signed distance field
 // Thanks to Iñigo Quilez (https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm)
@@ -37,11 +37,25 @@ float RoundedRectangleSDF(vec2 fragCoord, vec2 center, vec2 halfSize, vec4 radiu
 
     // Determine which corner radius to use
     radius.xy = (fragFromCenter.y > 0.0) ? radius.xy : radius.zw;
-    radius.x  = (fragFromCenter.x < 0.0) ? radius.x  : radius.y;
+    radius.x = (fragFromCenter.x < 0.0) ? radius.x : radius.y;
 
     // Calculate signed distance field
     vec2 dist = abs(fragFromCenter) - halfSize + radius.x;
     return min(max(dist.x, dist.y), 0.0) + length(max(dist, 0.0)) - radius.x;
+}
+
+vec4 composite_over(vec4 under, vec4 over)
+{
+    float outA = over.a + under.a * (1.0 - over.a);
+
+    if (outA <= 0.0)
+        return vec4(0.0);
+
+    vec3 outRGB =
+        (over.rgb * over.a +
+            under.rgb * under.a * (1.0 - over.a)) / outA;
+
+    return vec4(outRGB, outA);
 }
 
 void main()
@@ -53,25 +67,31 @@ void main()
     vec2 fragCoord = gl_FragCoord.xy;
 
     // Calculate signed distance field for rounded rectangle
-    vec2 halfSize = rectangle.zw*0.5;
+    vec2 halfSize = rectangle.zw * 0.5;
     vec2 center = rectangle.xy + halfSize;
     float recSDF = RoundedRectangleSDF(fragCoord, center, halfSize, radius);
-
+    
     // Calculate signed distance field for rectangle shadow
-    vec2 shadowHalfSize = halfSize*shadowScale;
+    vec2 shadowHalfSize = halfSize * shadowScale;
+
+
     vec2 shadowCenter = center + shadowOffset;
     float shadowSDF = RoundedRectangleSDF(fragCoord, shadowCenter, shadowHalfSize, radius);
 
     // Caculate alpha factors
     float recFactor = smoothstep(1.0, 0.0, recSDF);
+    float recFactorHard = recSDF < 0 ? 1.0 : 0.0;
     float shadowFactor = smoothstep(shadowRadius, 0.0, shadowSDF);
-    float borderFactor = smoothstep(0.0, 1.0, recSDF + borderThickness)*recFactor;
+    float borderFactor = smoothstep(0.0, 1.0, recSDF + borderThickness) * recFactor;
 
     // Multiply each color by its respective alpha factor
-    vec4 recColor = vec4(color.rgb, color.a*recFactor);
-    vec4 shadowCol = vec4(shadowColor.rgb, shadowColor.a*shadowFactor);
-    vec4 borderCol = vec4(borderColor.rgb, borderColor.a*borderFactor);
+    vec4 recColor = vec4(color.rgb, color.a * (borderThickness > 0 ? recFactorHard : recFactor));
+    vec4 shadowCol = vec4(shadowColor.rgb, shadowColor.a * shadowFactor);
+    vec4 borderCol = vec4(borderColor.rgb, borderColor.a * borderFactor);
 
     // Combine the colors in the order (shadow, rectangle, border)
-    finalColor = mix(mix(shadowCol, recColor, recColor.a), borderCol, borderCol.a);
+    vec4 result = composite_over(shadowCol, recColor);
+    result = composite_over(result, borderCol);
+
+    finalColor = result;
 }

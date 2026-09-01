@@ -5,8 +5,8 @@ import "core:math"
 import rl "vendor:raylib"
 
 
-render_commands :: proc(commands: []Render_Command) {
-	for variant in commands {
+render_commands :: proc(ctx: UI_Context) {
+	for variant in ctx.render_commands {
 		switch command in variant {
 		case Rect_Command:
 			{
@@ -68,7 +68,9 @@ draw_rect_command :: proc(command: Rect_Command) {
 	setup_rect_shader(&command)
 
 	rl.BeginShaderMode(command.rect_shader.shader)
-	rl.DrawRectangle(0, 0, rl.GetScreenWidth(), rl.GetScreenHeight(), rl.WHITE)
+	// rl.DrawRectangle(0, 0, rl.GetScreenWidth(), rl.GetScreenHeight(), rl.WHITE)
+	rl.DrawRectangleRec(command.rect, rl.WHITE)
+
 	rl.EndShaderMode()
 
 	// draw_rounded_rect(command.rect, 4, command.color)
@@ -145,9 +147,13 @@ setup_rect_shader :: proc(command: ^Rect_Command) {
 	shadow_color := to_shader_color_data(command.shadow.color)
 	border_color := to_shader_color_data(command.border.color)
 
+	shadow_offset := command.shadow.offset
+	shadow_offset.y = -shadow_offset.y
+
+
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.radius_loc, &command.corner_radius, .VEC4)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_radius_loc, &command.shadow.radius, .FLOAT)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &command.shadow.offset, .VEC2)
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &shadow_offset, .VEC2)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_scale_loc, &command.shadow.scale, .FLOAT)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_thickness_loc, &command.border.thickness, .FLOAT)
 

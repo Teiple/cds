@@ -1061,9 +1061,9 @@ default_layout :: proc() -> UI_Layout_Config {
 		layout_direction = .Left_To_Right,
 		padding = pad_all(8),
 		background_color = rl.RAYWHITE,
-		corner_radius = 8,
+		corner_radius = 0,
 		border = {thickness = 0, color = rl.BLACK},
-		shadow = {radius = 4, scale = 1.0, color = rl.ColorAlpha(rl.BLACK, 0.5), offset = {4, -4}},
+		shadow = {radius = 0, scale = 0.0, color = rl.ColorAlpha(rl.BLACK, 0.25), offset = {4, 4}},
 	}
 }
 
@@ -1071,7 +1071,7 @@ default_layout :: proc() -> UI_Layout_Config {
 default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
 	return UI_Text_Config {
 		font_index = 0,
-		font_size = f32(ctx.fonts[0].font.baseSize),
+		font_size = 32,
 		line_spacing = 4,
 		color = rl.BLACK,
 		alignment = {.Left, .Top},

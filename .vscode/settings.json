@@ -3,4 +3,6 @@
     "workbench.editor.limit.enabled": true,
     "workbench.editor.limit.value": 4,
     "ols.server.path": "/home/hongphuc/odin-lang/ols/ols",
+    "shader-validator.glsl.targetClient": "OpenGL450",
+    "shader-validator.glsl.spirvVersion": "None"
 }
