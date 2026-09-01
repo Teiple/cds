@@ -90,7 +90,7 @@ main :: proc() {
 			if ui.layout(
 				corner_radius = 8,
 				border = {color = rl.RAYWHITE, thickness = 2},
-				shadow = {radius = 0.5},
+				shadow = ui.shadow(radius = 8),
 				width = ui.grow(),
 				background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 			) {
@@ -100,7 +100,7 @@ main :: proc() {
 					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 					mouse_mode = .Passthrough,
 				) {
-					ui.text({content = "Hello World", font_size = 32})
+					ui.text(content = "Hello World", font_size = 32)
 				}
 				if ui.layout(
 					corner_radius = 8,
@@ -120,23 +120,21 @@ main :: proc() {
 			when ODIN_DEBUG {
 				if ui.layout(
 					corner_radius = 8,
-					shadow = {radius = 8, offset = {0, 0}},
 					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 					border = {color = get_random_color(-0.1, true), thickness = 2},
 				) {
-					ui.text({
+					ui.text(
 						content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated),
 						font_size = 32,
-					})
+					)
 				}
 
 				if ui.layout(
 					corner_radius = 8,
-					shadow = {radius = 8, offset = {0, 0}},
 					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
 					border = {color = get_random_color(-0.1, true), thickness = 2},
 				) {
-					ui.text({content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps), font_size = 32})
+					ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps), font_size = 32)
 				}
 			}
 		}

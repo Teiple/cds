@@ -172,60 +172,16 @@ Alignment_Y :: enum {
 UI_Index :: i32
 Font_Index :: i32
 
-UI_Layout_Declare :: struct {
-	id:               string,
-	width:            Maybe(Sizing_Axis),
-	height:           Maybe(Sizing_Axis),
-	padding:          Maybe(Layout_Padding),
-	child_gap:        Maybe(f32),
-	layout_direction: Maybe(Layout_Direction),
-	child_alignment:  Maybe(Alignment),
-	background_color: Maybe(rl.Color),
-	corner_radius:    Maybe(f32),
-	border:           Maybe(Border_Declare),
-	shadow:           Maybe(Shadow_Declare),
-	mouse_mode:       Maybe(UI_LayoutMouseMode),
-}
-
-UI_Border_Declare :: struct {
-	width: Maybe(f32),
-	color: Maybe(rl.Color),
-}
-
-UI_Text_Declare :: struct {
-	id:           string,
-	content:      Maybe(string),
-	font_index:   Font_Index,
-	font_size:    Maybe(f32),
-	color:        Maybe(rl.Color),
-	line_spacing: Maybe(f32),
-	alignment:    Maybe(Alignment),
-}
-
-Border_Config :: struct {
+Border_Config :: struct #all_or_none {
 	thickness: f32,
 	color:     rl.Color,
 }
 
-Border_Declare :: struct {
-	thickness: Maybe(f32),
-	color:     Maybe(rl.Color),
-}
-
-Shadow_Config :: struct {
+Shadow_Config :: struct #all_or_none {
 	enabled: bool,
 	color:   rl.Color,
 	radius:  f32,
 	offset:  rl.Vector2,
-}
-
-Shadow_Declare :: struct {
-	color:  Maybe(rl.Color),
-	radius: Maybe(f32),
-	offset: struct {
-		x: Maybe(f32),
-		y: Maybe(f32),
-	},
 }
 
 UI_Layout_Config :: struct {
@@ -249,11 +205,6 @@ UI_Text_Config :: struct {
 	color:        rl.Color,
 	line_spacing: f32,
 	alignment:    Alignment,
-}
-
-UI_Element_Declare :: union {
-	UI_Layout_Declare,
-	UI_Text_Declare,
 }
 
 UI_Element :: struct {
@@ -300,13 +251,7 @@ Child_Iter :: struct {
 }
 
 @(private = "file")
-open_layout :: proc(ctx: ^UI_Context, declare: UI_Layout_Declare) -> bool {
-	config, limits := parse_layout_declare(default_layout(), declare)
-	return open_layout_by_config(ctx, declare.id, config, limits)
-}
-
-@(private = "file")
-open_layout_by_config :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limits: UI_Limits) -> bool {
+open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limits: UI_Limits) -> bool {
 	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
@@ -325,17 +270,16 @@ open_layout_by_config :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Co
 }
 
 @(private = "file")
-open_text :: proc(ctx: ^UI_Context, declare: UI_Text_Declare) {
+open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
 	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
-	config, limits := parse_text_declare(ctx^, default_text(ctx^), declare)
 	ui_ele := UI_Element {
-		id = declare.id,
+		id = id,
 		parent = parent_idx,
 		index = i32(len(ctx.elements)),
 		attributes = Text_Attributes{config = config, element = index},
-		limits = limits,
+		limits = {}, // limits are calculated later
 		subtree_size = 1,
 	}
 
@@ -1151,75 +1095,6 @@ set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
 }
 
 @(private = "file")
-parse_layout_declare :: proc(
-	default_config: UI_Layout_Config,
-	declare: UI_Layout_Declare,
-) -> (
-	UI_Layout_Config,
-	UI_Limits,
-) {
-	config := default_config
-	width, height: Sizing_Axis
-
-	set_if_set(&width, declare.width)
-	set_if_set(&height, declare.height)
-
-	config.width = width.mode
-	config.height = height.mode
-
-	limits := UI_Limits {
-		x = {min = width.min, max = width.max},
-		y = {min = height.min, max = height.max},
-	}
-
-	set_if_set(&config.padding, declare.padding)
-	set_if_set(&config.child_gap, declare.child_gap)
-	set_if_set(&config.layout_direction, declare.layout_direction)
-	set_if_set(&config.child_alignment, declare.child_alignment)
-	set_if_set(&config.background_color, declare.background_color)
-	set_if_set(&config.corner_radius, declare.corner_radius)
-
-	if border, ok := declare.border.(Border_Declare); ok {
-		set_if_set(&config.border.thickness, border.thickness)
-		set_if_set(&config.border.color, border.color)
-	}
-
-	if shadow, ok := declare.shadow.(Shadow_Declare); ok {
-		config.shadow.enabled = true
-		set_if_set(&config.shadow.radius, shadow.radius)
-		set_if_set(&config.shadow.offset.x, shadow.offset.x)
-		set_if_set(&config.shadow.offset.y, shadow.offset.y)
-		set_if_set(&config.shadow.color, shadow.color)
-	}
-
-	set_if_set(&config.mouse_mode, declare.mouse_mode)
-
-	return config, limits
-}
-
-@(private = "file")
-parse_text_declare :: proc(
-	ctx: UI_Context,
-	default_config: UI_Text_Config,
-	declare: UI_Text_Declare,
-) -> (
-	UI_Text_Config,
-	UI_Limits,
-) {
-	config := default_config
-
-	set_if_set(&config.content, declare.content)
-	set_if_set(&config.font_size, declare.font_size)
-	set_if_set(&config.font_index, declare.font_index)
-	set_if_set(&config.color, declare.color)
-	set_if_set(&config.line_spacing, declare.line_spacing)
-	set_if_set(&config.alignment, declare.alignment)
-
-	return config, UI_Limits{}
-}
-
-
-@(private = "file")
 child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
 	return Child_Iter{ctx = ctx, current = start.index + 1, end = start.index + start.subtree_size}
@@ -1391,10 +1266,8 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 
 // Public layout declaration ultilities
 // Elements
-@(deferred_none = close_layout_deffered)
-layout_func :: proc(declare: UI_Layout_Declare) -> bool {
-	return open_layout(current_context, declare)
-}
+BORDER_DEFAULT: Border_Config : {thickness = 2, color = {0, 0, 0, 255}}
+SHADOW_DEFAULT: Shadow_Config : {enabled = false, radius = 8, offset = {0, 0}, color = {0, 0, 0, 100}}
 
 @(deferred_none = close_layout_deffered)
 layout :: proc(
@@ -1407,11 +1280,11 @@ layout :: proc(
 	child_alignment: Alignment = {x = .Left, y = .Top},
 	background_color: rl.Color = {},
 	corner_radius: f32 = 8,
-	border: Border_Config = {thickness = 2, color = {0, 0, 0, 255}},
-	shadow: Shadow_Config = {enabled = false, radius = 8, color = {0, 0, 0, 100}},
+	border: Border_Config = BORDER_DEFAULT,
+	shadow: Shadow_Config = SHADOW_DEFAULT,
 	mouse_mode: UI_LayoutMouseMode = .Capture,
 ) -> bool {
-	return open_layout_by_config(
+	return open_layout(
 		current_context,
 		id,
 		{
@@ -1436,8 +1309,27 @@ close_layout_deffered :: proc() {
 	close_layout(current_context)
 }
 
-text :: proc(declare: UI_Text_Declare) -> bool {
-	open_text(current_context, declare)
+text :: proc(
+	id: string = "",
+	content: string = "",
+	font_index: Font_Index = 0,
+	font_size: f32 = 16,
+	color: rl.Color = {0, 0, 0, 255},
+	line_spacing: f32 = 8,
+	alignment: Alignment = {x = .Left, y = .Top},
+) -> bool {
+	open_text(
+		current_context,
+		id,
+		{
+			content = content,
+			font_index = font_index,
+			font_size = font_size,
+			color = color,
+			line_spacing = line_spacing,
+			alignment = alignment,
+		},
+	)
 	return true
 }
 
@@ -1470,14 +1362,6 @@ align :: #force_inline proc(value: Alignment) -> Alignment {
 	return value
 }
 
-border :: #force_inline proc(value: Border_Declare) -> Border_Declare {
-	return value
-}
-
-shadow :: #force_inline proc(value: Shadow_Declare) -> Shadow_Declare {
-	return value
-}
-
 vec2 :: #force_inline proc(value: rl.Vector2) -> rl.Vector2 {
 	return value
 }
@@ -1488,6 +1372,18 @@ color :: #force_inline proc(value: rl.Color) -> rl.Color {
 
 mouse_mode :: #force_inline proc(value: UI_LayoutMouseMode) -> UI_LayoutMouseMode {
 	return value
+}
+
+border :: #force_inline proc(thickness := BORDER_DEFAULT.thickness, color := BORDER_DEFAULT.color) -> Border_Config {
+	return {thickness = thickness, color = color}
+}
+
+shadow :: #force_inline proc(
+	radius := SHADOW_DEFAULT.radius,
+	color := SHADOW_DEFAULT.color,
+	offset := SHADOW_DEFAULT.offset,
+) -> Shadow_Config {
+	return {enabled = true, radius = radius, color = color, offset = offset}
 }
 
 // Input queries
