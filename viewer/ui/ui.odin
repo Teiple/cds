@@ -188,7 +188,6 @@ UI_Text_Declare :: struct {
 	content:      Maybe(string),
 	font_index:   Font_Index,
 	font_size:    Maybe(f32),
-	spacing:      Maybe(f32),
 	color:        Maybe(rl.Color),
 	line_spacing: Maybe(f32),
 	alignment:    Maybe(Alignment),
@@ -205,17 +204,19 @@ Border_Declare :: struct {
 }
 
 Shadow_Config :: struct {
-	color:  rl.Color,
-	radius: f32,
-	offset: rl.Vector2,
-	scale:  f32,
+	enabled: bool,
+	color:   rl.Color,
+	radius:  f32,
+	offset:  rl.Vector2,
 }
 
 Shadow_Declare :: struct {
 	color:  Maybe(rl.Color),
 	radius: Maybe(f32),
-	offset: Maybe(rl.Vector2),
-	scale:  Maybe(f32),
+	offset: struct {
+		x: Maybe(f32),
+		y: Maybe(f32),
+	},
 }
 
 UI_Layout_Config :: struct {
@@ -483,7 +484,7 @@ fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
 }
 
 @(private = "file")
-grow_and_shrink_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	// Grow and Shrink phases, not gonna merge them because of readability
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
@@ -491,12 +492,21 @@ grow_and_shrink_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 	// Content space available to children.
 	available := ele_get_size(current, axis) - layout_get_pad(layout, axis)
+	percent_basis := available
 
 	// Cross-axis: grow children simply fill the available space
 	if layout_is_across(layout, axis) {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			if is_grow_layout_or_text(child^, axis) {
 				ele_set_size(child, clamp_element_size(available, ele_get_lims(child, axis)), axis)
+			} else {
+				// Percent sizing
+				percent_size := layout_get_mode(child^, axis).(Percent_Size) or_continue
+				ele_set_size(
+					child,
+					clamp_element_size(percent_size.value * percent_basis, ele_get_lims(child, axis)),
+					axis,
+				)
 			}
 		}
 		return
@@ -507,22 +517,31 @@ grow_and_shrink_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	clear(&growables)
 	defer clear(&growables)
 
-	remaining := available
+
 	child_count := 0
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) do child_count += 1
+	assert(child_count > 0) // cause subtree_size > 1
+	gap_total := f32(child_count - 1) * layout.config.child_gap
+
+	remaining := available - gap_total
+	percent_basis -= gap_total
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		remaining -= ele_get_size(child, axis)
-
 		if is_grow_layout_or_text(child^, axis) {
 			append(&growables, child.index)
+		} else {
+			percent_size := layout_get_mode(child^, axis).(Percent_Size) or_continue
+			ele_set_size(
+				child,
+				clamp_element_size(percent_size.value * percent_basis, ele_get_lims(child, axis)),
+				axis,
+			)
 		}
 
-		child_count += 1
+		remaining -= ele_get_size(child, axis)
 	}
 
-	if child_count > 1 {
-		remaining -= f32(child_count - 1) * layout.config.child_gap
-	}
+	remaining -= child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
 
 	if len(growables) == 0 do return
 
@@ -636,10 +655,10 @@ grow_and_shrink_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 }
 
 @(private = "file")
-grow_and_shrink_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
-	grow_and_shrink_sizing(ctx, index, axis)
+grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+	grow_and_percent_sizing(ctx, index, axis)
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		grow_and_shrink_sizing_tree(ctx, child.index, axis)
+		grow_and_percent_sizing_tree(ctx, child.index, axis)
 	}
 }
 
@@ -844,12 +863,24 @@ ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32
 load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	assert(os.exists(string(font_path)))
 
-	font := rl.LoadFontEx(font_path, i32(base_size), nil, 0)
+	font_file_size: i32 = 0
+	font_file_data := rl.LoadFileData(font_path, &font_file_size)
+
+	font: rl.Font = {
+		baseSize   = i32(base_size),
+		glyphCount = 95,
+	}
+
+	font.glyphs = rl.LoadFontData(font_file_data, font_file_size, i32(base_size), nil, 0, .SDF, &font.glyphCount)
+
+	atlas := rl.GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, 0, 1)
+	font.texture = rl.LoadTextureFromImage(atlas)
+	rl.SetTextureFilter(font.texture, rl.TextureFilter.BILINEAR)
+
+	rl.UnloadImage(atlas)
+	rl.UnloadFileData(font_file_data)
 
 	assert(rl.IsFontValid(font))
-
-	rl.GenTextureMipmaps(&font.texture)
-	rl.SetTextureFilter(font.texture, rl.TextureFilter.BILINEAR)
 
 	return {font = font, spacing = spacing}
 }
@@ -867,7 +898,7 @@ context_make :: proc(
 	font_configs: []UI_Font_Config,
 	font_shader: cstring,
 ) -> UI_Context {
-	fonts := make([dynamic]UI_Font, 0, 16)
+	fonts := make([dynamic]UI_Font, 0, 4)
 	for config in font_configs {
 		append(&fonts, load_font(config.base_size, config.spacing, config.font_path))
 	}
@@ -876,11 +907,11 @@ context_make :: proc(
 	rect_shader := load_rect_shader()
 
 	return UI_Context {
-		elements = make([dynamic]UI_Element, 0, 500),
-		open_element_stack = make([dynamic]UI_Index, 0, 50),
-		render_commands = make([dynamic]Render_Command, 0, 500),
-		growable_buffer = make([dynamic]UI_Index, 0, 500),
-		wrapped_text_lines = make([dynamic]string, 0, 500),
+		elements = make([dynamic]UI_Element, 0, 5),
+		open_element_stack = make([dynamic]UI_Index, 0, 5),
+		render_commands = make([dynamic]Render_Command, 0, 5),
+		growable_buffer = make([dynamic]UI_Index, 0, 5),
+		wrapped_text_lines = make([dynamic]string, 0, 5),
 		measure_text = measure_text_proc,
 		fonts = fonts[:],
 		font_shader = font_shader,
@@ -935,12 +966,12 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	close_layout(ctx)
 
 	// Top down, calculate grow sizing widths
-	grow_and_shrink_sizing_tree(ctx, 0, .X)
+	grow_and_percent_sizing_tree(ctx, 0, .X)
 	wrap_texts(ctx)
 
 	// Calculate heights
 	fit_sizing_heights_tree(ctx, 0)
-	grow_and_shrink_sizing_tree(ctx, 0, .Y)
+	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
 	// Compute positions
 	calculate_position(ctx, 0, .X)
@@ -1045,7 +1076,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 				height = Fixed_Size{height},
 				layout_direction = .Top_To_Bottom,
 				padding = pad_all(16),
-				background_color = rl.BLUE,
+				background_color = rl.RAYWHITE,
 			},
 		},
 	}
@@ -1060,10 +1091,10 @@ default_layout :: proc() -> UI_Layout_Config {
 		height = Fit_Size{},
 		layout_direction = .Left_To_Right,
 		padding = pad_all(8),
-		background_color = rl.RAYWHITE,
+		background_color = {},
 		corner_radius = 0,
 		border = {thickness = 0, color = rl.BLACK},
-		shadow = {radius = 0, scale = 0.0, color = rl.ColorAlpha(rl.BLACK, 0.25), offset = {4, 4}},
+		shadow = {enabled = false, radius = 4, color = rl.ColorAlpha(rl.BLACK, 0.25), offset = {2, 2}},
 	}
 }
 
@@ -1071,7 +1102,7 @@ default_layout :: proc() -> UI_Layout_Config {
 default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
 	return UI_Text_Config {
 		font_index = 0,
-		font_size = 32,
+		font_size = 16,
 		line_spacing = 4,
 		color = rl.BLACK,
 		alignment = {.Left, .Top},
@@ -1124,9 +1155,10 @@ parse_layout_declare :: proc(
 	}
 
 	if shadow, ok := declare.shadow.(Shadow_Declare); ok {
+		config.shadow.enabled = true
 		set_if_set(&config.shadow.radius, shadow.radius)
-		set_if_set(&config.shadow.scale, shadow.scale)
-		set_if_set(&config.shadow.offset, shadow.offset)
+		set_if_set(&config.shadow.offset.x, shadow.offset.x)
+		set_if_set(&config.shadow.offset.y, shadow.offset.y)
 		set_if_set(&config.shadow.color, shadow.color)
 	}
 
@@ -1209,7 +1241,21 @@ layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: Normalized
 }
 
 @(private = "file")
-layout_get_mode :: proc(layout: Layout_Attributes, axis: Axis) -> Size_Mode {
+layout_get_mode :: proc {
+	layout_get_mode_from_attr,
+	layout_get_mode_from_ele,
+}
+
+@(private = "file")
+layout_get_mode_from_attr :: proc(layout: Layout_Attributes, axis: Axis) -> Size_Mode {
+	return axis == .X ? layout.config.width : layout.config.height
+}
+
+@(private = "file")
+layout_get_mode_from_ele :: proc(element: UI_Element, axis: Axis) -> Size_Mode {
+	layout, ok := element.attributes.(Layout_Attributes)
+	assert(ok)
+
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
@@ -1361,7 +1407,19 @@ border :: #force_inline proc(value: Border_Declare) -> Border_Declare {
 	return value
 }
 
-// Inout queries
+shadow :: #force_inline proc(value: Shadow_Declare) -> Shadow_Declare {
+	return value
+}
+
+vec2 :: #force_inline proc(value: rl.Vector2) -> rl.Vector2 {
+	return value
+}
+
+color :: #force_inline proc(value: rl.Color) -> rl.Color {
+	return value
+}
+
+// Input queries
 // Input
 
 mouse_state :: proc() -> UI_MouseState {
@@ -1387,14 +1445,13 @@ get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_MouseState {
 Rect_Shader :: struct {
 	shader: rl.Shader,
 	locs:   struct {
-		shadow_scale:         f32,
 		border_thickness:     f32,
 		rectangle_loc:        i32,
 		radius_loc:           i32,
 		color_loc:            i32,
+		shadow_enabled_loc:   i32,
 		shadow_radius_loc:    i32,
 		shadow_offset_loc:    i32,
-		shadow_scale_loc:     i32,
 		shadow_color_loc:     i32,
 		border_thickness_loc: i32,
 		border_color_loc:     i32,
@@ -1409,9 +1466,9 @@ load_rect_shader :: proc() -> Rect_Shader {
 			rectangle_loc = rl.GetShaderLocation(shader, "rectangle"),
 			radius_loc = rl.GetShaderLocation(shader, "radius"),
 			color_loc = rl.GetShaderLocation(shader, "color"),
+			shadow_enabled_loc = rl.GetShaderLocation(shader, "shadowEnabled"),
 			shadow_radius_loc = rl.GetShaderLocation(shader, "shadowRadius"),
 			shadow_offset_loc = rl.GetShaderLocation(shader, "shadowOffset"),
-			shadow_scale_loc = rl.GetShaderLocation(shader, "shadowScale"),
 			shadow_color_loc = rl.GetShaderLocation(shader, "shadowColor"),
 			border_thickness_loc = rl.GetShaderLocation(shader, "borderThickness"),
 			border_color_loc = rl.GetShaderLocation(shader, "borderColor"),

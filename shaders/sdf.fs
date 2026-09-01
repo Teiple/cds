@@ -1,22 +1,26 @@
+// source: https://github.com/raysan5/raylib/blob/master/examples/text/resources/shaders/glsl330/sdf.fs
 #version 330
 
+// Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;
 in vec4 fragColor;
 
+// Input uniform values
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
-uniform float softness = 1.25; 
 
+// Output fragment color
 out vec4 finalColor;
 
-void main()
-{
+// NOTE: Add your custom variables here
+
+void main() {
+    // Texel color fetching from texture sampler
+    // NOTE: Calculate alpha using signed distance field (SDF)
     float distanceFromOutline = texture(texture0, fragTexCoord).a - 0.5;
     float distanceChangePerFragment = length(vec2(dFdx(distanceFromOutline), dFdy(distanceFromOutline)));
-    
-    // Use softness to scale the transition width
-    float width = softness * distanceChangePerFragment;
-    float alpha = smoothstep(-width, width, distanceFromOutline);
+    float alpha = smoothstep(-distanceChangePerFragment, distanceChangePerFragment, distanceFromOutline);
 
+    // Calculate final fragment color
     finalColor = vec4(fragColor.rgb, fragColor.a * alpha);
 }

@@ -2,18 +2,16 @@
 
 /*******************************************************************************************
 *
-*   raylib [shaders] example - rounded rectangle
+*   raylib [text] example - font sdf
 *
 *   Example complexity rating: [★★★☆] 3/4
 *
-*   Example originally created with raylib 5.5, last time updated with raylib 5.5
-*
-*   Example contributed by Anstro Pleuton (@anstropleuton) and reviewed by Ramon Santamaria (@raysan5)
+*   Example originally created with raylib 1.3, last time updated with raylib 4.0
 *
 *   Example licensed under an unmodified zlib/libpng license, which is an OSI-certified,
 *   BSD-like license that allows static linking with closed source software
 *
-*   Copyright (c) 2025 Anstro Pleuton (@anstropleuton)
+*   Copyright (c) 2015-2025 Ramon Santamaria (@raysan5)
 *
 ********************************************************************************************/
 
@@ -25,41 +23,7 @@
     #define GLSL_VERSION            100
 #endif
 
-//----------------------------------------------------------------------------------
-// Types and Structures Definition
-//----------------------------------------------------------------------------------
-// Rounded rectangle data
-typedef struct {
-    Vector4 cornerRadius; // Individual corner radius (top-left, top-right, bottom-left, bottom-right)
-
-    // Shadow variables
-    float shadowRadius;
-    Vector2 shadowOffset;
-    float shadowScale;
-
-    // Border variables
-    float borderThickness; // Inner-border thickness
-
-    // Shader locations
-    int rectangleLoc;
-    int radiusLoc;
-    int colorLoc;
-    int shadowRadiusLoc;
-    int shadowOffsetLoc;
-    int shadowScaleLoc;
-    int shadowColorLoc;
-    int borderThicknessLoc;
-    int borderColorLoc;
-} RoundedRectangle;
-
-//------------------------------------------------------------------------------------
-// Module Functions Declaration
-//------------------------------------------------------------------------------------
-// Create a rounded rectangle and set uniform locations
-static RoundedRectangle CreateRoundedRectangle(Vector4 cornerRadius, float shadowRadius, Vector2 shadowOffset, float shadowScale, float borderThickness, Shader shader);
-
-// Update rounded rectangle uniforms
-static void UpdateRoundedRectangle(RoundedRectangle rec, Shader shader);
+#include <stdlib.h>
 
 //------------------------------------------------------------------------------------
 // Program main entry point
@@ -71,110 +35,103 @@ int main(void)
     const int screenWidth = 800;
     const int screenHeight = 450;
 
-    InitWindow(screenWidth, screenHeight, "raylib [shaders] example - rounded rectangle");
+    InitWindow(screenWidth, screenHeight, "raylib [text] example - font sdf");
 
-    // Load the shader
-    Shader shader = LoadShader("./shaders/base.vs", "./shaders/rounded_rect.fs");
+    // NOTE: Textures/Fonts MUST be loaded after Window initialization (OpenGL context is required)
 
-    // Create a rounded rectangle
-    RoundedRectangle roundedRectangle = CreateRoundedRectangle(
-        (Vector4){ 5.0f, 10.0f, 15.0f, 20.0f },     // Corner radius
-        20.0f,                                      // Shadow radius
-        (Vector2){ 0.0f, -5.0f },                   // Shadow offset
-        0.95f,                                      // Shadow scale
-        5.0f,                                       // Border thickness
-        shader                                      // Shader
-    );
+    const char msg[50] = "Signed Distance Fields";
 
-    // Update shader uniforms
-    UpdateRoundedRectangle(roundedRectangle, shader);
+    // Loading file to memory
+    int fileSize = 0;
+    unsigned char *fileData = LoadFileData("./assets/fonts/NotoSans-SemiBold.ttf", &fileSize);
 
-    const Color rectangleColor = BLUE;
-    const Color shadowColor = DARKBLUE;
-    const Color borderColor = SKYBLUE;
+    // Default font generation from TTF font
+    Font fontDefault = { 0 };
+    fontDefault.baseSize = 16;
+    fontDefault.glyphCount = 95;
 
-    SetTargetFPS(60);
+    // Loading font data from memory data
+    // Parameters > font size: 16, no glyphs array provided (0), glyphs count: 95 (autogenerate chars array)
+    fontDefault.glyphs = LoadFontData(fileData, fileSize, 16, 0, 95, FONT_DEFAULT);
+    // Parameters > glyphs count: 95, font size: 16, glyphs padding in image: 4 px, pack method: 0 (default)
+    Image atlas = GenImageFontAtlas(fontDefault.glyphs, &fontDefault.recs, 95, 16, 4, 0);
+    fontDefault.texture = LoadTextureFromImage(atlas);
+    UnloadImage(atlas);
+
+    // SDF font generation from TTF font
+    Font fontSDF = { 0 };
+    fontSDF.baseSize = 16;
+    fontSDF.glyphCount = 95;
+    // Parameters > font size: 16, no glyphs array provided (0), glyphs count: 0 (defaults to 95)
+    fontSDF.glyphs = LoadFontData(fileData, fileSize, 16, 0, 0, FONT_SDF);
+    // Parameters > glyphs count: 95, font size: 16, glyphs padding in image: 0 px, pack method: 1 (Skyline algorythm)
+    atlas = GenImageFontAtlas(fontSDF.glyphs, &fontSDF.recs, 95, 16, 0, 1);
+    fontSDF.texture = LoadTextureFromImage(atlas);
+    UnloadImage(atlas);
+
+    UnloadFileData(fileData);      // Free memory from loaded file
+
+    // Load SDF required shader (we use default vertex shader)
+    Shader shader = LoadShader(0, "./shaders/sdf.fs");
+
+    SetTextureFilter(fontSDF.texture, TEXTURE_FILTER_BILINEAR);    // Required for SDF font
+
+    Vector2 fontPosition = { 40, screenHeight/2.0f - 50 };
+    Vector2 textSize = { 0.0f, 0.0f };
+    float fontSize = 16.0f;
+    int currentFont = 0;            // 0 - fontDefault, 1 - fontSDF
+
+    SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
     {
+        // Update
+        //----------------------------------------------------------------------------------
+        fontSize += GetMouseWheelMove()*8.0f;
+
+        if (fontSize < 6) fontSize = 6;
+
+        if (IsKeyDown(KEY_SPACE)) currentFont = 1;
+        else currentFont = 0;
+
+        if (currentFont == 0) textSize = MeasureTextEx(fontDefault, msg, fontSize, 0);
+        else textSize = MeasureTextEx(fontSDF, msg, fontSize, 0);
+
+        fontPosition.x = (float)GetScreenWidth()/2 - textSize.x/2;
+        fontPosition.y = (float)GetScreenHeight()/2 - textSize.y/2 + 80;
+        //----------------------------------------------------------------------------------
+
         // Draw
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
             ClearBackground(RAYWHITE);
 
-            // Draw rectangle box with rounded corners using shader
-            Rectangle rec = { 50, 70, 110, 60 };
-            DrawRectangleLines((int)rec.x - 20, (int)rec.y - 20, (int)rec.width + 40, (int)rec.height + 40, DARKGRAY);
-            DrawText("Rounded rectangle", (int)rec.x - 20, (int)rec.y - 35, 10, DARKGRAY);
+            if (currentFont == 1)
+            {
+                // NOTE: SDF fonts require a custom SDf shader to compute fragment color
+                BeginShaderMode(shader);    // Activate SDF font shader
+                    DrawTextEx(fontSDF, msg, fontPosition, fontSize, 0, BLACK);
+                EndShaderMode();            // Activate our default shader for next drawings
 
-            // Flip Y axis to match shader coordinate system
-            rec.y = screenHeight - rec.y - rec.height;
-            SetShaderValue(shader, roundedRectangle.rectangleLoc, (float[]){ rec.x, rec.y, rec.width, rec.height }, SHADER_UNIFORM_VEC4);
+                DrawTexture(fontSDF.texture, 10, 10, BLACK);
+            }
+            else
+            {
+                DrawTextEx(fontDefault, msg, fontPosition, fontSize, 0, BLACK);
+                DrawTexture(fontDefault.texture, 10, 10, BLACK);
+            }
 
-            // Only rectangle color
-            SetShaderValue(shader, roundedRectangle.colorLoc, (float[]) { rectangleColor.r/255.0f, rectangleColor.g/255.0f, rectangleColor.b/255.0f, rectangleColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.shadowColorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.borderColorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
+            if (currentFont == 1) DrawText("SDF!", 320, 20, 80, RED);
+            else DrawText("default font", 315, 40, 30, GRAY);
 
-            BeginShaderMode(shader);
-                DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
-            EndShaderMode();
+            DrawText("FONT SIZE: 16.0", GetScreenWidth() - 240, 20, 20, DARKGRAY);
+            DrawText(TextFormat("RENDER SIZE: %02.02f", fontSize), GetScreenWidth() - 240, 50, 20, DARKGRAY);
+            DrawText("Use MOUSE WHEEL to SCALE TEXT!", GetScreenWidth() - 240, 90, 10, DARKGRAY);
 
-            // Draw rectangle shadow using shader
-            rec = (Rectangle){ 50, 200, 110, 60 };
-            DrawRectangleLines((int)rec.x - 20, (int)rec.y - 20, (int)rec.width + 40, (int)rec.height + 40, DARKGRAY);
-            DrawText("Rounded rectangle shadow", (int)rec.x - 20, (int)rec.y - 35, 10, DARKGRAY);
-
-            rec.y = screenHeight - rec.y - rec.height;
-            SetShaderValue(shader, roundedRectangle.rectangleLoc, (float[]){ rec.x, rec.y, rec.width, rec.height }, SHADER_UNIFORM_VEC4);
-
-            // Only shadow color
-            SetShaderValue(shader, roundedRectangle.colorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.shadowColorLoc, (float[]) { shadowColor.r/255.0f, shadowColor.g/255.0f, shadowColor.b/255.0f, shadowColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.borderColorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
-
-            BeginShaderMode(shader);
-                DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
-            EndShaderMode();
-
-            // Draw rectangle's border using shader
-            rec = (Rectangle){ 50, 330, 110, 60 };
-            DrawRectangleLines((int)rec.x - 20, (int)rec.y - 20, (int)rec.width + 40, (int)rec.height + 40, DARKGRAY);
-            DrawText("Rounded rectangle border", (int)rec.x - 20, (int)rec.y - 35, 10, DARKGRAY);
-
-            rec.y = screenHeight - rec.y - rec.height;
-            SetShaderValue(shader, roundedRectangle.rectangleLoc, (float[]){ rec.x, rec.y, rec.width, rec.height }, SHADER_UNIFORM_VEC4);
-
-            // Only border color
-            SetShaderValue(shader, roundedRectangle.colorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.shadowColorLoc, (float[]) { 0.0f, 0.0f, 0.0f, 0.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.borderColorLoc, (float[]) { borderColor.r/255.0f, borderColor.g/255.0f, borderColor.b/255.0f, borderColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-
-            BeginShaderMode(shader);
-                DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
-            EndShaderMode();
-
-            // Draw one more rectangle with all three colors
-            rec = (Rectangle){ 240, 80, 500, 300 };
-            DrawRectangleLines((int)rec.x - 30, (int)rec.y - 30, (int)rec.width + 60, (int)rec.height + 60, DARKGRAY);
-            DrawText("Rectangle with all three combined", (int)rec.x - 30, (int)rec.y - 45, 10, DARKGRAY);
-
-            rec.y = screenHeight - rec.y - rec.height;
-            SetShaderValue(shader, roundedRectangle.rectangleLoc, (float[]){ rec.x, rec.y, rec.width, rec.height }, SHADER_UNIFORM_VEC4);
-
-            // All three colors
-            SetShaderValue(shader, roundedRectangle.colorLoc, (float[]) { rectangleColor.r/255.0f, rectangleColor.g/255.0f, rectangleColor.b/255.0f, rectangleColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.shadowColorLoc, (float[]) { shadowColor.r/255.0f, shadowColor.g/255.0f, shadowColor.b/255.0f, shadowColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, roundedRectangle.borderColorLoc, (float[]) { borderColor.r/255.0f, borderColor.g/255.0f, borderColor.b/255.0f, borderColor.a/255.0f }, SHADER_UNIFORM_VEC4);
-
-            BeginShaderMode(shader);
-                DrawRectangle(0, 0, screenWidth, screenHeight, WHITE);
-            EndShaderMode();
-
-            DrawText("(c) Rounded rectangle SDF by Iñigo Quilez. MIT License.", screenWidth - 300, screenHeight - 20, 10, BLACK);
+            DrawText("HOLD SPACE to USE SDF FONT VERSION!", 340, GetScreenHeight() - 30, 20, MAROON);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -182,50 +139,13 @@ int main(void)
 
     // De-Initialization
     //--------------------------------------------------------------------------------------
-    UnloadShader(shader); // Unload shader
+    UnloadFont(fontDefault);    // Default font unloading
+    UnloadFont(fontSDF);        // SDF font unloading
 
-    CloseWindow();        // Close window and OpenGL context
+    UnloadShader(shader);       // Unload SDF shader
+
+    CloseWindow();              // Close window and OpenGL context
     //--------------------------------------------------------------------------------------
 
     return 0;
-}
-
-//------------------------------------------------------------------------------------
-// Module Functions Definitions
-//------------------------------------------------------------------------------------
-
-// Create a rounded rectangle and set uniform locations
-RoundedRectangle CreateRoundedRectangle(Vector4 cornerRadius, float shadowRadius, Vector2 shadowOffset, float shadowScale, float borderThickness, Shader shader)
-{
-    RoundedRectangle rec;
-    rec.cornerRadius = cornerRadius;
-    rec.shadowRadius = shadowRadius;
-    rec.shadowOffset = shadowOffset;
-    rec.shadowScale = shadowScale;
-    rec.borderThickness = borderThickness;
-
-    // Get shader uniform locations
-    rec.rectangleLoc = GetShaderLocation(shader, "rectangle");
-    rec.radiusLoc = GetShaderLocation(shader, "radius");
-    rec.colorLoc = GetShaderLocation(shader, "color");
-    rec.shadowRadiusLoc = GetShaderLocation(shader, "shadowRadius");
-    rec.shadowOffsetLoc = GetShaderLocation(shader, "shadowOffset");
-    rec.shadowScaleLoc = GetShaderLocation(shader, "shadowScale");
-    rec.shadowColorLoc = GetShaderLocation(shader, "shadowColor");
-    rec.borderThicknessLoc = GetShaderLocation(shader, "borderThickness");
-    rec.borderColorLoc = GetShaderLocation(shader, "borderColor");
-
-    UpdateRoundedRectangle(rec, shader);
-
-    return rec;
-}
-
-// Update rounded rectangle uniforms
-void UpdateRoundedRectangle(RoundedRectangle rec, Shader shader)
-{
-    SetShaderValue(shader, rec.radiusLoc, (float[]){ rec.cornerRadius.x, rec.cornerRadius.y, rec.cornerRadius.z, rec.cornerRadius.w }, SHADER_UNIFORM_VEC4);
-    SetShaderValue(shader, rec.shadowRadiusLoc, &rec.shadowRadius, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, rec.shadowOffsetLoc, (float[]){ rec.shadowOffset.x, rec.shadowOffset.y }, SHADER_UNIFORM_VEC2);
-    SetShaderValue(shader, rec.shadowScaleLoc, &rec.shadowScale, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, rec.borderThicknessLoc, &rec.borderThickness, SHADER_UNIFORM_FLOAT);
 }

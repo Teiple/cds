@@ -4,11 +4,11 @@
 
 // Input vertex attributes (from vertex shader)
 in vec2 fragTexCoord;
-in vec4 fragColor;
+// in vec4 fragColor;
 
 // Input uniform values
 uniform sampler2D texture0;
-uniform vec4 colDiffuse;
+// uniform vec4 colDiffuse;
 
 // Output fragment color
 out vec4 finalColor;
@@ -18,48 +18,39 @@ uniform vec4 radius; // Corner radius (top-left, top-right, bottom-left, bottom-
 uniform vec4 color;
 
 // Shadow parameters
+uniform int shadowEnabled;
 uniform float shadowRadius;
 uniform vec2 shadowOffset;
-uniform float shadowScale;
 uniform vec4 shadowColor;
 
 // Border parameters
 uniform float borderThickness;
-uniform vec4 borderColor;       
+uniform vec4 borderColor;
 
-// Create a rounded rectangle using signed distance field
-// Thanks to Iñigo Quilez (https://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm)
-// And thanks to inobelar (https://www.shadertoy.com/view/fsdyzB) for shader
-// MIT License
-float RoundedRectangleSDF(vec2 fragCoord, vec2 center, vec2 halfSize, vec4 radius)
-{
-    vec2 fragFromCenter = fragCoord - center;
+float sdRoundRect(vec2 p, vec2 halfSize, vec4 radius) {
 
     // Determine which corner radius to use
-    radius.xy = (fragFromCenter.y > 0.0) ? radius.xy : radius.zw;
-    radius.x = (fragFromCenter.x < 0.0) ? radius.x : radius.y;
+    radius.xy = (p.y > 0.0) ? radius.xy : radius.zw;
+    radius.x = (p.x < 0.0) ? radius.x : radius.y;
 
     // Calculate signed distance field
-    vec2 dist = abs(fragFromCenter) - halfSize + radius.x;
+    vec2 dist = abs(p) - halfSize + radius.x;
     return min(max(dist.x, dist.y), 0.0) + length(max(dist, 0.0)) - radius.x;
 }
 
-vec4 composite_over(vec4 under, vec4 over)
-{
+vec4 compositeOver(vec4 under, vec4 over) {
     float outA = over.a + under.a * (1.0 - over.a);
 
-    if (outA <= 0.0)
+    if(outA <= 0.0)
         return vec4(0.0);
 
-    vec3 outRGB =
-        (over.rgb * over.a +
-            under.rgb * under.a * (1.0 - over.a)) / outA;
+    vec3 outRGB = (over.rgb * over.a +
+        under.rgb * under.a * (1.0 - over.a)) / outA;
 
     return vec4(outRGB, outA);
 }
 
-void main()
-{
+void main() {
     // Texel color fetching from texture sampler
     vec4 texelColor = texture(texture0, fragTexCoord);
 
@@ -69,29 +60,38 @@ void main()
     // Calculate signed distance field for rounded rectangle
     vec2 halfSize = rectangle.zw * 0.5;
     vec2 center = rectangle.xy + halfSize;
-    float recSDF = RoundedRectangleSDF(fragCoord, center, halfSize, radius);
-    
+    float recSdf = sdRoundRect(fragCoord - center, halfSize, radius);
+
     // Calculate signed distance field for rectangle shadow
-    vec2 shadowHalfSize = halfSize * shadowScale;
 
+    // Anti-aliasing
+    float aa = max(fwidth(recSdf) * 0.5, 0.001);
 
-    vec2 shadowCenter = center + shadowOffset;
-    float shadowSDF = RoundedRectangleSDF(fragCoord, shadowCenter, shadowHalfSize, radius);
-
-    // Caculate alpha factors
-    float recFactor = smoothstep(1.0, 0.0, recSDF);
-    float recFactorHard = recSDF < 0 ? 1.0 : 0.0;
-    float shadowFactor = smoothstep(shadowRadius, 0.0, shadowSDF);
-    float borderFactor = smoothstep(0.0, 1.0, recSDF + borderThickness) * recFactor;
+    // Calculate alpha factors
+    float recFactor = 1.0 - smoothstep(-borderThickness - aa, -borderThickness + aa, recSdf);
+    float outerFactor = 1.0 - smoothstep(-aa, aa, recSdf); // Outer rounded-rect coverage
+    float borderFactor = max(outerFactor - recFactor, 0.0); // The region between the two edges is the border
 
     // Multiply each color by its respective alpha factor
-    vec4 recColor = vec4(color.rgb, color.a * (borderThickness > 0 ? recFactorHard : recFactor));
-    vec4 shadowCol = vec4(shadowColor.rgb, shadowColor.a * shadowFactor);
+    vec4 recColor = vec4(color.rgb, color.a * recFactor);
     vec4 borderCol = vec4(borderColor.rgb, borderColor.a * borderFactor);
+    vec4 shadowCol;
+    vec4 result;
 
-    // Combine the colors in the order (shadow, rectangle, border)
-    vec4 result = composite_over(shadowCol, recColor);
-    result = composite_over(result, borderCol);
+    if(shadowEnabled != 0) {
+        // Shadows
+        vec2 shadowCenter = center + shadowOffset;
+        float shadowSdf = sdRoundRect(fragCoord - shadowCenter, halfSize, radius);
+        float shadowFactor = smoothstep(shadowRadius, 0.0, shadowSdf);
+
+        shadowCol = vec4(shadowColor.rgb, shadowColor.a * shadowFactor);
+
+        // Combine the colors in the order (shadow, rectangle, border)
+        result = compositeOver(compositeOver(shadowCol, recColor), borderCol);
+    } else {
+        // Rec + Border only
+        result = compositeOver(recColor, borderCol);
+    }
 
     finalColor = result;
 }

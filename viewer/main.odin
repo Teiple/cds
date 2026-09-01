@@ -1,7 +1,6 @@
 package main
 
 import fmt "core:fmt"
-import "core:image"
 import "core:math/rand"
 import mem "core:mem"
 import ui "ui"
@@ -34,6 +33,7 @@ main :: proc() {
 		}
 	}
 
+
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(960, 540, "Unnamed")
 	defer rl.CloseWindow()
@@ -42,52 +42,105 @@ main :: proc() {
 
 	ui_ctx: ui.UI_Context = ui.context_make(
 		ui.measure_text,
-		{{base_size = 32, font_path = "assets/fonts/NotoSans-SemiBold.ttf", spacing = 0}},
+		{{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
 		"shaders/sdf.fs",
 	)
 	defer ui.context_delete(ui_ctx)
 
-	fetch_pallete_colors(&debug_palette, "assets/images/colors.png", 7, 12)
+	fetch_pallete_colors(&debug_palette, "assets/images/colors.png", 2, 16)
+
+	interval: f32 = 1.0
+	interval_sum_fps: f32 = 0
+	interval_frame_count: i32 = 0
+	interval_time_count: f32 = 0
+	interval_avg_fps: f32 = 0
 
 	for !rl.WindowShouldClose() {
 		rand.reset(123)
 
 		rl.BeginDrawing()
-		defer rl.EndDrawing()
-		defer free_all(context.temp_allocator)
+
+		defer {
+			rl.EndDrawing()
+			free_all(context.temp_allocator)
+		}
+
+		delta := rl.GetFrameTime()
+
+		interval_frame_count += 1
+		interval_time_count += delta
+		interval_sum_fps += delta > 0 ? 1.0 / delta : 0
+
+		if interval_time_count >= interval {
+			if interval_frame_count > 0 {
+				interval_avg_fps = interval_sum_fps / f32(interval_frame_count)
+			}
+			interval_frame_count = 0
+			interval_time_count = 0
+			interval_sum_fps = 0
+		}
 
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
 			if ui.layout(
 				{
+					corner_radius = 8,
+					border = ui.border({color = rl.RAYWHITE, thickness = 2}),
+					shadow = ui.shadow({radius = 8, offset = {0, 0}}),
 					width = ui.grow(),
-					height = ui.grow(),
-					padding = ui.pad_all(16),
-					child_gap = 12,
-					layout_direction = .Top_To_Bottom,
 					background_color = get_random_color(),
 				},
 			) {
-				ui.text({content = "Hello World", alignment = ui.align({x = .Center})})
-				ui.text({content = fmt.tprintf("fps: %.f", 1.0 / rl.GetFrameTime())})
-
-				ui.layout(
+				if ui.layout({corner_radius = 8, width = ui.grow(), background_color = get_random_color()}) {
+					ui.text({content = "Hello World", font_size = 32})
+				}
+				if ui.layout(
 					{
-						width = ui.grow(),
-						height = ui.fixed(48),
-						padding = ui.pad_all(8),
-						child_gap = 12,
-						layout_direction = .Left_To_Right,
-						border = ui.border({thickness = 2}),
-						background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.5 : 0),
+						corner_radius = 8,
+						width = ui.percent(.2),
+						height = ui.grow(),
+						background_color = get_random_color(),
 					},
-				)
+				) {
+				}
+				if ui.layout(
+					{
+						corner_radius = 8,
+						width = ui.percent(.2),
+						height = ui.grow(),
+						background_color = get_random_color(),
+					},
+				) {
+				}
+			}
+			when ODIN_DEBUG {
+				if ui.layout(
+					{
+						corner_radius = 8,
+						border = ui.border({color = rl.RAYWHITE, thickness = 2}),
+						shadow = ui.shadow({radius = 8, offset = {0, 0}}),
+						background_color = get_random_color(),
+					},
+				) {
+					ui.text(
+						{content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated), font_size = 32},
+					)
+				}
 
-				ui.text({content = "Details"})
-				ui.text({content = "Status: Online"})
+				if ui.layout(
+					{
+						corner_radius = 8,
+						border = ui.border({color = rl.RAYWHITE, thickness = 2}),
+						shadow = ui.shadow({radius = 8, offset = {0, 0}}),
+						background_color = get_random_color(),
+					},
+				) {
+					ui.text({content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps), font_size = 32})
+				}
 			}
 		}
+
 		ui.render_commands(ui_ctx)
 	}
 }

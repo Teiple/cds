@@ -1,9 +1,11 @@
 
 package ui
 
+import "core:c"
 import "core:math"
 import rl "vendor:raylib"
 
+AA_OFFSET :: f32(1)
 
 render_commands :: proc(ctx: UI_Context) {
 	for variant in ctx.render_commands {
@@ -65,15 +67,45 @@ draw_text_command :: proc(command: Text_Command) {
 @(private)
 draw_rect_command :: proc(command: Rect_Command) {
 	command := command
+
 	setup_rect_shader(&command)
 
+	rect := command.rect
+	shadow := command.shadow
+
+	// Extra space for SDF antialiasing
+	aa := AA_OFFSET
+
+	// Main rectangle bounds
+	min_x := rect.x - aa
+	min_y := rect.y - aa
+	max_x := rect.x + rect.width + aa
+	max_y := rect.y + rect.height + aa
+
+	if shadow.enabled {
+		// Shadow bounds
+		shadow_min_x := rect.x + shadow.offset.x - shadow.radius - aa
+		shadow_min_y := rect.y + shadow.offset.y - shadow.radius - aa
+		shadow_max_x := rect.x + rect.width + shadow.offset.x + shadow.radius + aa
+		shadow_max_y := rect.y + rect.height + shadow.offset.y + shadow.radius + aa
+
+		// Union of rectangle + shadow
+		min_x = min(min_x, shadow_min_x)
+		min_y = min(min_y, shadow_min_y)
+		max_x = max(max_x, shadow_max_x)
+		max_y = max(max_y, shadow_max_y)
+	}
+
+	draw_rect := rl.Rectangle {
+		x      = min_x,
+		y      = min_y,
+		width  = max_x - min_x,
+		height = max_y - min_y,
+	}
+
 	rl.BeginShaderMode(command.rect_shader.shader)
-	// rl.DrawRectangle(0, 0, rl.GetScreenWidth(), rl.GetScreenHeight(), rl.WHITE)
-	rl.DrawRectangleRec(command.rect, rl.WHITE)
-
+	rl.DrawRectangleRec(draw_rect, rl.WHITE)
 	rl.EndShaderMode()
-
-	// draw_rounded_rect(command.rect, 4, command.color)
 }
 
 @(private, require_results)
@@ -144,23 +176,28 @@ setup_rect_shader :: proc(command: ^Rect_Command) {
 	rect_shader := command.rect_shader
 
 	color := to_shader_color_data(command.color)
-	shadow_color := to_shader_color_data(command.shadow.color)
 	border_color := to_shader_color_data(command.border.color)
 
-	shadow_offset := command.shadow.offset
-	shadow_offset.y = -shadow_offset.y
-
-
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.radius_loc, &command.corner_radius, .VEC4)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_radius_loc, &command.shadow.radius, .FLOAT)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &shadow_offset, .VEC2)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_scale_loc, &command.shadow.scale, .FLOAT)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_thickness_loc, &command.border.thickness, .FLOAT)
 
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.rectangle_loc, &rect_data, .VEC4)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.color_loc, &color, .VEC4)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_color_loc, &shadow_color, .VEC4)
 	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_color_loc, &border_color, .VEC4)
+
+	shadow_enabled := command.shadow.enabled ? 1 : 0
+
+	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_enabled_loc, &shadow_enabled, .INT)
+
+	if command.shadow.enabled {
+		shadow_color := to_shader_color_data(command.shadow.color)
+		shadow_offset := command.shadow.offset
+		shadow_offset.y = -shadow_offset.y
+
+		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_radius_loc, &command.shadow.radius, .FLOAT)
+		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &shadow_offset, .VEC2)
+		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_color_loc, &shadow_color, .VEC4)
+	}
 }
 
 
