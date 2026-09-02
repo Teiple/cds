@@ -18,7 +18,7 @@ Axis :: enum {
 	Y,
 }
 
-UI_MouseState :: enum {
+UI_Mouse_State :: enum {
 	None,
 	Pressed,
 	Down,
@@ -26,7 +26,7 @@ UI_MouseState :: enum {
 	Hover,
 }
 
-UI_LayoutMouseMode :: enum {
+UI_Layout_Mouse_Mode :: enum {
 	Capture,
 	Passthrough,
 	Ignore,
@@ -34,13 +34,25 @@ UI_LayoutMouseMode :: enum {
 
 UI_Input :: struct {
 	mouse_position: rl.Vector2,
-	mouse_state:    UI_MouseState,
+	mouse_state:    UI_Mouse_State,
 	scroll:         rl.Vector2,
 }
 
-UI_InputEvent :: struct {
+UI_Input_Event :: struct {
 	mouse_captured:   bool,
 	hovered_elements: [dynamic]UI_Index,
+}
+
+UI_ClipData :: struct {
+	open_clip_stack: [dynamic]UI_Index,
+	region:          rl.Rectangle,
+}
+
+UI_Layout_Mouse_Event_Callbacks :: struct {
+	on_pressed:  proc(),
+	on_released: proc(),
+	on_down:     proc(),
+	on_hover:    proc(),
 }
 
 UI_Measure_Text :: proc(text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
@@ -52,7 +64,7 @@ Render_Command :: union {
 	Pop_Clip_Command,
 }
 
-Rect_Command :: struct {
+Rect_Command :: struct #all_or_none {
 	rect:          rl.Rectangle,
 	color:         rl.Color,
 	corner_radius: rl.Vector4,
@@ -61,7 +73,7 @@ Rect_Command :: struct {
 	rect_shader:   Rect_Shader,
 }
 
-Text_Command :: struct {
+Text_Command :: struct #all_or_none {
 	content:       string,
 	font:          rl.Font,
 	font_size:     f32,
@@ -70,7 +82,7 @@ Text_Command :: struct {
 	color:         rl.Color,
 	position:      rl.Vector2,
 	wrapped_lines: []string,
-	shader:        rl.Shader,
+	font_shader:   Font_Shader,
 }
 
 Push_Clip_Command :: struct {
@@ -93,16 +105,17 @@ UI_Font_Config :: struct {
 
 UI_Context :: struct {
 	elements:           [dynamic]UI_Element,
-	open_element_stack: [dynamic]UI_Index,
+	open_layout_stack:  [dynamic]UI_Index,
 	growable_buffer:    [dynamic]UI_Index,
 	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]Render_Command,
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
-	font_shader:        rl.Shader,
+	font_shader:        Font_Shader,
 	rect_shader:        Rect_Shader,
 	input:              UI_Input,
-	input_event:        UI_InputEvent,
+	input_event:        UI_Input_Event,
+	clip:               UI_ClipData,
 }
 
 Sizing_Axis :: struct {
@@ -195,7 +208,9 @@ UI_Layout_Config :: struct {
 	corner_radius:    f32,
 	border:           Border_Config,
 	shadow:           Shadow_Config,
-	mouse_mode:       UI_LayoutMouseMode,
+	mouse_mode:       UI_Layout_Mouse_Mode,
+	callbacks:        UI_Layout_Mouse_Event_Callbacks,
+	clip:             bool,
 }
 
 UI_Text_Config :: struct {
@@ -252,7 +267,7 @@ Child_Iter :: struct {
 
 @(private = "file")
 open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limits: UI_Limits) -> bool {
-	parent := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
+	parent := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
 	ui_ele := UI_Element {
@@ -265,13 +280,13 @@ open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limi
 	}
 
 	append(&ctx.elements, ui_ele)
-	append(&ctx.open_element_stack, index)
+	append(&ctx.open_layout_stack, index)
 	return true
 }
 
 @(private = "file")
 open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
-	parent_idx := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
+	parent_idx := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	index := UI_Index(len(ctx.elements))
 
 	ui_ele := UI_Element {
@@ -290,7 +305,7 @@ open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
 
 @(private = "file")
 close_layout :: proc(ctx: ^UI_Context) {
-	index := pop(&ctx.open_element_stack)
+	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
 
 	// Compute subtree size: everything appended after this node is in its subtree
@@ -843,29 +858,30 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 }
 
 @(private = "file")
-load_font_shader :: proc(shader_path: cstring) -> rl.Shader {
+load_font_shader :: proc(shader_path: cstring) -> Font_Shader {
 	assert(os.exists(string(shader_path)))
 
-	return rl.LoadShader(nil, shader_path)
+	shader := rl.LoadShader(nil, shader_path)
+	return {shader = shader, mask_rectangle_loc = rl.GetShaderLocation(shader, "maskRectangle")}
 }
 
 
 context_make :: proc(
 	measure_text_proc: UI_Measure_Text,
 	font_configs: []UI_Font_Config,
-	font_shader: cstring,
+	font_shader_path: cstring,
 ) -> UI_Context {
 	fonts := make([dynamic]UI_Font, 0, 4)
 	for config in font_configs {
 		append(&fonts, load_font(config.base_size, config.spacing, config.font_path))
 	}
 
-	font_shader := load_font_shader(font_shader)
+	font_shader := load_font_shader(font_shader_path)
 	rect_shader := load_rect_shader()
 
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 5),
-		open_element_stack = make([dynamic]UI_Index, 0, 5),
+		open_layout_stack = make([dynamic]UI_Index, 0, 5),
 		render_commands = make([dynamic]Render_Command, 0, 5),
 		growable_buffer = make([dynamic]UI_Index, 0, 5),
 		wrapped_text_lines = make([dynamic]string, 0, 5),
@@ -874,12 +890,13 @@ context_make :: proc(
 		font_shader = font_shader,
 		rect_shader = rect_shader,
 		input_event = {mouse_captured = false, hovered_elements = make([dynamic]i32, 0, 4)},
+		clip = {open_clip_stack = make([dynamic]i32, 0, 2)},
 	}
 }
 
 context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.elements)
-	delete(ctx.open_element_stack)
+	delete(ctx.open_layout_stack)
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
@@ -887,13 +904,14 @@ context_delete :: proc(ctx: UI_Context) {
 	for f in ctx.fonts {
 		rl.UnloadFont(f.font)
 	}
-	rl.UnloadShader(ctx.font_shader)
+	rl.UnloadShader(ctx.font_shader.shader)
 
 	delete(ctx.fonts)
 
 	rl.UnloadShader(ctx.rect_shader.shader)
 
 	delete(ctx.input_event.hovered_elements)
+	delete(ctx.clip.open_clip_stack)
 }
 
 @(require_results, deferred_in_out = end_layout)
@@ -901,14 +919,14 @@ begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) ->
 	current_context = ctx
 
 	clear(&ctx.elements)
-	clear(&ctx.open_element_stack)
+	clear(&ctx.open_layout_stack)
 
 	// Create the root element at index 0
 	append(&ctx.elements, root_layout(window_width, window_height))
 
 	// Set its preorder_idx explicitly (it's 0)
 	ctx.elements[0].index = 0
-	append(&ctx.open_element_stack, 0)
+	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
 	clear(&ctx.growable_buffer)
@@ -940,62 +958,141 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	// Mouse input, forward to next frame
 	detect_mouse(ctx)
 
-	// Generate render commands
 	clear(&ctx.render_commands)
-	for ele in ctx.elements {
-		switch attr in ele.attributes {
-		case Layout_Attributes:
-			{
-				append(
-					&ctx.render_commands,
-					Rect_Command{
-						rect = {x = ele.position.x, y = ele.position.y, width = ele.size.x, height = ele.size.y},
-						color = attr.config.background_color,
-						corner_radius = attr.config.corner_radius,
-						border = attr.config.border,
-						shadow = attr.config.shadow,
-						rect_shader = ctx.rect_shader,
-					},
-				)
-			}
-		case Text_Attributes:
-			{
-				append(
-					&ctx.render_commands,
-					Text_Command{
-						content = attr.config.content,
-						font_size = attr.config.font_size,
-						spacing = ctx.fonts[attr.config.font_index].spacing,
-						line_spacing = attr.config.line_spacing,
-						font = ctx.fonts[attr.config.font_index].font,
-						position = ele.position,
-						wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
-						color = attr.config.color,
-						shader = ctx.font_shader,
-					},
-				)
-			}
-		}
+	clear(&ctx.clip.open_clip_stack)
 
-	}
+	// Generate render commands
+	generate_commands(ctx, 0)
 
 	// Clean up
 	clear(&ctx.elements)
-	clear(&ctx.open_element_stack)
+	clear(&ctx.open_layout_stack)
+}
+
+@(private = "file")
+generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
+	ele := &ctx.elements[index]
+
+	// Generate rect/text command for the current element
+	switch attr in ele.attributes {
+	case Layout_Attributes:
+		append(
+			&ctx.render_commands,
+			Rect_Command{
+				rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
+				color = attr.config.background_color,
+				corner_radius = attr.config.corner_radius,
+				border = attr.config.border,
+				shadow = attr.config.shadow,
+				rect_shader = ctx.rect_shader,
+			},
+		)
+		// If clipping is enabled, push clip before children
+		if attr.config.clip {
+			append(
+				&ctx.render_commands,
+				Push_Clip_Command{rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}},
+			)
+		}
+	case Text_Attributes:
+		append(
+			&ctx.render_commands,
+			Text_Command{
+				content = attr.config.content,
+				font = ctx.fonts[attr.config.font_index].font,
+				font_size = attr.config.font_size,
+				spacing = ctx.fonts[attr.config.font_index].spacing,
+				line_spacing = attr.config.line_spacing,
+				color = attr.config.color,
+				position = ele.position,
+				wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
+				font_shader = ctx.font_shader,
+			},
+		)
+	}
+
+	// Recursively process children
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+		generate_commands(ctx, child.index)
+	}
+
+	// Pop clip if this layout had clipping enabled
+	if layout_attr, ok := ele.attributes.(Layout_Attributes); ok && layout_attr.config.clip {
+		append(&ctx.render_commands, Pop_Clip_Command{})
+	}
 }
 
 detect_mouse :: proc(ctx: ^UI_Context) {
+	MOUSE_BTN :: rl.MouseButton.LEFT
+
 	ctx.input.mouse_position = rl.GetMousePosition()
 	ctx.input.mouse_state =
-		rl.IsMouseButtonPressed(rl.MouseButton.LEFT) ? .Pressed : (rl.IsMouseButtonDown(rl.MouseButton.LEFT) ? .Down : (rl.IsMouseButtonReleased(rl.MouseButton.LEFT) ? .Released : .Hover))
+		rl.IsMouseButtonPressed(MOUSE_BTN) ? .Pressed : (rl.IsMouseButtonDown(MOUSE_BTN) ? .Down : (rl.IsMouseButtonReleased(MOUSE_BTN) ? .Released : .Hover))
 
 	ctx.input_event.mouse_captured = false
 	clear(&ctx.input_event.hovered_elements)
+	clear(&ctx.clip.open_clip_stack)
+	ctx.clip.region = {}
 
-	travel_bottom_up(
+	travel_tree(
 		ctx,
-		proc(ctx: ^UI_Context, index: i32) {
-			if ctx.input_event.mouse_captured do return
+		on_down = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
+			ele := ctx.elements[index]
+
+			layout := ele.attributes.(Layout_Attributes) or_return
+
+			if layout.config.clip {
+				append(&ctx.clip.open_clip_stack, index)
+
+				ele_rect: rl.Rectangle = {
+					x      = ele.position.x,
+					y      = ele.position.y,
+					width  = ele.size.x,
+					height = ele.size.y,
+				}
+
+				if len(ctx.clip.open_clip_stack) == 1 {
+					ctx.clip.region = ele_rect
+				} else {
+					ctx.clip.region = intersect_rect(ctx.clip.region, ele_rect)
+				}
+			}
+
+			return
+		},
+		on_up = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
+			in_clip := len(ctx.clip.open_clip_stack) > 0
+
+			// check if we returned to the element that opened the clip region, if so close the clip
+			defer if in_clip && index == ctx.clip.open_clip_stack[len(ctx.clip.open_clip_stack) - 1] {
+				pop(&ctx.clip.open_clip_stack)
+
+				// recompute the clip region
+				if len(ctx.clip.open_clip_stack) > 0 {
+					clip_index := ctx.clip.open_clip_stack[0]
+
+					ctx.clip.region = {
+						x      = ctx.elements[clip_index].position.x,
+						y      = ctx.elements[clip_index].position.y,
+						width  = ctx.elements[clip_index].size.x,
+						height = ctx.elements[clip_index].size.y,
+					}
+
+					for i in 1 ..< len(ctx.clip.open_clip_stack) {
+						clip_index := ctx.clip.open_clip_stack[i]
+
+						ctx.clip.region = intersect_rect(
+							ctx.clip.region,
+							{
+								x = ctx.elements[clip_index].position.x,
+								y = ctx.elements[clip_index].position.y,
+								width = ctx.elements[clip_index].size.x,
+								height = ctx.elements[clip_index].size.y,
+							},
+						)
+					}
+				}
+			}
 
 			ele := ctx.elements[index]
 
@@ -1004,34 +1101,68 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 			mouse_position := ctx.input.mouse_position
 
+
+			min_x, max_x := ele.position.x, ele.position.x + ele.size.x
+			min_y, max_y := ele.position.y, ele.position.y + ele.size.y
+
+			if in_clip {
+				min_x, max_x = max(min_x, ctx.clip.region.x), min(max_x, ctx.clip.region.x + ctx.clip.region.width)
+				min_y, max_y = max(min_y, ctx.clip.region.y), min(max_y, ctx.clip.region.y + ctx.clip.region.height)
+			}
+
 			is_rect_hovered :=
-				mouse_position.x >= ele.position.x &&
-				mouse_position.x <= ele.position.x + ele.size.x &&
-				mouse_position.y >= ele.position.y &&
-				mouse_position.y <= ele.position.y + ele.size.y
+				mouse_position.x >= min_x &&
+				mouse_position.x <= max_x &&
+				mouse_position.y >= min_y &&
+				mouse_position.y <= max_y
 
 			if is_rect_hovered {
+				// handle callbacks
+				switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
+				case .Hover:
+					if callbacks.on_hover != nil do callbacks.on_hover()
+				case .Pressed:
+					if callbacks.on_pressed != nil do callbacks.on_pressed()
+				case .Down:
+					if callbacks.on_down != nil do callbacks.on_down()
+				case .Released:
+					if callbacks.on_released != nil do callbacks.on_released()
+				case .None:
+					break
+				}
+
 				append(&ctx.input_event.hovered_elements, index)
 
 				if layout.config.mouse_mode == .Capture {
 					ctx.input_event.mouse_captured = true
+
+					stop = true
+					return
 				}
+
 				// else it passed through
 			}
+
+			return
 		},
 	)
 }
 
-travel_bottom_up :: proc(
+travel_tree :: proc(
 	ctx: ^UI_Context,
-	do_proc: proc(ctx: ^UI_Context, index: UI_Index) = nil,
 	index: UI_Index = 0,
-) {
+	on_up: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
+	on_down: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
+) -> bool {
+	if on_down != nil && on_down(ctx, index) do return true
+
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		travel_bottom_up(ctx, do_proc, child.index)
+		if travel_tree(ctx, child.index, on_up, on_down) do return true
 	}
 
-	if do_proc != nil do do_proc(ctx, index)
+	if on_up != nil && on_up(ctx, index) do return true
+
+	return false
 }
 
 @(private = "file")
@@ -1266,7 +1397,7 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 
 // Public layout declaration ultilities
 // Elements
-BORDER_DEFAULT: Border_Config : {thickness = 2, color = {0, 0, 0, 255}}
+BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 SHADOW_DEFAULT: Shadow_Config : {enabled = false, radius = 8, offset = {0, 0}, color = {0, 0, 0, 100}}
 
 @(deferred_none = close_layout_deffered)
@@ -1282,7 +1413,9 @@ layout :: proc(
 	corner_radius: f32 = 8,
 	border: Border_Config = BORDER_DEFAULT,
 	shadow: Shadow_Config = SHADOW_DEFAULT,
-	mouse_mode: UI_LayoutMouseMode = .Capture,
+	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
+	callbacks: UI_Layout_Mouse_Event_Callbacks = {},
+	clip: bool = false,
 ) -> bool {
 	return open_layout(
 		current_context,
@@ -1299,8 +1432,10 @@ layout :: proc(
 			mouse_mode = mouse_mode,
 			border = border,
 			shadow = shadow,
+			callbacks = callbacks,
+			clip = clip,
 		},
-		{x = {min = width.min, max = width.max}, y = {min = width.min, max = width.max}},
+		{x = {min = width.min, max = width.max}, y = {min = height.min, max = height.max}},
 	)
 }
 
@@ -1370,7 +1505,7 @@ color :: #force_inline proc(value: rl.Color) -> rl.Color {
 	return value
 }
 
-mouse_mode :: #force_inline proc(value: UI_LayoutMouseMode) -> UI_LayoutMouseMode {
+mouse_mode :: #force_inline proc(value: UI_Layout_Mouse_Mode) -> UI_Layout_Mouse_Mode {
 	return value
 }
 
@@ -1389,26 +1524,26 @@ shadow :: #force_inline proc(
 // Input queries
 // Input
 
-mouse_state :: proc() -> UI_MouseState {
+mouse_state :: proc() -> UI_Mouse_State {
 	return get_layout_mouse_state(current_context^)
 }
 
-mouse_state_ahead :: proc() -> UI_MouseState {
+mouse_state_ahead :: proc() -> UI_Mouse_State {
 	return get_layout_mouse_state_ahead(current_context^)
 }
 
 @(private = "file")
-get_layout_mouse_state :: proc(ctx: UI_Context) -> UI_MouseState {
-	open_ele := ctx.open_element_stack[len(ctx.open_element_stack) - 1]
+get_layout_mouse_state :: proc(ctx: UI_Context) -> UI_Mouse_State {
+	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	return slice.contains(ctx.input_event.hovered_elements[:], open_ele) ? ctx.input.mouse_state : .None
 }
 
 @(private = "file")
-get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_MouseState {
+get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_Mouse_State {
 	return slice.contains(ctx.input_event.hovered_elements[:], i32(len(ctx.elements))) ? ctx.input.mouse_state : .None
 }
 
-// Shapes
+// Shaders
 Rect_Shader :: struct {
 	shader: rl.Shader,
 	locs:   struct {
@@ -1422,7 +1557,13 @@ Rect_Shader :: struct {
 		shadow_color_loc:     i32,
 		border_thickness_loc: i32,
 		border_color_loc:     i32,
+		mask_rectangle_loc:   i32,
 	},
+}
+
+Font_Shader :: struct {
+	shader:             rl.Shader,
+	mask_rectangle_loc: i32,
 }
 
 load_rect_shader :: proc() -> Rect_Shader {
@@ -1439,6 +1580,16 @@ load_rect_shader :: proc() -> Rect_Shader {
 			shadow_color_loc = rl.GetShaderLocation(shader, "shadowColor"),
 			border_thickness_loc = rl.GetShaderLocation(shader, "borderThickness"),
 			border_color_loc = rl.GetShaderLocation(shader, "borderColor"),
+			mask_rectangle_loc = rl.GetShaderLocation(shader, "maskRectangle"),
 		},
 	}
+}
+
+intersect_rect :: proc(a, b: rl.Rectangle) -> rl.Rectangle {
+	left := max(a.x, b.x)
+	top := max(a.y, b.y)
+	right := min(a.x + a.width, b.x + b.width)
+	bottom := min(a.y + a.height, b.y + b.height)
+
+	return {x = left, y = top, width = max(0, right - left), height = max(0, bottom - top)}
 }

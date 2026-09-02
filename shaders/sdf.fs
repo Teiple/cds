@@ -12,9 +12,23 @@ uniform vec4 colDiffuse;
 // Output fragment color
 out vec4 finalColor;
 
+// Masking
+uniform vec4 maskRectangle;
+
 // NOTE: Add your custom variables here
 
+bool inRect(vec2 p, vec2 pos, vec2 size) {
+    return p.x >= pos.x && p.x <= pos.x + size.x && p.y >= pos.y && p.y <= pos.y + size.y;
+}
+
 void main() {
+    // Requires fragment coordinate in pixels
+    vec2 fragCoord = gl_FragCoord.xy;
+
+    if(maskRectangle.z > 0 && maskRectangle.w > 0 && !inRect(fragCoord, maskRectangle.xy, maskRectangle.zw)) {
+        discard;
+    }
+
     // Texel color fetching from texture sampler
     // NOTE: Calculate alpha using signed distance field (SDF)
     float distanceFromOutline = texture(texture0, fragTexCoord).a - 0.5;

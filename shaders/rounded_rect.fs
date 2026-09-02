@@ -7,7 +7,7 @@ in vec2 fragTexCoord;
 // in vec4 fragColor;
 
 // Input uniform values
-uniform sampler2D texture0;
+// uniform sampler2D texture0;
 // uniform vec4 colDiffuse;
 
 // Output fragment color
@@ -27,6 +27,9 @@ uniform vec4 shadowColor;
 uniform float borderThickness;
 uniform vec4 borderColor;
 
+// Masking
+uniform vec4 maskRectangle;
+
 float sdRoundRect(vec2 p, vec2 halfSize, vec4 radius) {
 
     // Determine which corner radius to use
@@ -36,6 +39,10 @@ float sdRoundRect(vec2 p, vec2 halfSize, vec4 radius) {
     // Calculate signed distance field
     vec2 dist = abs(p) - halfSize + radius.x;
     return min(max(dist.x, dist.y), 0.0) + length(max(dist, 0.0)) - radius.x;
+}
+
+bool inRect(vec2 p, vec2 pos, vec2 size) {
+    return p.x >= pos.x && p.x <= pos.x + size.x && p.y >= pos.y && p.y <= pos.y + size.y;
 }
 
 vec4 compositeOver(vec4 under, vec4 over) {
@@ -52,10 +59,14 @@ vec4 compositeOver(vec4 under, vec4 over) {
 
 void main() {
     // Texel color fetching from texture sampler
-    vec4 texelColor = texture(texture0, fragTexCoord);
+    // vec4 texelColor = texture(texture0, fragTexCoord);
 
     // Requires fragment coordinate in pixels
     vec2 fragCoord = gl_FragCoord.xy;
+
+    if(maskRectangle.z > 0 && maskRectangle.w > 0 && !inRect(fragCoord, maskRectangle.xy, maskRectangle.zw)) {
+        discard;
+    }
 
     // Calculate signed distance field for rounded rectangle
     vec2 halfSize = rectangle.zw * 0.5;

@@ -87,59 +87,10 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if ui.layout(
-				corner_radius = 8,
-				border = {color = rl.RAYWHITE, thickness = 2},
-				shadow = ui.shadow(radius = 8),
-				width = ui.grow(),
-				background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-			) {
-				if ui.layout(
-					corner_radius = 8,
-					width = ui.grow(),
-					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-					mouse_mode = .Passthrough,
-				) {
-					ui.text(content = "Hello World", font_size = 32)
-				}
-				if ui.layout(
-					corner_radius = 8,
-					width = ui.percent(.2),
-					height = ui.grow(),
-					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-				) {
-				}
-				if ui.layout(
-					corner_radius = 8,
-					width = ui.percent(.2),
-					height = ui.grow(),
-					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-				) {
-				}
-			}
-			when ODIN_DEBUG {
-				if ui.layout(
-					corner_radius = 8,
-					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-					border = {color = get_random_color(-0.1, true), thickness = 2},
-				) {
-					ui.text(
-						content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated),
-						font_size = 32,
-					)
-				}
-
-				if ui.layout(
-					corner_radius = 8,
-					background_color = get_random_color(ui.mouse_state_ahead() == .Hover ? 0.2 : 0),
-					border = {color = get_random_color(-0.1, true), thickness = 2},
-				) {
-					ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps), font_size = 32)
-				}
-			}
+			draw_layout_stress_test()
 		}
 
-		ui.render_commands(ui_ctx)
+		ui.render_commands(&ui_ctx)
 	}
 }
 
@@ -167,5 +118,5 @@ get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false) -> rl.Colo
 	if !use_prev {
 		debug_palette_prev_index = rand.int_range(0, len(debug_palette))
 	}
-	return rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness)
+	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), 1.0)
 }
