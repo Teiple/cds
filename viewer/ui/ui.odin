@@ -41,6 +41,7 @@ UI_Input :: struct {
 UI_Input_Event :: struct {
 	mouse_captured:   bool,
 	hovered_elements: [dynamic]UI_Index,
+	scrolls:          map[UI_Index]rl.Vector2,
 }
 
 UI_ClipData :: struct {
@@ -211,6 +212,7 @@ UI_Layout_Config :: struct {
 	mouse_mode:       UI_Layout_Mouse_Mode,
 	callbacks:        UI_Layout_Mouse_Event_Callbacks,
 	clip:             bool,
+	scroll:           bool,
 }
 
 UI_Text_Config :: struct {
@@ -444,7 +446,11 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	children_size += padding
 	children_min_size += padding
 
-	ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
+	// Also fit sizing grows in min size by their chilren, grow can keep their min size to whatever
+	if mode, ok := layout_get_mode(layout, axis).(Fit_Size); ok {
+		ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
+	}
+	// ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
 	ele_set_size(current, clamp_element_size(children_size, ele_get_lims(current, axis)), axis)
 }
 
@@ -750,7 +756,9 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		return
 	}
 
-	offset := ele_get_pos(current, axis) + layout_get_pad_at(layout, axis, .Start)
+	scroll_offset_v := ctx.input_event.scrolls[index]
+	scroll_offset := axis == .X ? scroll_offset_v.x : scroll_offset_v.y
+	offset := ele_get_pos(current, axis) + layout_get_pad_at(layout, axis, .Start) + scroll_offset
 
 	if layout_is_along(layout, axis) {
 		// Find the remaining size
@@ -886,7 +894,11 @@ context_make :: proc(
 		fonts = fonts[:],
 		font_shader = font_shader,
 		rect_shader = rect_shader,
-		input_event = {mouse_captured = false, hovered_elements = make([dynamic]i32, 0, 4)},
+		input_event = {
+			mouse_captured = false,
+			hovered_elements = make([dynamic]i32, 0, 4),
+			scrolls = make(map[UI_Index]rl.Vector2, 4),
+		},
 		clip = {open_clip_stack = make([dynamic]i32, 0, 2)},
 	}
 }
@@ -908,6 +920,7 @@ context_delete :: proc(ctx: UI_Context) {
 	rl.UnloadShader(ctx.rect_shader.shader)
 
 	delete(ctx.input_event.hovered_elements)
+	delete(ctx.input_event.scrolls)
 	delete(ctx.clip.open_clip_stack)
 }
 
@@ -975,7 +988,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	case Layout_Attributes:
 		append(
 			&ctx.render_commands,
-			Rect_Command{
+			Rect_Command {
 				rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
 				color = attr.config.background_color,
 				corner_radius = attr.config.corner_radius,
@@ -994,7 +1007,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	case Text_Attributes:
 		append(
 			&ctx.render_commands,
-			Text_Command{
+			Text_Command {
 				content = attr.config.content,
 				font = ctx.fonts[attr.config.font_index].font,
 				font_size = attr.config.font_size,
@@ -1019,6 +1032,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	}
 }
 
+@(private = "file")
 detect_mouse :: proc(ctx: ^UI_Context) {
 	MOUSE_BTN :: rl.MouseButton.LEFT
 
@@ -1038,15 +1052,40 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 			layout := ele.attributes.(Layout_Attributes) or_return
 
+			if layout.config.scroll {
+				ele_rect := ele_get_rect(ele)
+
+				clipped_rect := intersect_rect(ctx.clip.region, ele_rect)
+				mouse_position := ctx.input.mouse_position
+
+				is_rect_hovered :=
+					mouse_position.x >= clipped_rect.x &&
+					mouse_position.x <= clipped_rect.x + clipped_rect.width &&
+					mouse_position.y >= clipped_rect.y &&
+					mouse_position.y <= clipped_rect.y + clipped_rect.height
+
+
+				cur_scroll := ctx.input_event.scrolls[index]
+				next_scroll := cur_scroll + rl.GetMouseWheelMoveV() * 20.0
+
+				// find content height
+				content_height: f32 = 0
+				child_count: i32 = 0
+				for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+					content_height += child.size.y
+					child_count += 1
+				}
+				content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
+
+				next_scroll.y = clamp(next_scroll.y, -(content_height - (ele.size.y - layout_get_pad(layout, .Y))), 0)
+
+				ctx.input_event.scrolls[index] = next_scroll
+			}
+
 			if layout.config.clip {
 				append(&ctx.clip.open_clip_stack, index)
 
-				ele_rect: rl.Rectangle = {
-					x      = ele.position.x,
-					y      = ele.position.y,
-					width  = ele.size.x,
-					height = ele.size.y,
-				}
+				ele_rect := ele_get_rect(ele)
 
 				if len(ctx.clip.open_clip_stack) == 1 {
 					ctx.clip.region = ele_rect
@@ -1068,25 +1107,12 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 				if len(ctx.clip.open_clip_stack) > 0 {
 					clip_index := ctx.clip.open_clip_stack[0]
 
-					ctx.clip.region = {
-						x      = ctx.elements[clip_index].position.x,
-						y      = ctx.elements[clip_index].position.y,
-						width  = ctx.elements[clip_index].size.x,
-						height = ctx.elements[clip_index].size.y,
-					}
+					ctx.clip.region = ele_get_rect(ctx.elements[clip_index])
 
 					for i in 1 ..< len(ctx.clip.open_clip_stack) {
 						clip_index := ctx.clip.open_clip_stack[i]
 
-						ctx.clip.region = intersect_rect(
-							ctx.clip.region,
-							{
-								x = ctx.elements[clip_index].position.x,
-								y = ctx.elements[clip_index].position.y,
-								width = ctx.elements[clip_index].size.x,
-								height = ctx.elements[clip_index].size.y,
-							},
-						)
+						ctx.clip.region = intersect_rect(ctx.clip.region, ele_get_rect(ctx.elements[clip_index]))
 					}
 				}
 			}
@@ -1098,20 +1124,17 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 			mouse_position := ctx.input.mouse_position
 
-
-			min_x, max_x := ele.position.x, ele.position.x + ele.size.x
-			min_y, max_y := ele.position.y, ele.position.y + ele.size.y
+			clipped_rect: rl.Rectangle = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
 			if in_clip {
-				min_x, max_x = max(min_x, ctx.clip.region.x), min(max_x, ctx.clip.region.x + ctx.clip.region.width)
-				min_y, max_y = max(min_y, ctx.clip.region.y), min(max_y, ctx.clip.region.y + ctx.clip.region.height)
+				clipped_rect = intersect_rect(clipped_rect, ctx.clip.region)
 			}
 
 			is_rect_hovered :=
-				mouse_position.x >= min_x &&
-				mouse_position.x <= max_x &&
-				mouse_position.y >= min_y &&
-				mouse_position.y <= max_y
+				mouse_position.x >= clipped_rect.x &&
+				mouse_position.x <= clipped_rect.x + clipped_rect.width &&
+				mouse_position.y >= clipped_rect.y &&
+				mouse_position.y <= clipped_rect.y + clipped_rect.height
 
 			if is_rect_hovered {
 				// handle callbacks
@@ -1144,6 +1167,7 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 		},
 	)
 }
+
 
 travel_tree :: proc(
 	ctx: ^UI_Context,
@@ -1361,6 +1385,11 @@ ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	else do return element.position.y
 }
 
+@(private = "file")
+ele_get_rect :: #force_inline proc(element: UI_Element) -> rl.Rectangle {
+	return {x = element.position.x, y = element.position.y, width = element.size.x, height = element.size.y}
+}
+
 // Text
 @(private = "file")
 text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
@@ -1413,6 +1442,7 @@ layout :: proc(
 	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
 	callbacks: UI_Layout_Mouse_Event_Callbacks = {},
 	clip: bool = false,
+	scroll: bool = false,
 ) -> bool {
 	return open_layout(
 		current_context,
@@ -1431,6 +1461,7 @@ layout :: proc(
 			shadow = shadow,
 			callbacks = callbacks,
 			clip = clip,
+			scroll = scroll,
 		},
 		{x = {min = width.min, max = width.max}, y = {min = height.min, max = height.max}},
 	)
@@ -1539,6 +1570,7 @@ Font_Shader :: struct {
 	mask_rectangle_loc: i32,
 }
 
+@(private = "file")
 load_rect_shader :: proc() -> Rect_Shader {
 	shader := rl.LoadShader("./shaders/base.vs", "./shaders/rounded_rect.fs")
 	return {
@@ -1558,6 +1590,7 @@ load_rect_shader :: proc() -> Rect_Shader {
 	}
 }
 
+@(private)
 intersect_rect :: proc(a, b: rl.Rectangle) -> rl.Rectangle {
 	left := max(a.x, b.x)
 	top := max(a.y, b.y)

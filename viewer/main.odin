@@ -88,8 +88,15 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if ui.layout(width = ui.grow(), height = ui.grow(), background_color = get_random_color()) {
-				for i in 0 ..< 6 {
+			if ui.layout(
+				width = ui.grow(),
+				height = ui.grow(),
+				background_color = get_random_color(),
+				layout_direction = .Top_To_Bottom,
+				clip = true,
+				scroll = true,
+			) {
+				for i in 0 ..< 10 {
 					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
 				}
 			}
