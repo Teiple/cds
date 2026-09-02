@@ -23,9 +23,7 @@ bool inRect(vec2 p, vec2 pos, vec2 size) {
 
 void main() {
     // Requires fragment coordinate in pixels
-    vec2 fragCoord = gl_FragCoord.xy;
-
-    if(maskRectangle.z > 0 && maskRectangle.w > 0 && !inRect(fragCoord, maskRectangle.xy, maskRectangle.zw)) {
+    if(maskRectangle.z > 0 && maskRectangle.w > 0 && !inRect(gl_FragCoord.xy, maskRectangle.xy, maskRectangle.zw)) {
         discard;
     }
 

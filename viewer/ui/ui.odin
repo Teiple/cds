@@ -473,9 +473,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			if is_grow_layout_or_text(child^, axis) {
 				ele_set_size(child, clamp_element_size(available, ele_get_lims(child, axis)), axis)
-			} else {
-				// Percent sizing
-				percent_size := layout_get_mode(child^, axis).(Percent_Size) or_continue
+			} else if percent_size, ok := layout_get_mode(child^, axis).(Percent_Size); ok {
 				ele_set_size(
 					child,
 					clamp_element_size(percent_size.value * percent_basis, ele_get_lims(child, axis)),
@@ -487,9 +485,9 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	}
 
 	// Along-axis: distribute remaining/overshoot space among grow children
-	growables := ctx.growable_buffer
-	clear(&growables)
-	defer clear(&growables)
+	growables := &ctx.growable_buffer
+	clear(growables)
+	defer clear(growables)
 
 
 	child_count := 0
@@ -502,9 +500,8 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		if is_grow_layout_or_text(child^, axis) {
-			append(&growables, child.index)
-		} else {
-			percent_size := layout_get_mode(child^, axis).(Percent_Size) or_continue
+			append(growables, child.index)
+		} else if percent_size, ok := layout_get_mode(child^, axis).(Percent_Size); ok {
 			ele_set_size(
 				child,
 				clamp_element_size(percent_size.value * percent_basis, ele_get_lims(child, axis)),
@@ -556,7 +553,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 					ele_set_size(child, new_size, axis)
 
 					remaining -= new_size - previous
-					unordered_remove(&growables, i)
+					unordered_remove(growables, i)
 					continue
 				}
 
@@ -569,7 +566,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	}
 
 	// Hacking the growables array back to original size
-	non_zero_resize(&growables, growable_count)
+	non_zero_resize(growables, growable_count)
 
 	// Shrink phase
 	shrinkables := growables
@@ -613,7 +610,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 					ele_set_size(child, new_size, axis)
 
 					overshoot -= previous - new_size
-					unordered_remove(&shrinkables, i)
+					unordered_remove(shrinkables, i)
 					continue
 				}
 
@@ -1400,7 +1397,7 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 SHADOW_DEFAULT: Shadow_Config : {enabled = false, radius = 8, offset = {0, 0}, color = {0, 0, 0, 100}}
 
-@(deferred_none = close_layout_deffered)
+@(deferred_none = close_layout_deffered, require_results)
 layout :: proc(
 	id: string = "",
 	width: Sizing_Axis = {mode = Fit_Size{}},
@@ -1487,30 +1484,6 @@ percent :: #force_inline proc(value: f32, min: Maybe(f32) = nil, max: Maybe(f32)
 
 pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
-}
-
-pad :: #force_inline proc(value: Layout_Padding) -> Layout_Padding {
-	return value
-}
-
-align :: #force_inline proc(value: Alignment) -> Alignment {
-	return value
-}
-
-vec2 :: #force_inline proc(value: rl.Vector2) -> rl.Vector2 {
-	return value
-}
-
-color :: #force_inline proc(value: rl.Color) -> rl.Color {
-	return value
-}
-
-mouse_mode :: #force_inline proc(value: UI_Layout_Mouse_Mode) -> UI_Layout_Mouse_Mode {
-	return value
-}
-
-border :: #force_inline proc(thickness := BORDER_DEFAULT.thickness, color := BORDER_DEFAULT.color) -> Border_Config {
-	return {thickness = thickness, color = color}
 }
 
 shadow :: #force_inline proc(

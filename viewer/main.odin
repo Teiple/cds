@@ -1,6 +1,7 @@
 package main
 
 import fmt "core:fmt"
+import "core:math"
 import "core:math/rand"
 import mem "core:mem"
 import ui "ui"
@@ -87,7 +88,20 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			draw_layout_stress_test()
+			if ui.layout(width = ui.grow(), height = ui.grow(), background_color = get_random_color()) {
+				for i in 0 ..< 6 {
+					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
+				}
+			}
+			when ODIN_DEBUG {
+				if ui.layout(width = ui.grow(), clip = true) {
+					if ui.layout(width = ui.grow()) {}
+					if ui.layout(background_color = get_random_color()) {
+						ui.text(content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated))
+						ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
+					}
+				}
+			}
 		}
 
 		ui.render_commands(&ui_ctx)
