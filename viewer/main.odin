@@ -96,7 +96,26 @@ main :: proc() {
 				clip = true,
 				scroll = true,
 			) {
-				for i in 0 ..< 10 {
+				for i in 0 ..< 5 {
+					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
+				}
+				if ui.layout(
+					width = ui.grow(),
+					height = ui.fixed(120),
+					background_color = get_random_color(),
+					layout_direction = .Top_To_Bottom,
+					clip = true,
+					scroll = true,
+				) {
+					for i in 0 ..< 5 {
+						if ui.layout(
+							width = ui.grow(),
+							height = ui.fixed(64),
+							background_color = get_random_color(),
+						) {}
+					}
+				}
+				for i in 0 ..< 5 {
 					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
 				}
 			}
@@ -139,5 +158,5 @@ get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false) -> rl.Colo
 	if !use_prev {
 		debug_palette_prev_index = rand.int_range(0, len(debug_palette))
 	}
-	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), 1.0)
+	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), .2)
 }

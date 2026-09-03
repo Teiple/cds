@@ -7,7 +7,6 @@ import "core:slice"
 import "core:unicode/utf8"
 import rl "vendor:raylib"
 
-MAX_CHILD_COUNT :: 50
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
 @(private = "file")
@@ -40,13 +39,13 @@ UI_Input :: struct {
 
 UI_Input_Event :: struct {
 	mouse_captured:   bool,
+	scroll_captured:  bool,
 	hovered_elements: [dynamic]UI_Index,
 	scrolls:          map[UI_Index]rl.Vector2,
 }
 
 UI_ClipData :: struct {
-	open_clip_stack: [dynamic]UI_Index,
-	region:          rl.Rectangle,
+	open_clip_stack: [dynamic]rl.Rectangle,
 }
 
 UI_Layout_Mouse_Event_Callbacks :: struct {
@@ -198,6 +197,13 @@ Shadow_Config :: struct #all_or_none {
 	offset:  rl.Vector2,
 }
 
+UI_Link :: struct {
+	parent: UI_Index,
+	next:   Maybe(UI_Index),
+	prev:   Maybe(UI_Index),
+	last:   Maybe(UI_Index),
+}
+
 UI_Layout_Config :: struct {
 	width:            Size_Mode,
 	height:           Size_Mode,
@@ -225,14 +231,12 @@ UI_Text_Config :: struct {
 }
 
 UI_Element :: struct {
-	id:           string,
-	position:     rl.Vector2,
-	size:         rl.Vector2,
-	parent:       UI_Index,
-	index:        UI_Index, // index in the flat elements array
-	subtree_size: i32, // number of nodes in this subtree (set on close)
-	limits:       UI_Limits,
-	attributes:   union {
+	position:   rl.Vector2,
+	size:       rl.Vector2,
+	limits:     UI_Limits,
+	link:       UI_Link,
+	id:         string,
+	attributes: union {
 		Layout_Attributes,
 		Text_Attributes,
 	},
@@ -262,24 +266,33 @@ Text_Attributes :: struct {
 }
 
 Child_Iter :: struct {
-	ctx:     ^UI_Context,
-	current: UI_Index, // next child index to visit
-	end:     UI_Index, // exclusive end of this node's subtree
+	ctx:  ^UI_Context,
+	next: Maybe(UI_Index),
 }
 
 @(private = "file")
 open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limits: UI_Limits) -> bool {
-	parent := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
+	parent := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
 
 	ui_ele := UI_Element {
 		id = id,
-		parent = parent,
-		index = i32(len(ctx.elements)), // set before append
 		attributes = Layout_Attributes{config = config, element = index},
 		limits = limits,
 		// layout sets its tree size when close
 	}
+
+	// Linking
+	ui_ele.link = {
+		parent = parent,
+		last   = nil,
+		next   = nil,
+		prev   = ctx.elements[parent].link.last,
+	}
+	if last, ok := ctx.elements[parent].link.last.?; ok {
+		ctx.elements[last].link.next = index
+	}
+	ctx.elements[parent].link.last = index
 
 	append(&ctx.elements, ui_ele)
 	append(&ctx.open_layout_stack, index)
@@ -288,17 +301,26 @@ open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limi
 
 @(private = "file")
 open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
-	parent_idx := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
+	parent_idx := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
 
 	ui_ele := UI_Element {
 		id = id,
-		parent = parent_idx,
-		index = i32(len(ctx.elements)),
 		attributes = Text_Attributes{config = config, element = index},
 		limits = {}, // limits are calculated later
-		subtree_size = 1,
 	}
+
+	// Linking
+	ui_ele.link = {
+		parent = parent_idx,
+		last   = nil,
+		next   = nil,
+		prev   = ctx.elements[parent_idx].link.last,
+	}
+	if last, ok := ctx.elements[parent_idx].link.last.?; ok {
+		ctx.elements[last].link.next = index
+	}
+	ctx.elements[parent_idx].link.last = index
 
 	append(&ctx.elements, ui_ele)
 	calculate_text_width(ctx, index)
@@ -309,9 +331,6 @@ open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
 close_layout :: proc(ctx: ^UI_Context) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
-
-	// Compute subtree size: everything appended after this node is in its subtree
-	ele.subtree_size = i32(len(ctx.elements)) - ele.index
 
 	fit_sizing(ctx, index, .X)
 }
@@ -456,8 +475,8 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 @(private = "file")
 fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		fit_sizing_heights_tree(ctx, child.index)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		fit_sizing_heights_tree(ctx, child_index)
 	}
 
 	fit_sizing(ctx, index, .Y)
@@ -468,7 +487,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	// Grow and Shrink phases, not gonna merge them because of readability
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
-	if !ok || current.subtree_size <= 1 do return
+	if !ok || current.link.last == nil do return
 
 	// Content space available to children.
 	available := ele_get_size(current, axis) - layout_get_pad(layout, axis)
@@ -504,9 +523,9 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	remaining := available - gap_total
 	percent_basis -= gap_total
 
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		if is_grow_layout_or_text(child^, axis) {
-			append(growables, child.index)
+			append(growables, child_index)
 		} else if percent_size, ok := layout_get_mode(child^, axis).(Percent_Size); ok {
 			ele_set_size(
 				child,
@@ -632,8 +651,8 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 @(private = "file")
 grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	grow_and_percent_sizing(ctx, index, axis)
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		grow_and_percent_sizing_tree(ctx, child.index, axis)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		grow_and_percent_sizing_tree(ctx, child_index, axis)
 	}
 }
 
@@ -784,7 +803,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		}
 	}
 
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		ele_set_pos(child, offset, axis)
 
 		if layout_is_across(layout, axis) {
@@ -803,36 +822,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 			offset += ele_get_size(child, axis) + layout.config.child_gap
 		}
 
-		calculate_position(ctx, child.index, axis)
-	}
-}
-
-ui_debug_draw_tree :: proc(ctx: ^UI_Context, index: UI_Index = 0, cur_level: i32 = 1) {
-	current := ctx.elements[index]
-
-	for i in 0 ..< cur_level - 1 {
-		fmt.print(" . ")
-	}
-
-	layout, ok := current.attributes.(Layout_Attributes)
-
-	fmt.printf(
-		"%v (%v) %vx%v (pre=%v, sub=%v)",
-		current.id,
-		ctx.elements[current.parent].id,
-		current.size.x,
-		current.size.y,
-		current.index,
-		current.subtree_size,
-	)
-
-	if ok {
-		fmt.println(layout.config.layout_direction == .Left_To_Right ? " LTR" : " TTB")
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			ui_debug_draw_tree(ctx, child.index, cur_level + 1)
-		}
-	} else {
-		fmt.println()
+		calculate_position(ctx, child_index, axis)
 	}
 }
 
@@ -899,7 +889,7 @@ context_make :: proc(
 			hovered_elements = make([dynamic]i32, 0, 4),
 			scrolls = make(map[UI_Index]rl.Vector2, 4),
 		},
-		clip = {open_clip_stack = make([dynamic]i32, 0, 2)},
+		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
 	}
 }
 
@@ -935,7 +925,6 @@ begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) ->
 	append(&ctx.elements, root_layout(window_width, window_height))
 
 	// Set its preorder_idx explicitly (it's 0)
-	ctx.elements[0].index = 0
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -1022,8 +1011,8 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	}
 
 	// Recursively process children
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		generate_commands(ctx, child.index)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		generate_commands(ctx, child_index)
 	}
 
 	// Pop clip if this layout had clipping enabled
@@ -1041,102 +1030,48 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 		rl.IsMouseButtonPressed(MOUSE_BTN) ? .Pressed : (rl.IsMouseButtonDown(MOUSE_BTN) ? .Down : (rl.IsMouseButtonReleased(MOUSE_BTN) ? .Released : .Hover))
 
 	ctx.input_event.mouse_captured = false
+	ctx.input_event.scroll_captured = false
 	clear(&ctx.input_event.hovered_elements)
 	clear(&ctx.clip.open_clip_stack)
-	ctx.clip.region = {}
 
-	travel_tree(
+	travel_tree_reverse(
 		ctx,
 		on_down = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
 			ele := ctx.elements[index]
 
 			layout := ele.attributes.(Layout_Attributes) or_return
-
-			if layout.config.scroll {
-				ele_rect := ele_get_rect(ele)
-
-				clipped_rect := intersect_rect(ctx.clip.region, ele_rect)
-				mouse_position := ctx.input.mouse_position
-
-				is_rect_hovered :=
-					mouse_position.x >= clipped_rect.x &&
-					mouse_position.x <= clipped_rect.x + clipped_rect.width &&
-					mouse_position.y >= clipped_rect.y &&
-					mouse_position.y <= clipped_rect.y + clipped_rect.height
-
-
-				cur_scroll := ctx.input_event.scrolls[index]
-				next_scroll := cur_scroll + rl.GetMouseWheelMoveV() * 20.0
-
-				// find content height
-				content_height: f32 = 0
-				child_count: i32 = 0
-				for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-					content_height += child.size.y
-					child_count += 1
-				}
-				content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
-
-				next_scroll.y = clamp(next_scroll.y, -(content_height - (ele.size.y - layout_get_pad(layout, .Y))), 0)
-
-				ctx.input_event.scrolls[index] = next_scroll
-			}
+			ele_rect := ele_get_rect(ele)
 
 			if layout.config.clip {
-				append(&ctx.clip.open_clip_stack, index)
-
-				ele_rect := ele_get_rect(ele)
-
-				if len(ctx.clip.open_clip_stack) == 1 {
-					ctx.clip.region = ele_rect
+				if len(ctx.clip.open_clip_stack) == 0 {
+					append(&ctx.clip.open_clip_stack, ele_rect)
 				} else {
-					ctx.clip.region = intersect_rect(ctx.clip.region, ele_rect)
+					append(&ctx.clip.open_clip_stack, intersect_rect(back(ctx.clip.open_clip_stack), ele_rect))
 				}
 			}
 
 			return
 		},
 		on_up = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
-			in_clip := len(ctx.clip.open_clip_stack) > 0
-
-			// check if we returned to the element that opened the clip region, if so close the clip
-			defer if in_clip && index == ctx.clip.open_clip_stack[len(ctx.clip.open_clip_stack) - 1] {
-				pop(&ctx.clip.open_clip_stack)
-
-				// recompute the clip region
-				if len(ctx.clip.open_clip_stack) > 0 {
-					clip_index := ctx.clip.open_clip_stack[0]
-
-					ctx.clip.region = ele_get_rect(ctx.elements[clip_index])
-
-					for i in 1 ..< len(ctx.clip.open_clip_stack) {
-						clip_index := ctx.clip.open_clip_stack[i]
-
-						ctx.clip.region = intersect_rect(ctx.clip.region, ele_get_rect(ctx.elements[clip_index]))
-					}
-				}
-			}
-
 			ele := ctx.elements[index]
 
 			layout, ok := ele.attributes.(Layout_Attributes)
-			if !ok || layout.config.mouse_mode == .Ignore do return
+			if !ok do return
 
-			mouse_position := ctx.input.mouse_position
+			// close the clip if return
+			defer if layout.config.clip {
+				pop(&ctx.clip.open_clip_stack)
+			}
+
+			if layout.config.mouse_mode == .Ignore do return
 
 			clipped_rect: rl.Rectangle = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
-			if in_clip {
-				clipped_rect = intersect_rect(clipped_rect, ctx.clip.region)
+			if len(ctx.clip.open_clip_stack) > 0 {
+				clipped_rect = intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
 			}
 
-			is_rect_hovered :=
-				mouse_position.x >= clipped_rect.x &&
-				mouse_position.x <= clipped_rect.x + clipped_rect.width &&
-				mouse_position.y >= clipped_rect.y &&
-				mouse_position.y <= clipped_rect.y + clipped_rect.height
-
-			if is_rect_hovered {
+			if rect_contains(ctx.input.mouse_position, clipped_rect) {
 				// handle callbacks
 				switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
 				case .Hover:
@@ -1155,13 +1090,49 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 				if layout.config.mouse_mode == .Capture {
 					ctx.input_event.mouse_captured = true
-
-					stop = true
-					return
 				}
 
 				// else it passed through
 			}
+
+			if layout.config.scroll && !ctx.input_event.scroll_captured {
+				mouse_position := ctx.input.mouse_position
+
+				ele_rect := ele_get_rect(ele)
+				rl.DrawRectangleLinesEx(ele_rect, 1, rl.BLACK)
+
+				clipped_rect := ele_rect
+
+				if len(ctx.clip.open_clip_stack) > 0 {
+					clipped_rect = intersect_rect(back(ctx.clip.open_clip_stack), ele_rect)
+				}
+
+				if rect_contains(ctx.input.mouse_position, clipped_rect) {
+					cur_scroll := ctx.input_event.scrolls[index]
+					next_scroll := cur_scroll + rl.GetMouseWheelMoveV() * 20.0
+
+					// find content height
+					content_height: f32 = 0
+					child_count: i32 = 0
+					for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+						content_height += child.size.y
+						child_count += 1
+					}
+					content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
+
+					next_scroll.y = clamp(
+						next_scroll.y,
+						-(content_height - (ele.size.y - layout_get_pad(layout, .Y))),
+						0,
+					)
+
+					ctx.input_event.scrolls[index] = next_scroll
+					ctx.input_event.scroll_captured = true
+				}
+			}
+
+			// check if all travel goals has been fullfiled, if so stop early
+			stop = ctx.input_event.mouse_captured && ctx.input_event.scroll_captured
 
 			return
 		},
@@ -1169,20 +1140,19 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 }
 
 
-travel_tree :: proc(
+travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index = 0,
 	on_up: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
 	on_down: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
 ) -> bool {
 	if on_down != nil && on_down(ctx, index) do return true
-
-	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-		if travel_tree(ctx, child.index, on_up, on_down) do return true
+	for node := ctx.elements[index].link.last; node != nil; node = ctx.elements[node.?].link.prev {
+		if travel_tree_reverse(ctx, node.?, on_up, on_down) {
+			return true
+		}
 	}
-
 	if on_up != nil && on_up(ctx, index) do return true
-
 	return false
 }
 
@@ -1190,7 +1160,6 @@ travel_tree :: proc(
 root_layout :: proc(width: f32, height: f32) -> UI_Element {
 	return UI_Element {
 		id = "root",
-		parent = 0,
 		position = {0, 0},
 		size = {width, height},
 		limits = {}, // no limits
@@ -1202,7 +1171,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 				height = Fixed_Size{height},
 				layout_direction = .Top_To_Bottom,
 				padding = pad_all(16),
-				background_color = rl.RAYWHITE,
+				background_color = {},
 			},
 		},
 	}
@@ -1249,17 +1218,25 @@ set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
 @(private = "file")
 child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
-	return Child_Iter{ctx = ctx, current = start.index + 1, end = start.index + start.subtree_size}
+	return Child_Iter{ctx = ctx, next = start.link.last == nil ? nil : start_index + 1}
 }
 
 @(private = "file")
-child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, cond: bool) {
-	if it.current >= it.end {
-		return nil, false
+child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI_Index, cond: bool) {
+	if it.next == nil {
+		return
 	}
-	child = &it.ctx.elements[it.current]
-	it.current += child.subtree_size // jump to next sibling
-	return child, true
+
+	// set return values
+	{
+		child_index = it.next.?
+		child = &it.ctx.elements[child_index]
+		cond = true
+	}
+
+	it.next = child.link.next
+
+	return
 }
 
 @(private = "file")
@@ -1333,6 +1310,7 @@ layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 }
 
 // Elements
+// Getters receive elements by ref 'cause their usage everywhere and deferencing them is exhausting
 @(private = "file")
 ele_set_size :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.size.x = value
@@ -1385,6 +1363,7 @@ ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	else do return element.position.y
 }
 
+// This is rarely used but useful
 @(private = "file")
 ele_get_rect :: #force_inline proc(element: UI_Element) -> rl.Rectangle {
 	return {x = element.position.x, y = element.position.y, width = element.size.x, height = element.size.y}
@@ -1590,7 +1569,7 @@ load_rect_shader :: proc() -> Rect_Shader {
 	}
 }
 
-@(private)
+@(private, require_results)
 intersect_rect :: proc(a, b: rl.Rectangle) -> rl.Rectangle {
 	left := max(a.x, b.x)
 	top := max(a.y, b.y)
@@ -1598,4 +1577,15 @@ intersect_rect :: proc(a, b: rl.Rectangle) -> rl.Rectangle {
 	bottom := min(a.y + a.height, b.y + b.height)
 
 	return {x = left, y = top, width = max(0, right - left), height = max(0, bottom - top)}
+}
+
+@(private, require_results)
+rect_contains :: proc(p: rl.Vector2, rec: rl.Rectangle) -> bool {
+	return p.x >= rec.x && p.x <= rec.x + rec.width && p.y >= rec.y && p.y <= rec.y + rec.height
+}
+
+
+@(private, require_results)
+back :: proc(arr: [dynamic]$T) -> T {
+	return arr[len(arr) - 1]
 }
