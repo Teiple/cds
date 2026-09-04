@@ -1,7 +1,6 @@
 package main
 
 import fmt "core:fmt"
-import "core:math"
 import "core:math/rand"
 import mem "core:mem"
 import ui "ui"
@@ -48,7 +47,6 @@ main :: proc() {
 	ui_ctx: ui.UI_Context = ui.context_make(
 		ui.measure_text,
 		{{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
-		"shaders/sdf.fs",
 	)
 	defer ui.context_delete(ui_ctx)
 
@@ -92,40 +90,68 @@ main :: proc() {
 				width = ui.grow(),
 				height = ui.grow(),
 				background_color = get_random_color(),
-				layout_direction = .Top_To_Bottom,
 				clip = true,
 				scroll = true,
 			) {
-				for i in 0 ..< 5 {
-					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
-				}
 				if ui.layout(
 					width = ui.grow(),
-					height = ui.fixed(120),
-					background_color = get_random_color(),
+					height = ui.fit(),
 					layout_direction = .Top_To_Bottom,
-					clip = true,
-					scroll = true,
+					background_color = get_random_color(),
 				) {
 					for i in 0 ..< 5 {
-						if ui.layout(
-							width = ui.grow(),
-							height = ui.fixed(64),
-							background_color = get_random_color(),
-						) {}
+						if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
+							ui.text(
+								"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In vel urna luctus, fermentum massa mollis, ornare urna. Curabitur quis diam ac diam feugiat dignissim. Duis viverra eget ex rhoncus interdum. Quisque vel nunc vel nisl ultrices accumsan. Suspendisse venenatis ligula id pretium vehicula. Sed sit amet odio scelerisque, consequat est ac, pharetra magna. Fusce luctus eu diam non facilisis. In ut blandit est, at ultricies augue. ",
+							)
+						}
+					}
+					if ui.layout(
+						width = ui.grow(),
+						height = ui.fixed(120),
+						background_color = get_random_color(),
+						layout_direction = .Top_To_Bottom,
+						clip = true,
+						scroll = true,
+					) {
+						for i in 0 ..< 5 {
+							if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
+
+							}
+						}
+					}
+					for i in 0 ..< 5 {
+						if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
+							ui.text(
+								"Duis in nulla cursus, auctor enim ornare, mattis augue. Maecenas molestie egestas lectus, sit amet vestibulum lorem laoreet nec. Aliquam feugiat odio non interdum mattis. Quisque sed condimentum orci. Duis tincidunt fermentum est a euismod. Ut laoreet elit sapien, dignissim condimentum quam tincidunt vel. Morbi blandit est quis quam eleifend vulputate. Sed mattis at arcu quis ullamcorper. Sed vitae euismod massa. Sed lacus diam, sagittis vel eleifend ut, viverra eget ipsum. In sed erat interdum nibh tempor blandit. Morbi cursus dolor at dignissim tincidunt. Nullam ut pulvinar ligula. Nunc turpis tortor, semper nec feugiat non, rutrum tempus mauris. Suspendisse tortor massa, imperdiet quis mi et, sagittis feugiat neque. ",
+							)
+						}
 					}
 				}
-				for i in 0 ..< 5 {
-					if ui.layout(width = ui.grow(), height = ui.fixed(64), background_color = get_random_color()) {}
+				if ui.layout(
+					width = ui.fixed(32),
+					height = ui.grow(),
+					background_color = get_random_color(),
+					padding = ui.pad_all(0),
+				) {
+					if ui.layout(
+						width = ui.grow(),
+						height = ui.percent(.2, 64),
+						background_color = get_random_color(),
+					) {
+
+					}
 				}
 			}
+
+
 			when ODIN_DEBUG {
-				if ui.layout(width = ui.grow(), clip = true) {
-					if ui.layout(width = ui.grow()) {}
-					if ui.layout(background_color = get_random_color()) {
+				if ui.layout(width = ui.grow(), background_color = {255, 0, 0, 255}) {
+					if ui.layout(background_color = {255, 0, 0, 255}) {
 						ui.text(content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated))
 						ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
 					}
+					if ui.layout(width = ui.grow()) {}
 				}
 			}
 		}
@@ -158,5 +184,5 @@ get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false) -> rl.Colo
 	if !use_prev {
 		debug_palette_prev_index = rand.int_range(0, len(debug_palette))
 	}
-	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), .2)
+	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), 1.0)
 }

@@ -2,6 +2,8 @@
 package ui
 
 import "core:c"
+import "core:fmt"
+import "core:math"
 import rl "vendor:raylib"
 
 AA_OFFSET :: f32(1)
@@ -9,11 +11,14 @@ AA_OFFSET :: f32(1)
 render_commands :: proc(ctx: ^UI_Context) {
 	clear(&ctx.clip.open_clip_stack)
 
+	rl.BeginShaderMode(ctx.universal_shader.shader)
+	defer rl.EndShaderMode()
+
 	for variant, command_index in ctx.render_commands {
 		switch command in variant {
 		case Rect_Command:
 			{
-				draw_rect_command(ctx, command)
+				draw_rect_command(ctx^, command)
 			}
 		case Text_Command:
 			{
@@ -56,37 +61,52 @@ draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
 		}
 	}
 
-	pen := command.position
-	font_scale := command.font_size / f32(command.font.baseSize)
-
 	// Masking
 	{
-		mask_rect_data: [4]f32 = {}
+		mask_rect: rl.Rectangle = {}
 		if len(ctx.clip.open_clip_stack) > 0 {
-			mask_rect := back(ctx.clip.open_clip_stack)
-			mask_rect.y = f32(rl.GetScreenHeight()) - mask_rect.y - mask_rect.height
-			mask_rect_data = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
+			mask_rect = back(ctx.clip.open_clip_stack)
+			if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+				return
+			}
 		}
-		rl.SetShaderValue(command.font_shader.shader, command.font_shader.mask_rectangle_loc, &mask_rect_data, .VEC4)
+		setup_text_shader(ctx.universal_shader, ctx.screen_size, mask_rect)
 	}
 
-	rl.BeginShaderMode(command.font_shader.shader)
-	defer rl.EndShaderMode()
+	pen: rl.Vector2 = {command.rect.x, command.rect.y}
+	font_scale := command.font_size / f32(command.font.baseSize)
+
 
 	if len(command.wrapped_lines) == 0 {
 		draw_line(&pen, command.content, command.font, font_scale, command.color, command.spacing)
 	} else {
-		for line in command.wrapped_lines {
-			draw_line(&pen, line, command.font, font_scale, command.color, command.spacing)
+		line_height := command.font_size + command.line_spacing
 
-			pen.x = command.position.x
-			pen.y += command.font_size + command.line_spacing
+		// only draw lines that is in visible range
+		line_start: i32 = 0
+		line_end := i32(len(command.wrapped_lines))
+
+		if len(ctx.clip.open_clip_stack) > 0 {
+			mask_rect := back(ctx.clip.open_clip_stack)
+			line_start = cast(i32)math.floor(max(mask_rect.y - command.rect.y, 0) / line_height)
+			line_end = cast(i32)math.ceil(max((mask_rect.y + mask_rect.height) - command.rect.y, 0) / line_height)
+			line_end = min(line_end, cast(i32)len(command.wrapped_lines))
+		}
+
+		if line_end > line_start {
+			pen.y += f32(line_start) * line_height
+			for line in command.wrapped_lines[line_start:line_end] {
+				draw_line(&pen, line, command.font, font_scale, command.color, command.spacing)
+
+				pen.x = command.rect.x
+				pen.y += command.font_size + command.line_spacing
+			}
 		}
 	}
 }
 
 @(private)
-draw_rect_command :: proc(ctx: ^UI_Context, command: Rect_Command) {
+draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
 	command := command
 
 	// Masking
@@ -94,8 +114,11 @@ draw_rect_command :: proc(ctx: ^UI_Context, command: Rect_Command) {
 		mask_rect: rl.Rectangle
 		if len(ctx.clip.open_clip_stack) > 0 {
 			mask_rect = back(ctx.clip.open_clip_stack)
+			if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+				return
+			}
 		}
-		setup_rect_shader(&command, mask_rect)
+		setup_rect_shader(ctx.universal_shader, ctx.screen_size, &command, mask_rect)
 	}
 
 	rect := command.rect
@@ -131,9 +154,7 @@ draw_rect_command :: proc(ctx: ^UI_Context, command: Rect_Command) {
 		height = max_y - min_y,
 	}
 
-	rl.BeginShaderMode(command.rect_shader.shader)
 	rl.DrawRectangleRec(draw_rect, rl.WHITE)
-	rl.EndShaderMode()
 }
 
 @(private, require_results)
@@ -196,44 +217,70 @@ measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) 
 	return width
 }
 
-setup_rect_shader :: proc(command: ^Rect_Command, mask_rect: rl.Rectangle) {
+setup_rect_shader :: proc(
+	universal_shader: Universal_Shader,
+	screen_size: rl.Vector2,
+	command: ^Rect_Command,
+	mask_rect: rl.Rectangle,
+) {
 	rect := command.rect
-	rect.y = f32(rl.GetScreenHeight()) - rect.y - rect.height
+	rect.y = screen_size.y - rect.y - rect.height
 
 	rect_data: [4]f32 = {rect.x, rect.y, rect.width, rect.height}
-	rect_shader := command.rect_shader
+
 
 	color := to_shader_color_data(command.color)
 	border_color := to_shader_color_data(command.border.color)
+	mode := 0
 
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.radius_loc, &command.corner_radius, .VEC4)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_thickness_loc, &command.border.thickness, .FLOAT)
 
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.rectangle_loc, &rect_data, .VEC4)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.color_loc, &color, .VEC4)
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.border_color_loc, &border_color, .VEC4)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mode, &mode, .INT)
+
+	fmt.println("Rect pos/size: ", rect_data, "; color:", color, "; mode", mode)
+
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_radius, &command.corner_radius, .VEC4)
+	rl.SetShaderValue(
+		universal_shader.shader,
+		universal_shader.locs.border_thickness,
+		&command.border.thickness,
+		.FLOAT,
+	)
+
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_pos_size, &rect_data, .VEC4)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_color, &color, .VEC4)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.border_color, &border_color, .VEC4)
 
 	shadow_enabled := command.shadow.enabled ? 1 : 0
 
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_enabled_loc, &shadow_enabled, .INT)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_enabled, &shadow_enabled, .INT)
 
 	if command.shadow.enabled {
 		shadow_color := to_shader_color_data(command.shadow.color)
 		shadow_offset := command.shadow.offset
 		shadow_offset.y = -shadow_offset.y
 
-		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_radius_loc, &command.shadow.radius, .FLOAT)
-		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_offset_loc, &shadow_offset, .VEC2)
-		rl.SetShaderValue(rect_shader.shader, rect_shader.locs.shadow_color_loc, &shadow_color, .VEC4)
+		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_radius, &command.shadow.radius, .FLOAT)
+		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_offset, &shadow_offset, .VEC2)
+		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_color, &shadow_color, .VEC4)
 	}
 
 	mask_rect := mask_rect
-	mask_rect.y = f32(rl.GetScreenHeight()) - mask_rect.y - mask_rect.height
+	mask_rect.y = screen_size.y - mask_rect.y - mask_rect.height
 	mask_rect_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
 
-	rl.SetShaderValue(rect_shader.shader, rect_shader.locs.mask_rectangle_loc, &mask_rect_data, .VEC4)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mask_rectangle, &mask_rect_data, .VEC4)
 }
 
+setup_text_shader :: proc(universal_shader: Universal_Shader, screen_size: rl.Vector2, mask_rect: rl.Rectangle) {
+	mask_rect := mask_rect
+	mask_rect.y = screen_size.y - mask_rect.y - mask_rect.height
+	mask_rect_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
+
+	mode := 1
+
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mode, &mode, .INT)
+	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mask_rectangle, &mask_rect_data, .VEC4)
+}
 
 to_shader_color_data :: #force_inline proc(color: rl.Color) -> [4]f32 {
 	return {f32(color.r) / 255.0, f32(color.g) / 255.0, f32(color.b) / 255.0, f32(color.a) / 255.0}

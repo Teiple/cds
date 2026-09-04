@@ -70,19 +70,17 @@ Rect_Command :: struct #all_or_none {
 	corner_radius: rl.Vector4,
 	shadow:        Shadow_Config,
 	border:        Border_Config,
-	rect_shader:   Rect_Shader,
 }
 
 Text_Command :: struct #all_or_none {
-	content:       string,
-	font:          rl.Font,
 	font_size:     f32,
 	spacing:       f32,
 	line_spacing:  f32,
+	content:       string,
+	font:          rl.Font,
 	color:         rl.Color,
-	position:      rl.Vector2,
+	rect:          rl.Rectangle,
 	wrapped_lines: []string,
-	font_shader:   Font_Shader,
 }
 
 Push_Clip_Command :: struct {
@@ -111,9 +109,9 @@ UI_Context :: struct {
 	render_commands:    [dynamic]Render_Command,
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
-	font_shader:        Font_Shader,
-	rect_shader:        Rect_Shader,
+	universal_shader:   Universal_Shader,
 	input:              UI_Input,
+	screen_size:        rl.Vector2,
 	input_event:        UI_Input_Event,
 	clip:               UI_ClipData,
 }
@@ -261,6 +259,7 @@ Text_Attributes :: struct {
 	element:                  UI_Index,
 	config:                   UI_Text_Config,
 	preferred_size:           rl.Vector2,
+	size:                     rl.Vector2,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
@@ -671,6 +670,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 	for &ele in ctx.elements {
 		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
 
+
 		content := text_attr.config.content
 		config := text_attr.config
 
@@ -686,10 +686,13 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 			if wrapped_count > 0 {
 				ele.size.y = config.font_size * f32(wrapped_count) + f32(wrapped_count - 1) * config.line_spacing
+				text_attr.size.x = ele.size.x
 			} else {
 				ele.size.y = config.font_size
+				text_attr.size.x = text_attr.preferred_size.x
 			}
 			ele.limits.y.min = ele.size.y
+			text_attr.size.y = ele.size.y
 		}
 
 		byte_index := 0
@@ -697,7 +700,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 		for byte_index < len(content) {
 			whitespace_start := byte_index
 
-			// Skip whitespace / find word start.
+			// Skip whitespace / find word start
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if !is_separator(r) {
@@ -708,7 +711,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 			word_start := byte_index
 
-			// Find end of word.
+			// Find end of word
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if is_separator(r) {
@@ -720,7 +723,7 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 			word_end := byte_index
 
 			if word_start == word_end {
-				// Only whitespace remains.
+				// Only whitespace remains
 				break
 			}
 
@@ -852,27 +855,12 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	return {font = font, spacing = spacing}
 }
 
-@(private = "file")
-load_font_shader :: proc(shader_path: cstring) -> Font_Shader {
-	assert(os.exists(string(shader_path)))
 
-	shader := rl.LoadShader(nil, shader_path)
-	return {shader = shader, mask_rectangle_loc = rl.GetShaderLocation(shader, "maskRectangle")}
-}
-
-
-context_make :: proc(
-	measure_text_proc: UI_Measure_Text,
-	font_configs: []UI_Font_Config,
-	font_shader_path: cstring,
-) -> UI_Context {
+context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font_Config) -> UI_Context {
 	fonts := make([dynamic]UI_Font, 0, 4)
 	for config in font_configs {
 		append(&fonts, load_font(config.base_size, config.spacing, config.font_path))
 	}
-
-	font_shader := load_font_shader(font_shader_path)
-	rect_shader := load_rect_shader()
 
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 5),
@@ -882,8 +870,7 @@ context_make :: proc(
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		measure_text = measure_text_proc,
 		fonts = fonts[:],
-		font_shader = font_shader,
-		rect_shader = rect_shader,
+		universal_shader = load_universal_shader(),
 		input_event = {
 			mouse_captured = false,
 			hovered_elements = make([dynamic]i32, 0, 4),
@@ -903,11 +890,10 @@ context_delete :: proc(ctx: UI_Context) {
 	for f in ctx.fonts {
 		rl.UnloadFont(f.font)
 	}
-	rl.UnloadShader(ctx.font_shader.shader)
 
 	delete(ctx.fonts)
 
-	rl.UnloadShader(ctx.rect_shader.shader)
+	rl.UnloadShader(ctx.universal_shader.shader)
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.scrolls)
@@ -915,14 +901,16 @@ context_delete :: proc(ctx: UI_Context) {
 }
 
 @(require_results, deferred_in_out = end_layout)
-begin_layout :: proc(ctx: ^UI_Context, window_width: f32, window_height: f32) -> bool {
+begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) -> bool {
 	current_context = ctx
+
+	ctx.screen_size = {screen_width, screen_height}
 
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 
 	// Create the root element at index 0
-	append(&ctx.elements, root_layout(window_width, window_height))
+	append(&ctx.elements, root_layout(screen_width, screen_height))
 
 	// Set its preorder_idx explicitly (it's 0)
 	append(&ctx.open_layout_stack, 0)
@@ -983,7 +971,6 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 				corner_radius = attr.config.corner_radius,
 				border = attr.config.border,
 				shadow = attr.config.shadow,
-				rect_shader = ctx.rect_shader,
 			},
 		)
 		// If clipping is enabled, push clip before children
@@ -1003,9 +990,8 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 				spacing = ctx.fonts[attr.config.font_index].spacing,
 				line_spacing = attr.config.line_spacing,
 				color = attr.config.color,
-				position = ele.position,
 				wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
-				font_shader = ctx.font_shader,
+				rect = {ele.position.x, ele.position.y, attr.size.x, attr.size.y},
 			},
 		)
 	}
@@ -1099,7 +1085,6 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 				mouse_position := ctx.input.mouse_position
 
 				ele_rect := ele_get_rect(ele)
-				rl.DrawRectangleLinesEx(ele_rect, 1, rl.BLACK)
 
 				clipped_rect := ele_rect
 
@@ -1113,12 +1098,20 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 					// find content height
 					content_height: f32 = 0
-					child_count: i32 = 0
-					for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-						content_height += child.size.y
-						child_count += 1
+					if layout.config.layout_direction == .Top_To_Bottom {
+						child_count: i32 = 0
+						for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+							content_height += child.size.y
+							child_count += 1
+						}
+						content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
+					} else {
+						max_height: f32 = 0
+						for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+							max_height = max(max_height, child.size.y)
+						}
+						content_height += max_height
 					}
-					content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
 
 					next_scroll.y = clamp(
 						next_scroll.y,
@@ -1170,7 +1163,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 				width = Fixed_Size{width},
 				height = Fixed_Size{height},
 				layout_direction = .Top_To_Bottom,
-				padding = pad_all(16),
+				padding = pad_all(8),
 				background_color = {},
 			},
 		},
@@ -1452,8 +1445,8 @@ close_layout_deffered :: proc() {
 }
 
 text :: proc(
-	id: string = "",
 	content: string = "",
+	id: string = "",
 	font_index: Font_Index = 0,
 	font_size: f32 = 16,
 	color: rl.Color = {0, 0, 0, 255},
@@ -1526,57 +1519,56 @@ get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_Mouse_State {
 	return slice.contains(ctx.input_event.hovered_elements[:], i32(len(ctx.elements))) ? ctx.input.mouse_state : .None
 }
 
-// Shaders
-Rect_Shader :: struct {
+Universal_Shader :: struct {
 	shader: rl.Shader,
 	locs:   struct {
-		border_thickness:     f32,
-		rectangle_loc:        i32,
-		radius_loc:           i32,
-		color_loc:            i32,
-		shadow_enabled_loc:   i32,
-		shadow_radius_loc:    i32,
-		shadow_offset_loc:    i32,
-		shadow_color_loc:     i32,
-		border_thickness_loc: i32,
-		border_color_loc:     i32,
-		mask_rectangle_loc:   i32,
+		mode:             i32,
+		mask_rectangle:   i32,
+		rect_pos_size:    i32,
+		rect_color:       i32,
+		rect_radius:      i32,
+		border_color:     i32,
+		border_thickness: i32,
+		shadow_enabled:   i32,
+		shadow_radius:    i32,
+		shadow_offset:    i32,
+		shadow_color:     i32,
+		// texture0 is standard, no need to store unless you want to set explicitly
 	},
 }
 
-Font_Shader :: struct {
-	shader:             rl.Shader,
-	mask_rectangle_loc: i32,
-}
-
 @(private = "file")
-load_rect_shader :: proc() -> Rect_Shader {
-	shader := rl.LoadShader("./shaders/base.vs", "./shaders/rounded_rect.fs")
+load_universal_shader :: proc() -> Universal_Shader {
+	shader := rl.LoadShader("./shaders/base.vs", "./shaders/universal.fs")
 	return {
 		shader = shader,
 		locs = {
-			rectangle_loc = rl.GetShaderLocation(shader, "rectangle"),
-			radius_loc = rl.GetShaderLocation(shader, "radius"),
-			color_loc = rl.GetShaderLocation(shader, "color"),
-			shadow_enabled_loc = rl.GetShaderLocation(shader, "shadowEnabled"),
-			shadow_radius_loc = rl.GetShaderLocation(shader, "shadowRadius"),
-			shadow_offset_loc = rl.GetShaderLocation(shader, "shadowOffset"),
-			shadow_color_loc = rl.GetShaderLocation(shader, "shadowColor"),
-			border_thickness_loc = rl.GetShaderLocation(shader, "borderThickness"),
-			border_color_loc = rl.GetShaderLocation(shader, "borderColor"),
-			mask_rectangle_loc = rl.GetShaderLocation(shader, "maskRectangle"),
+			mode = rl.GetShaderLocation(shader, "mode"),
+			mask_rectangle = rl.GetShaderLocation(shader, "maskRectangle"),
+			rect_pos_size = rl.GetShaderLocation(shader, "rectPosSize"),
+			rect_color = rl.GetShaderLocation(shader, "rectColor"),
+			rect_radius = rl.GetShaderLocation(shader, "rectRadius"),
+			border_color = rl.GetShaderLocation(shader, "borderColor"),
+			border_thickness = rl.GetShaderLocation(shader, "borderThickness"),
+			shadow_enabled = rl.GetShaderLocation(shader, "shadowEnabled"),
+			shadow_radius = rl.GetShaderLocation(shader, "shadowRadius"),
+			shadow_offset = rl.GetShaderLocation(shader, "shadowOffset"),
+			shadow_color = rl.GetShaderLocation(shader, "shadowColor"),
 		},
 	}
 }
 
 @(private, require_results)
-intersect_rect :: proc(a, b: rl.Rectangle) -> rl.Rectangle {
+intersect_rect :: proc(a, b: rl.Rectangle) -> (rl.Rectangle, bool) #optional_ok {
 	left := max(a.x, b.x)
 	top := max(a.y, b.y)
 	right := min(a.x + a.width, b.x + b.width)
 	bottom := min(a.y + a.height, b.y + b.height)
 
-	return {x = left, y = top, width = max(0, right - left), height = max(0, bottom - top)}
+	width := right - left
+	height := bottom - top
+
+	return {x = left, y = top, width = max(width, 0), height = max(height, 0)}, width > 0 && height > 0
 }
 
 @(private, require_results)
