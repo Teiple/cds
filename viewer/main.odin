@@ -41,9 +41,6 @@ main :: proc() {
 	rl.InitWindow(960, 540, "Unnamed")
 	defer rl.CloseWindow()
 
-
-	// rl.SetTargetFPS(60)
-
 	ui_ctx: ui.UI_Context = ui.context_make(
 		ui.measure_text,
 		{{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
@@ -144,14 +141,13 @@ main :: proc() {
 				}
 			}
 
-
 			when ODIN_DEBUG {
-				if ui.layout(width = ui.grow(), background_color = {255, 0, 0, 255}) {
-					if ui.layout(background_color = {255, 0, 0, 255}) {
+				if ui.layout(width = ui.grow(), background_color = get_random_color()) {
+					if ui.layout(width = ui.grow()) {}
+					if ui.layout(background_color = get_random_color()) {
 						ui.text(content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated))
 						ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
 					}
-					if ui.layout(width = ui.grow()) {}
 				}
 			}
 		}

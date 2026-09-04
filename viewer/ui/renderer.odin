@@ -1,43 +1,98 @@
-
 package ui
 
 import "core:c"
-import "core:fmt"
 import "core:math"
 import rl "vendor:raylib"
 
 AA_OFFSET :: f32(1)
+ARC_SEGMENTS :: 12
 
 render_commands :: proc(ctx: ^UI_Context) {
 	clear(&ctx.clip.open_clip_stack)
 
-	rl.BeginShaderMode(ctx.universal_shader.shader)
+	rl.BeginShaderMode(ctx.mask_shader.shader)
 	defer rl.EndShaderMode()
 
-	for variant, command_index in ctx.render_commands {
+	current_clip_rect: rl.Rectangle = {0, 0, 0, 0}
+	clip_set: bool = false
+	mask_data: [4]f32
+
+	for variant in ctx.render_commands {
 		switch command in variant {
-		case Rect_Command:
-			{
-				draw_rect_command(ctx^, command)
-			}
-		case Text_Command:
-			{
-				draw_text_command(ctx^, command)
-			}
 		case Push_Clip_Command:
-			{
-				draw_push_clip_commad(ctx, command)
+			if len(ctx.clip.open_clip_stack) == 0 {
+				append(&ctx.clip.open_clip_stack, command.rect)
+			} else {
+				append(&ctx.clip.open_clip_stack, intersect_rect(back(ctx.clip.open_clip_stack), command.rect))
 			}
+
+			new_clip := back(ctx.clip.open_clip_stack)
+			if !clip_set || new_clip != current_clip_rect {
+				if clip_set && new_clip != current_clip_rect {
+					rl.EndShaderMode()
+					rl.BeginShaderMode(ctx.mask_shader.shader)
+				}
+				current_clip_rect = new_clip
+				clip_set = true
+				setup_mask_shader(ctx, current_clip_rect)
+			}
+
 		case Pop_Clip_Command:
-			{
-				draw_pop_clip_command(ctx)
+			pop(&ctx.clip.open_clip_stack)
+
+			new_clip: rl.Rectangle
+			if len(ctx.clip.open_clip_stack) > 0 {
+				new_clip = back(ctx.clip.open_clip_stack)
+			} else {
+				new_clip = {0, 0, 0, 0}
 			}
+
+			// Expensive but needed for nested clip, each clip close must flush the drawing
+			if !clip_set || new_clip != current_clip_rect {
+				if clip_set && new_clip != current_clip_rect {
+					rl.EndShaderMode()
+					rl.BeginShaderMode(ctx.mask_shader.shader)
+				}
+				current_clip_rect = new_clip
+				clip_set = true
+				setup_mask_shader(ctx, current_clip_rect)
+			}
+
+		case Rect_Command:
+			mask_rect: rl.Rectangle
+			has_clip := len(ctx.clip.open_clip_stack) > 0
+			if has_clip {
+				mask_rect = back(ctx.clip.open_clip_stack)
+				if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+					continue
+				}
+			}
+			draw_rect_command(ctx^, command)
+
+		case Text_Command:
+			mask_rect: rl.Rectangle
+			has_clip := len(ctx.clip.open_clip_stack) > 0
+			if has_clip {
+				mask_rect = back(ctx.clip.open_clip_stack)
+				if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+					continue
+				}
+			}
+			draw_text_command(ctx^, command)
 		}
 	}
 }
 
 @(private)
-draw_push_clip_commad :: proc(ctx: ^UI_Context, command: Push_Clip_Command) {
+setup_mask_shader :: proc(ctx: ^UI_Context, mask_rect: rl.Rectangle) {
+	mask_rect := mask_rect
+	mask_rect.y = ctx.screen_size.y - mask_rect.y - mask_rect.height
+	mask_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
+	rl.SetShaderValue(ctx.mask_shader.shader, ctx.mask_shader.mask_rectangle, &mask_data, .VEC4)
+}
+
+@(private)
+draw_push_clip_command :: proc(ctx: ^UI_Context, command: Push_Clip_Command) {
 	if len(ctx.clip.open_clip_stack) == 0 {
 		append(&ctx.clip.open_clip_stack, command.rect)
 	} else {
@@ -55,34 +110,19 @@ draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
 	draw_line :: proc(pen: ^rl.Vector2, text: string, font: rl.Font, font_scale: f32, color: rl.Color, spacing: f32) {
 		for character in text {
 			glyph_index := rl.GetGlyphIndex(font, character)
-
 			advance_x := draw_glyph(font, glyph_index, pen^, font_scale, color)
 			pen.x += advance_x + spacing
 		}
 	}
 
-	// Masking
-	{
-		mask_rect: rl.Rectangle = {}
-		if len(ctx.clip.open_clip_stack) > 0 {
-			mask_rect = back(ctx.clip.open_clip_stack)
-			if _, ok := intersect_rect(command.rect, mask_rect); !ok {
-				return
-			}
-		}
-		setup_text_shader(ctx.universal_shader, ctx.screen_size, mask_rect)
-	}
-
 	pen: rl.Vector2 = {command.rect.x, command.rect.y}
 	font_scale := command.font_size / f32(command.font.baseSize)
-
 
 	if len(command.wrapped_lines) == 0 {
 		draw_line(&pen, command.content, command.font, font_scale, command.color, command.spacing)
 	} else {
 		line_height := command.font_size + command.line_spacing
 
-		// only draw lines that is in visible range
 		line_start: i32 = 0
 		line_end := i32(len(command.wrapped_lines))
 
@@ -97,7 +137,6 @@ draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
 			pen.y += f32(line_start) * line_height
 			for line in command.wrapped_lines[line_start:line_end] {
 				draw_line(&pen, line, command.font, font_scale, command.color, command.spacing)
-
 				pen.x = command.rect.x
 				pen.y += command.font_size + command.line_spacing
 			}
@@ -107,54 +146,153 @@ draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
 
 @(private)
 draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
-	command := command
-
-	// Masking
-	{
-		mask_rect: rl.Rectangle
-		if len(ctx.clip.open_clip_stack) > 0 {
-			mask_rect = back(ctx.clip.open_clip_stack)
-			if _, ok := intersect_rect(command.rect, mask_rect); !ok {
-				return
-			}
-		}
-		setup_rect_shader(ctx.universal_shader, ctx.screen_size, &command, mask_rect)
-	}
-
 	rect := command.rect
-	shadow := command.shadow
+	radius := command.corner_radius
+	color := command.color
 
-	// Extra space for SDF antialiasing
-	aa := AA_OFFSET
-
-	// Main rectangle bounds
-	min_x := rect.x - aa
-	min_y := rect.y - aa
-	max_x := rect.x + rect.width + aa
-	max_y := rect.y + rect.height + aa
-
-	if shadow.enabled {
-		// Shadow bounds
-		shadow_min_x := rect.x + shadow.offset.x - shadow.radius - aa
-		shadow_min_y := rect.y + shadow.offset.y - shadow.radius - aa
-		shadow_max_x := rect.x + rect.width + shadow.offset.x + shadow.radius + aa
-		shadow_max_y := rect.y + rect.height + shadow.offset.y + shadow.radius + aa
-
-		// Union of rectangle + shadow
-		min_x = min(min_x, shadow_min_x)
-		min_y = min(min_y, shadow_min_y)
-		max_x = max(max_x, shadow_max_x)
-		max_y = max(max_y, shadow_max_y)
+	if rect.width < 1 || rect.height < 1 {
+		return
 	}
 
-	draw_rect := rl.Rectangle {
-		x      = min_x,
-		y      = min_y,
-		width  = max_x - min_x,
-		height = max_y - min_y,
+	if radius.x == 0 && radius.y == 0 && radius.z == 0 && radius.w == 0 {
+		rl.DrawRectangleRec(rect, color)
+		if command.border.thickness > 0 {
+			rl.DrawRectangleLinesEx(rect, command.border.thickness, command.border.color)
+		}
+		return
 	}
 
-	rl.DrawRectangleRec(draw_rect, rl.WHITE)
+	draw_rounded_rect_filled(rect, color, radius)
+
+	if command.border.thickness > 0 {
+		draw_rounded_rect_border(rect, command.border.color, radius, command.border.thickness)
+	}
+}
+
+@(private)
+draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: rl.Vector4) {
+	x := rect.x
+	y := rect.y
+	w := rect.width
+	h := rect.height
+
+	r_tl := clamp(radius.x, 0, min(w / 2, h / 2))
+	r_tr := clamp(radius.y, 0, min(w / 2, h / 2))
+	r_br := clamp(radius.z, 0, min(w / 2, h / 2))
+	r_bl := clamp(radius.w, 0, min(w / 2, h / 2))
+
+	max_r := max(r_tl, r_tr, r_br, r_bl)
+
+	if max_r == 0 {
+		rl.DrawRectangleRec(rect, color)
+		return
+	}
+
+	center_w := w - r_tl - r_tr
+	center_h := h - r_tl - r_bl
+
+	if center_w > 0 {
+		rl.DrawRectangleRec({x + r_tl, y, center_w, h}, color)
+	}
+
+	if center_h > 0 {
+		rl.DrawRectangleRec({x, y + r_tl, w, center_h}, color)
+	}
+
+	if r_tl > 0 {
+		rl.DrawCircleSector({x + r_tl, y + r_tl}, r_tl, 180, 270, ARC_SEGMENTS, color)
+	}
+	if r_tr > 0 {
+		rl.DrawCircleSector({x + w - r_tr, y + r_tr}, r_tr, 270, 360, ARC_SEGMENTS, color)
+	}
+	if r_br > 0 {
+		rl.DrawCircleSector({x + w - r_br, y + h - r_br}, r_br, 0, 90, ARC_SEGMENTS, color)
+	}
+	if r_bl > 0 {
+		rl.DrawCircleSector({x + r_bl, y + h - r_bl}, r_bl, 90, 180, ARC_SEGMENTS, color)
+	}
+}
+
+@(private)
+draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: rl.Vector4, thickness: f32) {
+	x := rect.x
+	y := rect.y
+	w := rect.width
+	h := rect.height
+
+	r_tl := clamp(radius.x, 0, min(w / 2, h / 2))
+	r_tr := clamp(radius.y, 0, min(w / 2, h / 2))
+	r_br := clamp(radius.z, 0, min(w / 2, h / 2))
+	r_bl := clamp(radius.w, 0, min(w / 2, h / 2))
+
+	if thickness <= 0 {
+		return
+	}
+
+	if r_tl == 0 && r_tr == 0 && r_br == 0 && r_bl == 0 {
+		rl.DrawRectangleLinesEx(rect, thickness, color)
+		return
+	}
+
+	inner_r_tl := max(0, r_tl - thickness)
+	inner_r_tr := max(0, r_tr - thickness)
+	inner_r_br := max(0, r_br - thickness)
+	inner_r_bl := max(0, r_bl - thickness)
+
+	if thickness > 0 {
+		if r_tl > 0 {
+			rl.DrawRing({x + r_tl, y + r_tl}, inner_r_tl, r_tl, 180, 270, ARC_SEGMENTS, color)
+		}
+		if r_tr > 0 {
+			rl.DrawRing({x + w - r_tr, y + r_tr}, inner_r_tr, r_tr, 270, 360, ARC_SEGMENTS, color)
+		}
+		if r_br > 0 {
+			rl.DrawRing({x + w - r_br, y + h - r_br}, inner_r_br, r_br, 0, 90, ARC_SEGMENTS, color)
+		}
+		if r_bl > 0 {
+			rl.DrawRing({x + r_bl, y + h - r_bl}, inner_r_bl, r_bl, 90, 180, ARC_SEGMENTS, color)
+		}
+	}
+
+	if r_tl > 0 && r_tr > 0 {
+		rl.DrawRectangleRec({x + r_tl, y, w - r_tl - r_tr, thickness}, color)
+	} else if r_tl > 0 {
+		rl.DrawRectangleRec({x + r_tl, y, w - r_tl, thickness}, color)
+	} else if r_tr > 0 {
+		rl.DrawRectangleRec({x, y, w - r_tr, thickness}, color)
+	} else {
+		rl.DrawRectangleRec({x, y, w, thickness}, color)
+	}
+
+	if r_bl > 0 && r_br > 0 {
+		rl.DrawRectangleRec({x + r_bl, y + h - thickness, w - r_bl - r_br, thickness}, color)
+	} else if r_bl > 0 {
+		rl.DrawRectangleRec({x + r_bl, y + h - thickness, w - r_bl, thickness}, color)
+	} else if r_br > 0 {
+		rl.DrawRectangleRec({x, y + h - thickness, w - r_br, thickness}, color)
+	} else {
+		rl.DrawRectangleRec({x, y + h - thickness, w, thickness}, color)
+	}
+
+	if r_tl > 0 && r_bl > 0 {
+		rl.DrawRectangleRec({x, y + r_tl, thickness, h - r_tl - r_bl}, color)
+	} else if r_tl > 0 {
+		rl.DrawRectangleRec({x, y + r_tl, thickness, h - r_tl}, color)
+	} else if r_bl > 0 {
+		rl.DrawRectangleRec({x, y, thickness, h - r_bl}, color)
+	} else {
+		rl.DrawRectangleRec({x, y, thickness, h}, color)
+	}
+
+	if r_tr > 0 && r_br > 0 {
+		rl.DrawRectangleRec({x + w - thickness, y + r_tr, thickness, h - r_tr - r_br}, color)
+	} else if r_tr > 0 {
+		rl.DrawRectangleRec({x + w - thickness, y + r_tr, thickness, h - r_tr}, color)
+	} else if r_br > 0 {
+		rl.DrawRectangleRec({x + w - thickness, y, thickness, h - r_br}, color)
+	} else {
+		rl.DrawRectangleRec({x + w - thickness, y, thickness, h}, color)
+	}
 }
 
 @(private, require_results)
@@ -170,9 +308,6 @@ draw_glyph :: proc(
 	atlas_rect := font.recs[glyph_index]
 	glyph := font.glyphs[glyph_index]
 
-	// raylib's atlas_rect already excluded paddings
-	// padding := f32(font.glyphPadding)
-
 	source := atlas_rect
 
 	dest := rl.Rectangle {
@@ -181,7 +316,6 @@ draw_glyph :: proc(
 		width  = source.width * font_scale,
 		height = source.height * font_scale,
 	}
-
 
 	rl.DrawTexturePro(font.texture, source, dest, {}, 0, color)
 
@@ -193,17 +327,13 @@ measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) 
 
 	width = 0
 
-	// nic barker's hot path optimization
-
 	for character in input.content do if character & 0xc0 != 0x80 {
-
 		character_int := min(i32(character), 127)
 
 		if character_int == '\n' {
 			continue
 		}
 
-		// raylib only stores printable glyphs, for ascii the range is 32..126
 		glyph_index := character_int - 32
 
 		rect_width := font_info.font.recs[glyph_index].width * font_scale
@@ -215,73 +345,4 @@ measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) 
 	}
 
 	return width
-}
-
-setup_rect_shader :: proc(
-	universal_shader: Universal_Shader,
-	screen_size: rl.Vector2,
-	command: ^Rect_Command,
-	mask_rect: rl.Rectangle,
-) {
-	rect := command.rect
-	rect.y = screen_size.y - rect.y - rect.height
-
-	rect_data: [4]f32 = {rect.x, rect.y, rect.width, rect.height}
-
-
-	color := to_shader_color_data(command.color)
-	border_color := to_shader_color_data(command.border.color)
-	mode := 0
-
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mode, &mode, .INT)
-
-	fmt.println("Rect pos/size: ", rect_data, "; color:", color, "; mode", mode)
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_radius, &command.corner_radius, .VEC4)
-	rl.SetShaderValue(
-		universal_shader.shader,
-		universal_shader.locs.border_thickness,
-		&command.border.thickness,
-		.FLOAT,
-	)
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_pos_size, &rect_data, .VEC4)
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.rect_color, &color, .VEC4)
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.border_color, &border_color, .VEC4)
-
-	shadow_enabled := command.shadow.enabled ? 1 : 0
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_enabled, &shadow_enabled, .INT)
-
-	if command.shadow.enabled {
-		shadow_color := to_shader_color_data(command.shadow.color)
-		shadow_offset := command.shadow.offset
-		shadow_offset.y = -shadow_offset.y
-
-		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_radius, &command.shadow.radius, .FLOAT)
-		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_offset, &shadow_offset, .VEC2)
-		rl.SetShaderValue(universal_shader.shader, universal_shader.locs.shadow_color, &shadow_color, .VEC4)
-	}
-
-	mask_rect := mask_rect
-	mask_rect.y = screen_size.y - mask_rect.y - mask_rect.height
-	mask_rect_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mask_rectangle, &mask_rect_data, .VEC4)
-}
-
-setup_text_shader :: proc(universal_shader: Universal_Shader, screen_size: rl.Vector2, mask_rect: rl.Rectangle) {
-	mask_rect := mask_rect
-	mask_rect.y = screen_size.y - mask_rect.y - mask_rect.height
-	mask_rect_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
-
-	mode := 1
-
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mode, &mode, .INT)
-	rl.SetShaderValue(universal_shader.shader, universal_shader.locs.mask_rectangle, &mask_rect_data, .VEC4)
-}
-
-to_shader_color_data :: #force_inline proc(color: rl.Color) -> [4]f32 {
-	return {f32(color.r) / 255.0, f32(color.g) / 255.0, f32(color.b) / 255.0, f32(color.a) / 255.0}
 }

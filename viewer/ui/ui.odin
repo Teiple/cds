@@ -100,6 +100,10 @@ UI_Font_Config :: struct {
 	spacing:   f32,
 }
 
+Mask_Shader :: struct {
+	shader:         rl.Shader,
+	mask_rectangle: i32,
+}
 
 UI_Context :: struct {
 	elements:           [dynamic]UI_Element,
@@ -109,7 +113,7 @@ UI_Context :: struct {
 	render_commands:    [dynamic]Render_Command,
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
-	universal_shader:   Universal_Shader,
+	mask_shader:        Mask_Shader,
 	input:              UI_Input,
 	screen_size:        rl.Vector2,
 	input_event:        UI_Input_Event,
@@ -150,7 +154,6 @@ Layout_Padding :: struct {
 	left:   f32,
 }
 
-
 Alignment :: struct {
 	x: Alignment_X,
 	y: Alignment_Y,
@@ -166,7 +169,6 @@ NormalizedEnd :: enum {
 	Start,
 	End,
 }
-
 
 Alignment_X :: enum {
 	Left,
@@ -278,10 +280,8 @@ open_layout :: proc(ctx: ^UI_Context, id: string, config: UI_Layout_Config, limi
 		id = id,
 		attributes = Layout_Attributes{config = config, element = index},
 		limits = limits,
-		// layout sets its tree size when close
 	}
 
-	// Linking
 	ui_ele.link = {
 		parent = parent,
 		last   = nil,
@@ -306,10 +306,9 @@ open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
 	ui_ele := UI_Element {
 		id = id,
 		attributes = Text_Attributes{config = config, element = index},
-		limits = {}, // limits are calculated later
+		limits = {},
 	}
 
-	// Linking
 	ui_ele.link = {
 		parent = parent_idx,
 		last   = nil,
@@ -325,12 +324,10 @@ open_text :: proc(ctx: ^UI_Context, id: string, config: UI_Text_Config) {
 	calculate_text_width(ctx, index)
 }
 
-
 @(private = "file")
 close_layout :: proc(ctx: ^UI_Context) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
-
 	fit_sizing(ctx, index, .X)
 }
 
@@ -340,13 +337,11 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	text_attr, ok := &current.attributes.(Text_Attributes)
 	if !ok do return
 
-	// prefered size
 	text_attr.preferred_size.x = ctx.measure_text(text_attr.config, ctx.fonts[text_attr.config.font_index])
 	text_attr.preferred_size.y = text_attr.config.font_size
 
 	current.size.x = text_attr.preferred_size.x
 
-	// min size is the longest english word in the sentence
 	{
 		content := text_attr.config.content
 		config := text_attr.config
@@ -357,7 +352,6 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 		for byte_index < len(content) {
 			whitespace_start := byte_index
 
-			// Skip whitespace / find word start.
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if !is_separator(r) {
@@ -368,7 +362,6 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			word_start = byte_index
 
-			// Find end of word.
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if is_separator(r) {
@@ -380,7 +373,6 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 			word_end := byte_index
 
 			if word_start == word_end {
-				// Only whitespace remains.
 				break
 			}
 
@@ -397,17 +389,6 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	}
 
 	current.size.x = clamp_element_size(current.size.x, current.limits.x)
-}
-
-
-@(private = "file")
-calculate_layout_height :: proc(ctx: ^UI_Context, index: UI_Index) {
-	current := &ctx.elements[index]
-	if layout, ok := current.attributes.(Layout_Attributes); ok {
-		if mode, ok := layout.config.height.(Fixed_Size); ok {
-			current.size.y = mode.value
-		}
-	}
 }
 
 @(private = "file")
@@ -464,11 +445,9 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	children_size += padding
 	children_min_size += padding
 
-	// Also fit sizing grows in min size by their chilren, grow can keep their min size to whatever
 	if mode, ok := layout_get_mode(layout, axis).(Fit_Size); ok {
 		ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
 	}
-	// ele_set_min(current, max(ele_get_min(current, axis), children_min_size), axis)
 	ele_set_size(current, clamp_element_size(children_size, ele_get_lims(current, axis)), axis)
 }
 
@@ -477,22 +456,18 @@ fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index) {
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		fit_sizing_heights_tree(ctx, child_index)
 	}
-
 	fit_sizing(ctx, index, .Y)
 }
 
 @(private = "file")
 grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
-	// Grow and Shrink phases, not gonna merge them because of readability
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.link.last == nil do return
 
-	// Content space available to children.
 	available := ele_get_size(current, axis) - layout_get_pad(layout, axis)
 	percent_basis := available
 
-	// Cross-axis: grow children simply fill the available space
 	if layout_is_across(layout, axis) {
 		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			if is_grow_layout_or_text(child^, axis) {
@@ -508,15 +483,13 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		return
 	}
 
-	// Along-axis: distribute remaining/overshoot space among grow children
 	growables := &ctx.growable_buffer
 	clear(growables)
 	defer clear(growables)
 
-
 	child_count := 0
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) do child_count += 1
-	assert(child_count > 0) // cause subtree_size > 1
+	assert(child_count > 0)
 	gap_total := f32(child_count - 1) * layout.config.child_gap
 
 	remaining := available - gap_total
@@ -532,7 +505,6 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 				axis,
 			)
 		}
-
 		remaining -= ele_get_size(child, axis)
 	}
 
@@ -540,7 +512,6 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 	growable_count := len(growables)
 
-	// Grow phase
 	for remaining > math.F32_EPSILON && len(growables) > 0 {
 		smallest := ele_get_size(&ctx.elements[growables[0]], axis)
 		second_smallest := smallest
@@ -589,10 +560,8 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		}
 	}
 
-	// Hacking the growables array back to original size
 	non_zero_resize(growables, growable_count)
 
-	// Shrink phase
 	shrinkables := growables
 	overshoot := -remaining
 
@@ -670,7 +639,6 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 	for &ele in ctx.elements {
 		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
 
-
 		content := text_attr.config.content
 		config := text_attr.config
 
@@ -700,7 +668,6 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 		for byte_index < len(content) {
 			whitespace_start := byte_index
 
-			// Skip whitespace / find word start
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if !is_separator(r) {
@@ -711,7 +678,6 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 			word_start := byte_index
 
-			// Find end of word
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
 				if is_separator(r) {
@@ -723,10 +689,8 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 			word_end := byte_index
 
 			if word_start == word_end {
-				// Only whitespace remains
 				break
 			}
-
 
 			config.content = content[whitespace_start:word_start]
 			whitespace_width := ctx.measure_text(config, ctx.fonts[config.font_index])
@@ -774,7 +738,6 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 				ele_set_pos(current, ele_get_pos(current, axis) + remaining, axis)
 			}
 		}
-
 		return
 	}
 
@@ -783,7 +746,6 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	offset := ele_get_pos(current, axis) + layout_get_pad_at(layout, axis, .Start) + scroll_offset
 
 	if layout_is_along(layout, axis) {
-		// Find the remaining size
 		remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis)
 
 		child_count := 0
@@ -810,7 +772,6 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		ele_set_pos(child, offset, axis)
 
 		if layout_is_across(layout, axis) {
-			// Find the remaining size
 			remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis) - ele_get_size(child, axis)
 
 			switch align_get_norm(layout.config.child_alignment, axis) {
@@ -841,7 +802,7 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 		glyphCount = 95,
 	}
 
-	font.glyphs = rl.LoadFontData(font_file_data, font_file_size, i32(base_size), nil, 0, .SDF, &font.glyphCount)
+	font.glyphs = rl.LoadFontData(font_file_data, font_file_size, i32(base_size), nil, 0, .DEFAULT, &font.glyphCount)
 
 	atlas := rl.GenImageFontAtlas(font.glyphs, &font.recs, font.glyphCount, font.baseSize, 0, 1)
 	font.texture = rl.LoadTextureFromImage(atlas)
@@ -855,6 +816,11 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	return {font = font, spacing = spacing}
 }
 
+@(private = "file")
+load_mask_shader :: proc() -> Mask_Shader {
+	shader := rl.LoadShader("./shaders/mask.vs", "./shaders/mask.fs")
+	return {shader = shader, mask_rectangle = rl.GetShaderLocation(shader, "maskRectangle")}
+}
 
 context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font_Config) -> UI_Context {
 	fonts := make([dynamic]UI_Font, 0, 4)
@@ -870,7 +836,7 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		measure_text = measure_text_proc,
 		fonts = fonts[:],
-		universal_shader = load_universal_shader(),
+		mask_shader = load_mask_shader(),
 		input_event = {
 			mouse_captured = false,
 			hovered_elements = make([dynamic]i32, 0, 4),
@@ -890,10 +856,9 @@ context_delete :: proc(ctx: UI_Context) {
 	for f in ctx.fonts {
 		rl.UnloadFont(f.font)
 	}
-
 	delete(ctx.fonts)
 
-	rl.UnloadShader(ctx.universal_shader.shader)
+	rl.UnloadShader(ctx.mask_shader.shader)
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.scrolls)
@@ -909,10 +874,7 @@ begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) ->
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 
-	// Create the root element at index 0
 	append(&ctx.elements, root_layout(screen_width, screen_height))
-
-	// Set its preorder_idx explicitly (it's 0)
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -922,36 +884,28 @@ begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) ->
 	return true
 }
 
-
 @(private = "file")
 end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	if !ok do return
 
-	// Close the root – this computes sizes and subtree_size
 	close_layout(ctx)
 
-	// Top down, calculate grow sizing widths
 	grow_and_percent_sizing_tree(ctx, 0, .X)
 	wrap_texts(ctx)
 
-	// Calculate heights
 	fit_sizing_heights_tree(ctx, 0)
 	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
-	// Compute positions
 	calculate_position(ctx, 0, .X)
 	calculate_position(ctx, 0, .Y)
 
-	// Mouse input, forward to next frame
 	detect_mouse(ctx)
 
 	clear(&ctx.render_commands)
 	clear(&ctx.clip.open_clip_stack)
 
-	// Generate render commands
 	generate_commands(ctx, 0)
 
-	// Clean up
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 }
@@ -960,7 +914,6 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	ele := &ctx.elements[index]
 
-	// Generate rect/text command for the current element
 	switch attr in ele.attributes {
 	case Layout_Attributes:
 		append(
@@ -973,7 +926,6 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 				shadow = attr.config.shadow,
 			},
 		)
-		// If clipping is enabled, push clip before children
 		if attr.config.clip {
 			append(
 				&ctx.render_commands,
@@ -996,12 +948,10 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 		)
 	}
 
-	// Recursively process children
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		generate_commands(ctx, child_index)
 	}
 
-	// Pop clip if this layout had clipping enabled
 	if layout_attr, ok := ele.attributes.(Layout_Attributes); ok && layout_attr.config.clip {
 		append(&ctx.render_commands, Pop_Clip_Command{})
 	}
@@ -1020,9 +970,7 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 	clear(&ctx.input_event.hovered_elements)
 	clear(&ctx.clip.open_clip_stack)
 
-	travel_tree_reverse(
-		ctx,
-		on_down = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
+	travel_tree_reverse(ctx, on_down = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
 			ele := ctx.elements[index]
 
 			layout := ele.attributes.(Layout_Attributes) or_return
@@ -1037,14 +985,12 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 			}
 
 			return
-		},
-		on_up = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
+		}, on_up = proc(ctx: ^UI_Context, index: i32) -> (stop: bool) {
 			ele := ctx.elements[index]
 
 			layout, ok := ele.attributes.(Layout_Attributes)
 			if !ok do return
 
-			// close the clip if return
 			defer if layout.config.clip {
 				pop(&ctx.clip.open_clip_stack)
 			}
@@ -1058,7 +1004,6 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 			}
 
 			if rect_contains(ctx.input.mouse_position, clipped_rect) {
-				// handle callbacks
 				switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
 				case .Hover:
 					if callbacks.on_hover != nil do callbacks.on_hover()
@@ -1077,8 +1022,6 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 				if layout.config.mouse_mode == .Capture {
 					ctx.input_event.mouse_captured = true
 				}
-
-				// else it passed through
 			}
 
 			if layout.config.scroll && !ctx.input_event.scroll_captured {
@@ -1096,7 +1039,6 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 					cur_scroll := ctx.input_event.scrolls[index]
 					next_scroll := cur_scroll + rl.GetMouseWheelMoveV() * 20.0
 
-					// find content height
 					content_height: f32 = 0
 					if layout.config.layout_direction == .Top_To_Bottom {
 						child_count: i32 = 0
@@ -1113,25 +1055,18 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 						content_height += max_height
 					}
 
-					next_scroll.y = clamp(
-						next_scroll.y,
-						-(content_height - (ele.size.y - layout_get_pad(layout, .Y))),
-						0,
-					)
+					next_scroll.y = clamp(next_scroll.y, -(content_height - (ele.size.y - layout_get_pad(layout, .Y))), 0)
 
 					ctx.input_event.scrolls[index] = next_scroll
 					ctx.input_event.scroll_captured = true
 				}
 			}
 
-			// check if all travel goals has been fullfiled, if so stop early
 			stop = ctx.input_event.mouse_captured && ctx.input_event.scroll_captured
 
 			return
-		},
-	)
+		})
 }
-
 
 travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
@@ -1155,7 +1090,7 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 		id = "root",
 		position = {0, 0},
 		size = {width, height},
-		limits = {}, // no limits
+		limits = {},
 		attributes = Layout_Attributes {
 			config = UI_Layout_Config {
 				child_alignment = {x = .Left, y = .Top},
@@ -1220,7 +1155,6 @@ child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI
 		return
 	}
 
-	// set return values
 	{
 		child_index = it.next.?
 		child = &it.ctx.elements[child_index]
@@ -1253,8 +1187,6 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	return false
 }
 
-// Axis independant internal ultilities
-// Layout
 @(private = "file")
 layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return(
@@ -1302,8 +1234,6 @@ layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	)
 }
 
-// Elements
-// Getters receive elements by ref 'cause their usage everywhere and deferencing them is exhausting
 @(private = "file")
 ele_set_size :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.size.x = value
@@ -1327,7 +1257,6 @@ ele_get_size :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	return axis == .X ? element.size.x : element.size.y
 }
 
-
 @(private = "file")
 ele_get_min :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	return axis == .X ? element.limits.x.min.? or_else 0 : element.limits.y.min.? or_else 0
@@ -1343,7 +1272,6 @@ ele_get_lims :: proc(element: ^UI_Element, axis: Axis) -> UI_Axis_Limits {
 	return axis == .X ? element.limits.x : element.limits.y
 }
 
-
 @(private = "file")
 ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.position.x = value
@@ -1356,19 +1284,16 @@ ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	else do return element.position.y
 }
 
-// This is rarely used but useful
 @(private = "file")
 ele_get_rect :: #force_inline proc(element: UI_Element) -> rl.Rectangle {
 	return {x = element.position.x, y = element.position.y, width = element.size.x, height = element.size.y}
 }
 
-// Text
 @(private = "file")
 text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
 }
 
-// Alignment
 @(private = "file")
 align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 	if axis == .X {
@@ -1393,8 +1318,6 @@ align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
 	return .Start
 }
 
-// Public layout declaration ultilities
-// Elements
 BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 SHADOW_DEFAULT: Shadow_Config : {enabled = false, radius = 8, offset = {0, 0}, color = {0, 0, 0, 100}}
 
@@ -1468,7 +1391,6 @@ text :: proc(
 	return true
 }
 
-// Config shorthands
 grow :: #force_inline proc(min: Maybe(f32) = nil, max: Maybe(f32) = nil) -> Sizing_Axis {
 	return {mode = Grow_Size{}, min = min, max = max}
 }
@@ -1497,9 +1419,6 @@ shadow :: #force_inline proc(
 	return {enabled = true, radius = radius, color = color, offset = offset}
 }
 
-// Input queries
-// Input
-
 mouse_state :: proc() -> UI_Mouse_State {
 	return get_layout_mouse_state(current_context^)
 }
@@ -1519,45 +1438,6 @@ get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_Mouse_State {
 	return slice.contains(ctx.input_event.hovered_elements[:], i32(len(ctx.elements))) ? ctx.input.mouse_state : .None
 }
 
-Universal_Shader :: struct {
-	shader: rl.Shader,
-	locs:   struct {
-		mode:             i32,
-		mask_rectangle:   i32,
-		rect_pos_size:    i32,
-		rect_color:       i32,
-		rect_radius:      i32,
-		border_color:     i32,
-		border_thickness: i32,
-		shadow_enabled:   i32,
-		shadow_radius:    i32,
-		shadow_offset:    i32,
-		shadow_color:     i32,
-		// texture0 is standard, no need to store unless you want to set explicitly
-	},
-}
-
-@(private = "file")
-load_universal_shader :: proc() -> Universal_Shader {
-	shader := rl.LoadShader("./shaders/base.vs", "./shaders/universal.fs")
-	return {
-		shader = shader,
-		locs = {
-			mode = rl.GetShaderLocation(shader, "mode"),
-			mask_rectangle = rl.GetShaderLocation(shader, "maskRectangle"),
-			rect_pos_size = rl.GetShaderLocation(shader, "rectPosSize"),
-			rect_color = rl.GetShaderLocation(shader, "rectColor"),
-			rect_radius = rl.GetShaderLocation(shader, "rectRadius"),
-			border_color = rl.GetShaderLocation(shader, "borderColor"),
-			border_thickness = rl.GetShaderLocation(shader, "borderThickness"),
-			shadow_enabled = rl.GetShaderLocation(shader, "shadowEnabled"),
-			shadow_radius = rl.GetShaderLocation(shader, "shadowRadius"),
-			shadow_offset = rl.GetShaderLocation(shader, "shadowOffset"),
-			shadow_color = rl.GetShaderLocation(shader, "shadowColor"),
-		},
-	}
-}
-
 @(private, require_results)
 intersect_rect :: proc(a, b: rl.Rectangle) -> (rl.Rectangle, bool) #optional_ok {
 	left := max(a.x, b.x)
@@ -1575,7 +1455,6 @@ intersect_rect :: proc(a, b: rl.Rectangle) -> (rl.Rectangle, bool) #optional_ok 
 rect_contains :: proc(p: rl.Vector2, rec: rl.Rectangle) -> bool {
 	return p.x >= rec.x && p.x <= rec.x + rec.width && p.y >= rec.y && p.y <= rec.y + rec.height
 }
-
 
 @(private, require_results)
 back :: proc(arr: [dynamic]$T) -> T {
