@@ -83,76 +83,44 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			if ui.layout(
-				width = ui.grow(),
-				height = ui.grow(),
-				background_color = get_random_color(),
-				clip = true,
-				scroll = true,
-			) {
-				if ui.layout(
-					width = ui.grow(),
-					height = ui.fit(),
-					layout_direction = .Top_To_Bottom,
-					background_color = get_random_color(),
-				) {
-					for i in 0 ..< 5 {
-						if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
-							ui.text(
-								"Lorem ipsum dolor sit amet, consectetur adipiscing elit. In vel urna luctus, fermentum massa mollis, ornare urna. Curabitur quis diam ac diam feugiat dignissim. Duis viverra eget ex rhoncus interdum. Quisque vel nunc vel nisl ultrices accumsan. Suspendisse venenatis ligula id pretium vehicula. Sed sit amet odio scelerisque, consequat est ac, pharetra magna. Fusce luctus eu diam non facilisis. In ut blandit est, at ultricies augue. ",
-							)
-						}
-					}
-					if ui.layout(
-						width = ui.grow(),
-						height = ui.fixed(120),
-						background_color = get_random_color(),
-						layout_direction = .Top_To_Bottom,
-						clip = true,
-						scroll = true,
-					) {
-						for i in 0 ..< 5 {
-							if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
-
-							}
-						}
-					}
-					for i in 0 ..< 5 {
-						if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
-							ui.text(
-								"Duis in nulla cursus, auctor enim ornare, mattis augue. Maecenas molestie egestas lectus, sit amet vestibulum lorem laoreet nec. Aliquam feugiat odio non interdum mattis. Quisque sed condimentum orci. Duis tincidunt fermentum est a euismod. Ut laoreet elit sapien, dignissim condimentum quam tincidunt vel. Morbi blandit est quis quam eleifend vulputate. Sed mattis at arcu quis ullamcorper. Sed vitae euismod massa. Sed lacus diam, sagittis vel eleifend ut, viverra eget ipsum. In sed erat interdum nibh tempor blandit. Morbi cursus dolor at dignissim tincidunt. Nullam ut pulvinar ligula. Nunc turpis tortor, semper nec feugiat non, rutrum tempus mauris. Suspendisse tortor massa, imperdiet quis mi et, sagittis feugiat neque. ",
-							)
-						}
-					}
-				}
-				if ui.layout(
-					width = ui.fixed(32),
-					height = ui.grow(),
-					background_color = get_random_color(),
-					padding = ui.pad_all(0),
-				) {
-					if ui.layout(
-						width = ui.grow(),
-						height = ui.percent(.2, 64),
-						background_color = get_random_color(),
-					) {
-
-					}
-				}
+			for i in 0 ..< 2 {
+				scroll_ui()
 			}
 
 			when ODIN_DEBUG {
 				if ui.layout(width = ui.grow(), background_color = get_random_color()) {
 					if ui.layout(width = ui.grow()) {}
 					if ui.layout(background_color = get_random_color()) {
-						ui.text(content = fmt.tprintf("Allocated: %d bytes", track.current_memory_allocated))
+						ui.text(
+							content = fmt.tprintf("Allocated: %.2f KB", f32(track.current_memory_allocated) / 1024),
+						)
 						ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
 					}
 				}
 			}
+			// fmt.printfln("len: %v", len(ui_ctx.ids))
+			// fmt.printfln("%#v", ui_ctx.ids)
 		}
-
 		ui.render_commands(&ui_ctx)
+	}
+}
+
+scroll_ui :: proc(loc := #caller_location) {
+	if ui.layout(
+		width = ui.grow(),
+		height = ui.grow(),
+		background_color = get_random_color(),
+		clip = true,
+		scroll = true,
+		loc = loc,
+	) {
+		if ui.layout(width = ui.grow(), height = ui.fit(), layout_direction = .Top_To_Bottom, padding = {}) {
+			for i in 0 ..< 20 {
+				if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
+					ui.text(fmt.tprint(i), alignment = {.Center, .Center}, color = get_random_color(-0.25, true))
+				}
+			}
+		}
 	}
 }
 
