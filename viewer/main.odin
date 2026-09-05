@@ -83,42 +83,92 @@ main :: proc() {
 		rl.ClearBackground(rl.RAYWHITE)
 
 		if ui.begin_layout(&ui_ctx, f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())) {
-			for i in 0 ..< 2 {
-				scroll_ui()
-			}
+			scroll_ui()
 
 			when ODIN_DEBUG {
-				if ui.layout(width = ui.grow(), background_color = get_random_color()) {
-					if ui.layout(width = ui.grow()) {}
-					if ui.layout(background_color = get_random_color()) {
-						ui.text(
-							content = fmt.tprintf("Allocated: %.2f KB", f32(track.current_memory_allocated) / 1024),
-						)
-						ui.text(content = fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
+				if ui.layout().config(width = ui.grow(), background_color = get_random_color()) {
+					if ui.layout().config(width = ui.grow()) {}
+					if ui.layout().config(background_color = get_random_color()) {
+						ui.text().config(fmt.tprintf("Allocated: %.2f KB", f32(track.current_memory_allocated) / 1024))
+						ui.text().config(fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
 					}
 				}
 			}
-			// fmt.printfln("len: %v", len(ui_ctx.ids))
-			// fmt.printfln("%#v", ui_ctx.ids)
 		}
+
 		ui.render_commands(&ui_ctx)
 	}
 }
 
 scroll_ui :: proc(loc := #caller_location) {
-	if ui.layout(
+	if ui.layout(loc = loc).config(
 		width = ui.grow(),
 		height = ui.grow(),
 		background_color = get_random_color(),
 		clip = true,
 		scroll = true,
-		loc = loc,
+		padding = {},
 	) {
-		if ui.layout(width = ui.grow(), height = ui.fit(), layout_direction = .Top_To_Bottom, padding = {}) {
-			for i in 0 ..< 20 {
-				if ui.layout(width = ui.grow(), height = ui.fit(), background_color = get_random_color()) {
-					ui.text(fmt.tprint(i), alignment = {.Center, .Center}, color = get_random_color(-0.25, true))
+		if ui.layout().config(width = ui.grow(), height = ui.fit()) {
+			if ui.layout().config(
+				width = ui.grow(),
+				height = ui.fit(),
+				layout_direction = .Top_To_Bottom,
+				padding = {},
+			) {
+				for i in 1 ..= 20 {
+					if ui.layout().config(
+						width = ui.grow(),
+						height = ui.fit(),
+						background_color = get_random_color(),
+					) {
+						ui.text().config(
+							fmt.tprint(i),
+							alignment = {.Center, .Center},
+							color = get_random_color(-0.25, true),
+						)
+					}
 				}
+			}
+		}
+
+		scroll_data := ui.current_scroll_data()
+		scroll_normalized_offset: rl.Vector2 = {
+			scroll_data.min_offset.x < 0 ? scroll_data.offset.x / scroll_data.min_offset.x : 0,
+			scroll_data.min_offset.y < 0 ? scroll_data.offset.y / scroll_data.min_offset.y : 0,
+		}
+
+		SCROLL_THUMB_WIDTH :: 32
+		SCROLL_THUMB_MAX_HEIGHT :: 64
+		SCROLL_THUMB_PERCENT_HEIGHT :: .5
+		scroll_thumb_size: rl.Vector2 = {
+			SCROLL_THUMB_WIDTH,
+			min(SCROLL_THUMB_PERCENT_HEIGHT * scroll_data.view_size.y, SCROLL_THUMB_MAX_HEIGHT),
+		}
+
+		scroll_bar_id := ui.local_id("scroll_bar")
+		scroll_thumb_id := ui.local_id("scroll_thumb")
+
+		if ui.mouse_state_by_id(scroll_thumb_id) == .Down {
+			scroll_normalized_offset.y += rl.GetMouseDelta().y / (scroll_data.view_size.y - scroll_thumb_size.y)
+			scroll_normalized_offset.y = clamp(scroll_normalized_offset.y, 0, 1)
+			ui.set_scroll_offset(scroll_normalized_offset * scroll_data.min_offset)
+		}
+
+		if ui.layout(scroll_bar_id).config(
+			width = ui.fit(),
+			height = ui.grow(),
+			background_color = get_random_color(),
+			ignore_scroll = true,
+			padding = {},
+			child_alignment = {0, scroll_normalized_offset.y},
+		) {
+			if ui.layout(scroll_thumb_id).config(
+				width = ui.fixed(SCROLL_THUMB_WIDTH),
+				height = ui.percent(SCROLL_THUMB_PERCENT_HEIGHT, nil, SCROLL_THUMB_MAX_HEIGHT),
+				background_color = ui.mouse_state() == .Hover ? get_random_color(0.1) : get_random_color(),
+			) {
+
 			}
 		}
 	}

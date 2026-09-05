@@ -1,14 +1,26 @@
 package main
 
 import "core:fmt"
-Union :: union {
-	f32,
-	i32,
+
+@(deferred_none = end_func)
+func :: proc() -> bool {
+	fmt.println("Start func")
+	return true
+}
+
+end_func :: proc() {
+	fmt.println("End func")
+}
+
+Func_Struct :: struct {
+	func_field: type_of(func),
 }
 
 main :: proc() {
-	fmt.println("Hello World")
-	u: Union = i32(2)
-	uf := u.(f32)
-	fmt.printfln("Value %v", uf)
+	func_struct: Func_Struct = {
+		func_field = func,
+	}
+	if func_struct.func_field() {
+		fmt.println("Body")
+	}
 }

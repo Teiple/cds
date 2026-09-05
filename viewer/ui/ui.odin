@@ -1,17 +1,17 @@
 package ui
 
 import "base:runtime"
+import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:os"
-import "core:slice"
 import "core:unicode/utf8"
 import rl "vendor:raylib"
 
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
 @(private = "file")
-current_context: ^UI_Context
+builder: UI_Builder
 
 Axis :: enum {
 	X,
@@ -41,8 +41,16 @@ UI_Input :: struct {
 UI_Input_Event :: struct {
 	mouse_captured:   bool,
 	scroll_captured:  bool,
-	hovered_elements: [dynamic]UI_Index,
-	scrolls:          map[u32]rl.Vector2,
+	hovered_elements: [dynamic]u32,
+	scrolls:          map[u32]UI_Scroll_Data,
+}
+
+UI_Scroll_Data :: struct #all_or_none {
+	offset:         rl.Vector2,
+	content_size:   rl.Vector2,
+	min_offset:     rl.Vector2,
+	view_size:      rl.Vector2,
+	pending_offset: Maybe(rl.Vector2),
 }
 
 UI_ClipData :: struct {
@@ -56,7 +64,7 @@ UI_Layout_Mouse_Event_Callbacks :: struct {
 	on_hover:    proc(),
 }
 
-UI_Measure_Text :: proc(text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
+UI_Measure_Text :: proc(draw_text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
 
 Render_Command :: union {
 	Rect_Command,
@@ -69,7 +77,6 @@ Rect_Command :: struct #all_or_none {
 	rect:          rl.Rectangle,
 	color:         rl.Color,
 	corner_radius: rl.Vector4,
-	shadow:        Shadow_Config,
 	border:        Border_Config,
 }
 
@@ -104,6 +111,11 @@ UI_Font_Config :: struct {
 Mask_Shader :: struct {
 	shader:         rl.Shader,
 	mask_rectangle: i32,
+}
+
+UI_Builder :: struct {
+	current_context: ^UI_Context,
+	last_id:         u32,
 }
 
 UI_Context :: struct {
@@ -163,20 +175,16 @@ Layout_Padding :: struct {
 }
 
 Alignment :: struct {
-	x: Alignment_X,
-	y: Alignment_Y,
+	x: union {
+		f32,
+		Alignment_X,
+	},
+	y: union {
+		f32,
+		Alignment_Y,
+	},
 }
 
-NormalizedAlignment :: enum {
-	Start,
-	Center,
-	End,
-}
-
-NormalizedEnd :: enum {
-	Start,
-	End,
-}
 
 Alignment_X :: enum {
 	Left,
@@ -205,6 +213,11 @@ Shadow_Config :: struct #all_or_none {
 	offset:  rl.Vector2,
 }
 
+NormalizedEnd :: enum {
+	Start,
+	End,
+}
+
 UI_Link :: struct {
 	parent: UI_Index,
 	next:   Maybe(UI_Index),
@@ -218,17 +231,19 @@ UI_Layout_Config :: struct {
 	padding:          Layout_Padding,
 	child_gap:        f32,
 	layout_direction: Layout_Direction,
-	child_alignment:  Alignment,
+	child_alignment:  rl.Vector2,
 	background_color: rl.Color,
 	corner_radius:    f32,
 	border:           Border_Config,
-	shadow:           Shadow_Config,
 	mouse_mode:       UI_Layout_Mouse_Mode,
 	callbacks:        UI_Layout_Mouse_Event_Callbacks,
 	clip:             bool,
 	scroll:           bool,
+	ignore_scroll:    bool,
 	float:            UI_Float,
+	offset:           rl.Vector2,
 }
+
 
 UI_Float :: union {
 	Float_None,
@@ -276,7 +291,7 @@ UI_Text_Config :: struct {
 	font_size:    f32,
 	color:        rl.Color,
 	line_spacing: f32,
-	alignment:    Alignment,
+	alignment:    rl.Vector2,
 }
 
 UI_Element :: struct {
@@ -320,7 +335,8 @@ Child_Iter :: struct {
 	next: Maybe(UI_Index),
 }
 
-dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
+@(private = "file")
+push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 	// collisions may due to for loops or procedure calls
 	// procedure calls must set the loc manually, this only handle for loops
 
@@ -351,11 +367,22 @@ dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 }
 
 @(private = "file")
+push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
+	_, existed := ctx.ids[id]
+	if existed {
+		panic("Duplicate ids without manualy using dedupe")
+	}
+	ctx.ids[id] = {
+		base       = id,
+		index      = index,
+		loop_count = 1,
+	}
+}
+
+@(private = "file")
 open_layout :: proc(ctx: ^UI_Context, id: u32, config: UI_Layout_Config, limits: UI_Limits) -> bool {
 	parent := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
-
-	id := dedupe_id(ctx, index, id)
 
 	ui_ele := UI_Element {
 		id = id,
@@ -384,8 +411,6 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	parent_idx := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
 
-	id := dedupe_id(ctx, index, id)
-
 	ui_ele := UI_Element {
 		id = id,
 		attributes = Text_Attributes{config = config, element = index},
@@ -408,7 +433,7 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 }
 
 @(private = "file")
-close_layout :: proc(ctx: ^UI_Context) {
+close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
 	fit_sizing(ctx, index, .X)
@@ -879,14 +904,8 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		if ele_get_size(current, axis) > text_get_preferred(text_attr, axis) {
 			remaining := ele_get_size(current, axis) - text_get_preferred(text_attr, axis)
 
-			switch align_get_norm(text_attr.config.alignment, axis) {
-			case .Start:
-				break
-			case .Center:
-				ele_set_pos(current, ele_get_pos(current, axis) + remaining * 0.5, axis)
-			case .End:
-				ele_set_pos(current, ele_get_pos(current, axis) + remaining, axis)
-			}
+			align_offset := remaining * align_get_offset(text_attr.config.alignment, axis)
+			ele_set_pos(current, ele_get_pos(current, axis) + align_offset, axis)
 		}
 
 		// We cheat here, reset text size to its instrinsic size, since aligment may move the excessive size
@@ -897,8 +916,8 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		return
 	}
 
-	scroll_offset_v := ctx.input_event.scrolls[current.id]
-	scroll_offset := axis == .X ? scroll_offset_v.x : scroll_offset_v.y
+	scroll_data := ctx.input_event.scrolls[current.id]
+	scroll_offset := axis == .X ? scroll_data.offset.x : scroll_data.offset.y
 	offset := ele_get_pos(current, axis) + layout_get_pad_at(layout, axis, .Start) + scroll_offset
 
 	if layout_is_along(layout, axis) {
@@ -914,30 +933,23 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 			remaining -= f32(child_count - 1) * layout.config.child_gap
 		}
 
-		switch align_get_norm(layout.config.child_alignment, axis) {
-		case .Start:
-			break
-		case .Center:
-			offset += remaining * 0.5
-		case .End:
-			offset += remaining
-		}
+		offset += remaining * align_get_offset(layout.config.child_alignment, axis)
 	}
 
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
-		ele_set_pos(child, offset, axis)
+		child_layout, is_child_layout := child.attributes.(Layout_Attributes)
+		child_offset :=
+			offset +
+			(is_child_layout ? ((child_layout.config.ignore_scroll ? -scroll_offset : 0) + layout_get_final_offset(child_layout, axis)) : 0)
+
+		ele_set_pos(child, child_offset, axis)
 
 		if layout_is_across(layout, axis) {
 			remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis) - ele_get_size(child, axis)
 
-			switch align_get_norm(layout.config.child_alignment, axis) {
-			case .Start:
-				break
-			case .Center:
-				ele_set_pos(child, ele_get_pos(child, axis) + remaining * 0.5, axis)
-			case .End:
-				ele_set_pos(child, ele_get_pos(child, axis) + remaining, axis)
-			}
+			align_offset := remaining * align_get_offset(layout.config.child_alignment, axis)
+
+			ele_set_pos(child, ele_get_pos(child, axis) + align_offset, axis)
 		} else {
 			offset += ele_get_size(child, axis) + layout.config.child_gap
 		}
@@ -995,8 +1007,8 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		mask_shader = load_mask_shader(),
 		input_event = {
 			mouse_captured = false,
-			hovered_elements = make([dynamic]i32, 0, 4),
-			scrolls = make(map[u32]rl.Vector2, 4),
+			hovered_elements = make([dynamic]u32, 0, 4),
+			scrolls = make(map[u32]UI_Scroll_Data, 4),
 		},
 		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
 		ids = make(map[u32]UI_Id_Entry, 50),
@@ -1025,7 +1037,7 @@ context_delete :: proc(ctx: UI_Context) {
 
 @(require_results, deferred_in_out = end_layout)
 begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) -> bool {
-	current_context = ctx
+	builder.current_context = ctx
 
 	ctx.screen_size = {screen_width, screen_height}
 
@@ -1077,12 +1089,11 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	case Layout_Attributes:
 		append(
 			&ctx.render_commands,
-			Rect_Command {
+			Rect_Command{
 				rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
 				color = attr.config.background_color,
 				corner_radius = attr.config.corner_radius,
 				border = attr.config.border,
-				shadow = attr.config.shadow,
 			},
 		)
 		if attr.config.clip {
@@ -1094,7 +1105,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	case Text_Attributes:
 		append(
 			&ctx.render_commands,
-			Text_Command {
+			Text_Command{
 				content = attr.config.content,
 				font = ctx.fonts[attr.config.font_index].font,
 				font_size = attr.config.font_size,
@@ -1158,32 +1169,35 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 			clipped_rect: rl.Rectangle = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
-			if len(ctx.clip.open_clip_stack) > 0 {
-				clipped_rect = intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
-			}
-
-			if rect_contains(ctx.input.mouse_position, clipped_rect) {
-				switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
-				case .Hover:
-					if callbacks.on_hover != nil do callbacks.on_hover()
-				case .Pressed:
-					if callbacks.on_pressed != nil do callbacks.on_pressed()
-				case .Down:
-					if callbacks.on_down != nil do callbacks.on_down()
-				case .Released:
-					if callbacks.on_released != nil do callbacks.on_released()
-				case .None:
-					break
+			if !ctx.input_event.mouse_captured {
+				if len(ctx.clip.open_clip_stack) > 0 {
+					clipped_rect = intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
 				}
 
-				append(&ctx.input_event.hovered_elements, index)
+				if rect_contains(ctx.input.mouse_position, clipped_rect) {
+					switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
+					case .Hover:
+						if callbacks.on_hover != nil do callbacks.on_hover()
+					case .Pressed:
+						if callbacks.on_pressed != nil do callbacks.on_pressed()
+					case .Down:
+						if callbacks.on_down != nil do callbacks.on_down()
+					case .Released:
+						if callbacks.on_released != nil do callbacks.on_released()
+					case .None:
+						break
+					}
 
-				if layout.config.mouse_mode == .Capture {
-					ctx.input_event.mouse_captured = true
+					append(&ctx.input_event.hovered_elements, ele.id)
+
+					if layout.config.mouse_mode == .Capture {
+						ctx.input_event.mouse_captured = true
+					}
 				}
 			}
 
-			if layout.config.scroll && !ctx.input_event.scroll_captured {
+
+			if !ctx.input_event.scroll_captured && layout.config.scroll {
 				mouse_position := ctx.input.mouse_position
 
 				ele_rect := ele_get_rect(ele)
@@ -1195,28 +1209,23 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 				}
 
 				if rect_contains(ctx.input.mouse_position, clipped_rect) {
-					cur_scroll := ctx.input_event.scrolls[ele.id]
-					next_scroll := cur_scroll + rl.GetMouseWheelMoveV() * 20.0
+					content_size: rl.Vector2 = {layout_get_content_size(ctx, index, layout, .X), layout_get_content_size(ctx, index, layout, .Y)}
+					min_offset: rl.Vector2 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
 
-					content_height: f32 = 0
-					if layout.config.layout_direction == .Top_To_Bottom {
-						child_count: i32 = 0
-						for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-							content_height += child.size.y
-							child_count += 1
-						}
-						content_height += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
-					} else {
-						max_height: f32 = 0
-						for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-							max_height = max(max_height, child.size.y)
-						}
-						content_height += max_height
+					cur_scroll := ctx.input_event.scrolls[ele.id]
+					pending_offset, is_pending := cur_scroll.pending_offset.?
+					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + rl.GetMouseWheelMoveV() * 20.0
+
+					next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
+
+					ctx.input_event.scrolls[ele.id] = {
+						offset         = next_scroll_offset,
+						pending_offset = nil,
+						content_size   = content_size,
+						min_offset     = min_offset,
+						view_size      = ele.size,
 					}
 
-					next_scroll.y = clamp(next_scroll.y, -(content_height - (ele.size.y - layout_get_pad(layout, .Y))), 0)
-
-					ctx.input_event.scrolls[ele.id] = next_scroll
 					ctx.input_event.scroll_captured = true
 				}
 			}
@@ -1252,7 +1261,6 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 		limits = {},
 		attributes = Layout_Attributes {
 			config = UI_Layout_Config {
-				child_alignment = {x = .Left, y = .Top},
 				child_gap = 8,
 				width = Fixed_Size{width},
 				height = Fixed_Size{height},
@@ -1267,7 +1275,6 @@ root_layout :: proc(width: f32, height: f32) -> UI_Element {
 @(private = "file")
 default_layout :: proc() -> UI_Layout_Config {
 	return UI_Layout_Config {
-		child_alignment = {x = .Left, y = .Top},
 		child_gap = 8,
 		width = Fit_Size{},
 		height = Fit_Size{},
@@ -1276,19 +1283,12 @@ default_layout :: proc() -> UI_Layout_Config {
 		background_color = {},
 		corner_radius = 0,
 		border = {thickness = 0, color = rl.BLACK},
-		shadow = {enabled = false, radius = 4, color = rl.ColorAlpha(rl.BLACK, 0.25), offset = {2, 2}},
 	}
 }
 
 @(private = "file")
 default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
-	return UI_Text_Config {
-		font_index = 0,
-		font_size = 16,
-		line_spacing = 4,
-		color = rl.BLACK,
-		alignment = {.Left, .Top},
-	}
+	return UI_Text_Config{font_index = 0, font_size = 16, line_spacing = 4, color = rl.BLACK}
 }
 
 @(private = "file")
@@ -1350,6 +1350,26 @@ layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 }
 
 @(private = "file")
+layout_get_content_size :: proc(ctx: ^UI_Context, index: UI_Index, layout: Layout_Attributes, axis: Axis) -> f32 {
+	content_size: f32 = 0
+	if layout_is_along(layout, axis) {
+		child_count: i32 = 0
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			content_size += ele_get_size(child, axis)
+			child_count += 1
+		}
+		content_size += child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
+	} else {
+		max_size: f32 = 0
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			max_size = max(max_size, ele_get_size(child, axis))
+		}
+		content_size += max_size
+	}
+	return content_size
+}
+
+@(private = "file")
 layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: NormalizedEnd) -> f32 {
 	return(
 		axis == .X ? (end == .Start ? layout.config.padding.left : layout.config.padding.right) : (end == .Start ? layout.config.padding.top : layout.config.padding.bottom) \
@@ -1385,6 +1405,11 @@ layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	return(
 		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
 	)
+}
+
+@(private = "file")
+layout_get_final_offset :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
+	return axis == .X ? layout.config.offset.x : layout.config.offset.y
 }
 
 @(private = "file")
@@ -1448,35 +1473,14 @@ text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 }
 
 @(private = "file")
-align_get_norm :: proc(aligment: Alignment, axis: Axis) -> NormalizedAlignment {
-	if axis == .X {
-		switch aligment.x {
-		case .Left:
-			return .Start
-		case .Center:
-			return .Center
-		case .Right:
-			return .End
-		}
-	} else {
-		switch aligment.y {
-		case .Top:
-			return .Start
-		case .Center:
-			return .Center
-		case .Bottom:
-			return .End
-		}
-	}
-	return .Start
+align_get_offset :: proc(alignment: rl.Vector2, axis: Axis) -> f32 {
+	return axis == .X ? alignment.x : alignment.y
 }
 
 BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
-SHADOW_DEFAULT: Shadow_Config : {enabled = false, radius = 8, offset = {0, 0}, color = {0, 0, 0, 100}}
 
-@(deferred_none = close_layout_deffered, require_results)
-layout :: proc(
-	id: Maybe(u32) = nil,
+@(require_results, private = "file")
+draw_layout :: proc(
 	width: Sizing_Axis = {mode = Fit_Size{}},
 	height: Sizing_Axis = {mode = Fit_Size{}},
 	padding: Layout_Padding = {8, 8, 8, 8},
@@ -1486,34 +1490,35 @@ layout :: proc(
 	background_color: rl.Color = {},
 	corner_radius: f32 = 8,
 	border: Border_Config = BORDER_DEFAULT,
-	shadow: Shadow_Config = SHADOW_DEFAULT,
 	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
 	callbacks: UI_Layout_Mouse_Event_Callbacks = {},
 	clip: bool = false,
 	scroll: bool = false,
-	loc := #caller_location,
+	ignore_scroll: bool = false,
+	float: UI_Float = Float_None{},
+	offset: rl.Vector2 = {},
 ) -> bool {
-	parent_hash := current_context.elements[back(current_context.open_layout_stack)].id
-	layout_id := id.? or_else hash_loc(parent_hash, loc)
-
 	return open_layout(
-		current_context,
-		layout_id,
+		builder.current_context,
+		builder.last_id,
 		{
 			width = width.mode,
 			height = height.mode,
 			padding = padding,
 			child_gap = child_gap,
 			layout_direction = layout_direction,
-			child_alignment = child_alignment,
+			child_alignment = get_alignment_offset(child_alignment),
 			background_color = background_color,
 			corner_radius = corner_radius,
 			mouse_mode = mouse_mode,
-			border = border,
-			shadow = shadow,
+			// debug
+			border = {thickness = 2, color = rl.ColorBrightness(background_color, -0.15)},
 			callbacks = callbacks,
 			clip = clip,
 			scroll = scroll,
+			float = float,
+			ignore_scroll = ignore_scroll,
+			offset = offset,
 		},
 		{x = {min = width.min, max = width.max}, y = {min = height.min, max = height.max}},
 	)
@@ -1521,12 +1526,12 @@ layout :: proc(
 
 @(private = "file")
 close_layout_deffered :: proc() {
-	close_layout(current_context)
+	close_layout(builder.current_context)
 }
 
-text :: proc(
-	content: string = "",
-	id: Maybe(u32) = nil,
+@(private = "file")
+draw_text :: proc(
+	content: string,
 	font_index: Font_Index = 0,
 	font_size: f32 = 16,
 	color: rl.Color = {0, 0, 0, 255},
@@ -1534,19 +1539,16 @@ text :: proc(
 	alignment: Alignment = {x = .Left, y = .Top},
 	loc := #caller_location,
 ) -> bool {
-	parent_hash := current_context.elements[back(current_context.open_layout_stack)].id
-	text_id := id.? or_else hash_loc(parent_hash, loc)
-
 	open_text(
-		current_context,
-		text_id,
+		builder.current_context,
+		builder.last_id,
 		{
 			content = content,
 			font_index = font_index,
 			font_size = font_size,
 			color = color,
 			line_spacing = line_spacing,
-			alignment = alignment,
+			alignment = get_alignment_offset(alignment),
 		},
 	)
 	return true
@@ -1572,41 +1574,85 @@ pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
 }
 
-shadow :: #force_inline proc(
-	radius := SHADOW_DEFAULT.radius,
-	color := SHADOW_DEFAULT.color,
-	offset := SHADOW_DEFAULT.offset,
-) -> Shadow_Config {
-	return {enabled = true, radius = radius, color = color, offset = offset}
-}
-
 mouse_state :: proc() -> UI_Mouse_State {
-	return get_layout_mouse_state(current_context^)
+	return get_layout_mouse_state_by_id(builder.current_context^, builder.last_id)
 }
 
-mouse_state_ahead :: proc() -> UI_Mouse_State {
-	return get_layout_mouse_state_ahead(current_context^)
+mouse_state_by_id :: proc(id: u32) -> UI_Mouse_State {
+	return get_layout_mouse_state_by_id(builder.current_context^, id)
 }
 
-layout_hash :: proc() -> u32 {
-	return get_layout_hash(current_context^)
+current_scroll_data :: proc() -> UI_Scroll_Data {
+	return get_layout_scroll_data(builder.current_context^)
 }
 
+set_scroll_offset :: proc(scroll: rl.Vector2) {
+	set_layout_scroll_offset(builder.current_context, scroll)
+}
+
+// Internal ultilities
 @(private = "file")
-get_layout_hash :: proc(ctx: UI_Context) -> u32 {
+set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: rl.Vector2) {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
-	return ctx.elements[open_ele].id
+	scroll := ctx.input_event.scrolls[ctx.elements[open_ele].id]
+	scroll.pending_offset = new_scroll
+
+	ctx.input_event.scrolls[ctx.elements[open_ele].id] = scroll
 }
 
 @(private = "file")
-get_layout_mouse_state :: proc(ctx: UI_Context) -> UI_Mouse_State {
-	open_ele := back(ctx.open_layout_stack)
-	return slice.contains(ctx.input_event.hovered_elements[:], open_ele) ? ctx.input.mouse_state : .None
+get_layout_scroll_data :: proc(ctx: UI_Context) -> UI_Scroll_Data {
+	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
+	return ctx.input_event.scrolls[ctx.elements[open_ele].id]
+}
+
+
+@(private = "file")
+get_layout_mouse_state_by_id :: proc(ctx: UI_Context, id: u32) -> UI_Mouse_State {
+	for ele_id in ctx.input_event.hovered_elements {
+		if ele_id == id {
+			return ctx.input.mouse_state
+		}
+	}
+	return .None
 }
 
 @(private = "file")
-get_layout_mouse_state_ahead :: proc(ctx: UI_Context) -> UI_Mouse_State {
-	return slice.contains(ctx.input_event.hovered_elements[:], i32(len(ctx.elements))) ? ctx.input.mouse_state : .None
+get_alignment_offset :: proc(alignment: Alignment) -> rl.Vector2 {
+	offset: rl.Vector2
+	switch variant in alignment.x {
+	case Alignment_X:
+		{
+			switch variant {
+			case .Left:
+				offset.x = 0
+			case .Center:
+				offset.x = .5
+			case .Right:
+				offset.x = 1
+			}
+		}
+	case f32:
+		offset.x = variant
+	}
+
+	switch variant in alignment.y {
+	case Alignment_Y:
+		{
+			switch variant {
+			case .Top:
+				offset.y = 0
+			case .Center:
+				offset.y = .5
+			case .Bottom:
+				offset.y = 1
+			}
+		}
+	case f32:
+		offset.y = variant
+	}
+
+	return offset
 }
 
 @(private, require_results)
@@ -1632,7 +1678,7 @@ back :: proc(arr: [dynamic]$T) -> T {
 	return arr[len(arr) - 1]
 }
 
-hash_loc :: proc(parent_hash: u32, loc: runtime.Source_Code_Location) -> u32 {
+auto_id_hash :: proc(parent_hash: u32, loc: runtime.Source_Code_Location) -> u32 {
 	line := transmute([4]u8)loc.line
 	column := transmute([4]u8)loc.column
 	h: u32 = parent_hash
@@ -1642,7 +1688,70 @@ hash_loc :: proc(parent_hash: u32, loc: runtime.Source_Code_Location) -> u32 {
 	return h
 }
 
-named_id :: proc(id: string) -> u32 {
-	h := hash.adler32(transmute([]u8)id)
-	return h
+@(require_results)
+global_id :: proc(id: string) -> u32 {
+	id := hash.adler32(transmute([]u8)id)
+
+	return id
+}
+
+@(require_results)
+local_id :: proc(id: string) -> u32 {
+	parent_hash := builder.current_context.elements[back(builder.current_context.open_layout_stack)].id
+	id := hash.adler32(transmute([]u8)id, parent_hash)
+
+	return id
+}
+
+@(require_results)
+family_id :: proc(id: string, owner: string) -> u32 {
+	parent_hash := builder.current_context.elements[back(builder.current_context.open_layout_stack)].id
+	id := hash.adler32(transmute([]u8)id, parent_hash)
+
+	return id
+}
+
+@(private = "file")
+declare_id :: proc(id: Maybe(u32) = nil, loc := #caller_location) {
+	index := i32(len(builder.current_context.elements))
+
+	new_id: u32
+	if id == nil {
+		parent_hash := builder.current_context.elements[back(builder.current_context.open_layout_stack)].id
+		new_id = auto_id_hash(parent_hash, loc)
+		push_and_dedupe_id(builder.current_context, index, new_id)
+
+	} else {
+		new_id = id.?
+		push_id(builder.current_context, index, new_id)
+	}
+
+	builder.last_id = new_id
+}
+
+UI_Element_Builder :: struct($T: typeid) {
+	config: T,
+}
+
+
+@(deferred_none = end_declare_layout)
+layout :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Builder(type_of(draw_layout)) {
+	declare_id(id, loc)
+	return {draw_layout}
+}
+
+text :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Builder(type_of(draw_text)) {
+	declare_id(id, loc)
+	return {draw_text}
+}
+
+
+@(private = "file")
+end_declare_layout :: proc() {
+	close_layout(builder.current_context)
+}
+
+
+last_id :: proc() -> u32 {
+	return builder.last_id
 }
