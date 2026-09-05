@@ -18,12 +18,22 @@ Axis :: enum {
 	Y,
 }
 
+UI_Layout_Mouse_State :: enum {
+	Away,
+	Pressed,
+	Down,
+	Released,
+	Hovered,
+	PressedAway,
+	DownAway,
+	ReleasedAway,
+}
+
 UI_Mouse_State :: enum {
 	None,
 	Pressed,
 	Down,
 	Released,
-	Hover,
 }
 
 UI_Layout_Mouse_Mode :: enum {
@@ -39,10 +49,12 @@ UI_Input :: struct {
 }
 
 UI_Input_Event :: struct {
-	mouse_captured:   bool,
-	scroll_captured:  bool,
-	hovered_elements: [dynamic]u32,
-	scrolls:          map[u32]UI_Scroll_Data,
+	mouse_captured:    bool,
+	scroll_captured:   bool,
+	selected_once:     bool,
+	hovered_elements:  [dynamic]u32,
+	selected_elements: [dynamic]u32,
+	scrolls:           map[u32]UI_Scroll_Data,
 }
 
 UI_Scroll_Data :: struct #all_or_none {
@@ -61,7 +73,7 @@ UI_Layout_Mouse_Event_Callbacks :: struct {
 	on_pressed:  proc(),
 	on_released: proc(),
 	on_down:     proc(),
-	on_hover:    proc(),
+	on_hovered:  proc(),
 }
 
 UI_Measure_Text :: proc(draw_text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
@@ -335,7 +347,7 @@ Child_Iter :: struct {
 	next: Maybe(UI_Index),
 }
 
-@(private = "file")
+@(private = "file", require_results)
 push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 	// collisions may due to for loops or procedure calls
 	// procedure calls must set the loc manually, this only handle for loops
@@ -1008,6 +1020,7 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		input_event = {
 			mouse_captured = false,
 			hovered_elements = make([dynamic]u32, 0, 4),
+			selected_elements = make([dynamic]u32, 0, 4),
 			scrolls = make(map[u32]UI_Scroll_Data, 4),
 		},
 		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
@@ -1030,6 +1043,7 @@ context_delete :: proc(ctx: UI_Context) {
 	rl.UnloadShader(ctx.mask_shader.shader)
 
 	delete(ctx.input_event.hovered_elements)
+	delete(ctx.input_event.selected_elements)
 	delete(ctx.input_event.scrolls)
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
@@ -1133,10 +1147,11 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 	ctx.input.mouse_position = rl.GetMousePosition()
 	ctx.input.mouse_state =
-		rl.IsMouseButtonPressed(MOUSE_BTN) ? .Pressed : (rl.IsMouseButtonDown(MOUSE_BTN) ? .Down : (rl.IsMouseButtonReleased(MOUSE_BTN) ? .Released : .Hover))
+		rl.IsMouseButtonPressed(MOUSE_BTN) ? .Pressed : (rl.IsMouseButtonDown(MOUSE_BTN) ? .Down : (rl.IsMouseButtonReleased(MOUSE_BTN) ? .Released : .None))
 
 	ctx.input_event.mouse_captured = false
 	ctx.input_event.scroll_captured = false
+	ctx.input_event.selected_once = false
 	clear(&ctx.input_event.hovered_elements)
 	clear(&ctx.clip.open_clip_stack)
 
@@ -1176,16 +1191,22 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 
 				if rect_contains(ctx.input.mouse_position, clipped_rect) {
 					switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
-					case .Hover:
-						if callbacks.on_hover != nil do callbacks.on_hover()
+					case .None:
+						if callbacks.on_hovered != nil do callbacks.on_hovered()
 					case .Pressed:
-						if callbacks.on_pressed != nil do callbacks.on_pressed()
+						{
+							if callbacks.on_pressed != nil do callbacks.on_pressed()
+
+							if !ctx.input_event.selected_once {
+								clear(&ctx.input_event.selected_elements)
+								ctx.input_event.selected_once = true
+							}
+							append(&ctx.input_event.selected_elements, ele.id)
+						}
 					case .Down:
 						if callbacks.on_down != nil do callbacks.on_down()
 					case .Released:
 						if callbacks.on_released != nil do callbacks.on_released()
-					case .None:
-						break
 					}
 
 					append(&ctx.input_event.hovered_elements, ele.id)
@@ -1574,12 +1595,27 @@ pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
 }
 
-mouse_state :: proc() -> UI_Mouse_State {
+mouse_state_on_this :: proc() -> UI_Layout_Mouse_State {
 	return get_layout_mouse_state_by_id(builder.current_context^, builder.last_id)
 }
 
-mouse_state_by_id :: proc(id: u32) -> UI_Mouse_State {
+mouse_state_on_id :: proc(id: u32) -> UI_Layout_Mouse_State {
 	return get_layout_mouse_state_by_id(builder.current_context^, id)
+}
+
+mouse_state :: proc() -> UI_Mouse_State {
+	return builder.current_context.input.mouse_state
+}
+
+is_id_selected :: proc(id: u32) -> bool {
+	for ele_id in builder.current_context.input_event.selected_elements {
+		if ele_id == id do return true
+	}
+	return false
+}
+
+is_this_selected :: proc() -> bool {
+	return is_id_selected(builder.last_id)
 }
 
 current_scroll_data :: proc() -> UI_Scroll_Data {
@@ -1608,13 +1644,32 @@ get_layout_scroll_data :: proc(ctx: UI_Context) -> UI_Scroll_Data {
 
 
 @(private = "file")
-get_layout_mouse_state_by_id :: proc(ctx: UI_Context, id: u32) -> UI_Mouse_State {
+get_layout_mouse_state_by_id :: proc(ctx: UI_Context, id: u32) -> UI_Layout_Mouse_State {
 	for ele_id in ctx.input_event.hovered_elements {
 		if ele_id == id {
-			return ctx.input.mouse_state
+			switch ctx.input.mouse_state {
+			case .None:
+				return .Hovered
+			case .Pressed:
+				return .Pressed
+			case .Down:
+				return .Down
+			case .Released:
+				return .Released
+			}
 		}
 	}
-	return .None
+	switch ctx.input.mouse_state {
+	case .None:
+		return .Away
+	case .Pressed:
+		return .PressedAway
+	case .Down:
+		return .DownAway
+	case .Released:
+		return .ReleasedAway
+	}
+	return .Away
 }
 
 @(private = "file")
@@ -1719,7 +1774,7 @@ declare_id :: proc(id: Maybe(u32) = nil, loc := #caller_location) {
 	if id == nil {
 		parent_hash := builder.current_context.elements[back(builder.current_context.open_layout_stack)].id
 		new_id = auto_id_hash(parent_hash, loc)
-		push_and_dedupe_id(builder.current_context, index, new_id)
+		new_id = push_and_dedupe_id(builder.current_context, index, new_id)
 
 	} else {
 		new_id = id.?

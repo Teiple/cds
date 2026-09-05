@@ -47,7 +47,7 @@ main :: proc() {
 	)
 	defer ui.context_delete(ui_ctx)
 
-	fetch_pallete_colors(&debug_palette, "assets/images/colors.png", 2, 16)
+	fetch_palette_colors(&debug_palette, "assets/images/colors.png", 2, 16)
 
 	interval: f32 = 1.0
 	interval_sum_fps: f32 = 0
@@ -104,30 +104,23 @@ scroll_ui :: proc(loc := #caller_location) {
 	if ui.layout(loc = loc).config(
 		width = ui.grow(),
 		height = ui.grow(),
-		background_color = get_random_color(),
 		clip = true,
 		scroll = true,
 		padding = {},
+		child_gap = 0,
 	) {
-		if ui.layout().config(width = ui.grow(), height = ui.fit()) {
-			if ui.layout().config(
-				width = ui.grow(),
-				height = ui.fit(),
-				layout_direction = .Top_To_Bottom,
-				padding = {},
-			) {
-				for i in 1 ..= 20 {
-					if ui.layout().config(
-						width = ui.grow(),
-						height = ui.fit(),
-						background_color = get_random_color(),
-					) {
-						ui.text().config(
-							fmt.tprint(i),
-							alignment = {.Center, .Center},
-							color = get_random_color(-0.25, true),
-						)
-					}
+		if ui.layout().config(width = ui.grow(), height = ui.fit(), layout_direction = .Top_To_Bottom) {
+			for i in 1 ..= 20 {
+				if ui.layout().config(
+					width = ui.grow(),
+					height = ui.fit(),
+					background_color = ui.is_this_selected() ? get_random_color(-0.5) : get_random_color(),
+				) {
+					ui.text().config(
+						fmt.tprint(i),
+						alignment = {.Center, .Center},
+						color = get_random_color(-0.25, true),
+					)
 				}
 			}
 		}
@@ -141,6 +134,7 @@ scroll_ui :: proc(loc := #caller_location) {
 		SCROLL_THUMB_WIDTH :: 32
 		SCROLL_THUMB_MAX_HEIGHT :: 64
 		SCROLL_THUMB_PERCENT_HEIGHT :: .5
+
 		scroll_thumb_size: rl.Vector2 = {
 			SCROLL_THUMB_WIDTH,
 			min(SCROLL_THUMB_PERCENT_HEIGHT * scroll_data.view_size.y, SCROLL_THUMB_MAX_HEIGHT),
@@ -149,7 +143,7 @@ scroll_ui :: proc(loc := #caller_location) {
 		scroll_bar_id := ui.local_id("scroll_bar")
 		scroll_thumb_id := ui.local_id("scroll_thumb")
 
-		if ui.mouse_state_by_id(scroll_thumb_id) == .Down {
+		if ui.is_id_selected(scroll_thumb_id) && ui.mouse_state() == .Down {
 			scroll_normalized_offset.y += rl.GetMouseDelta().y / (scroll_data.view_size.y - scroll_thumb_size.y)
 			scroll_normalized_offset.y = clamp(scroll_normalized_offset.y, 0, 1)
 			ui.set_scroll_offset(scroll_normalized_offset * scroll_data.min_offset)
@@ -166,7 +160,7 @@ scroll_ui :: proc(loc := #caller_location) {
 			if ui.layout(scroll_thumb_id).config(
 				width = ui.fixed(SCROLL_THUMB_WIDTH),
 				height = ui.percent(SCROLL_THUMB_PERCENT_HEIGHT, nil, SCROLL_THUMB_MAX_HEIGHT),
-				background_color = ui.mouse_state() == .Hover ? get_random_color(0.1) : get_random_color(),
+				background_color = ui.mouse_state_on_this() == .Hovered ? get_random_color(0.1) : get_random_color(),
 			) {
 
 			}
@@ -174,7 +168,7 @@ scroll_ui :: proc(loc := #caller_location) {
 	}
 }
 
-fetch_pallete_colors :: proc(palette: ^[dynamic; $N]rl.Color, image_path: cstring, rows: i32, columns: i32) {
+fetch_palette_colors :: proc(palette: ^[dynamic; $N]rl.Color, image_path: cstring, rows: i32, columns: i32) {
 	image := rl.LoadImage(image_path)
 	defer rl.UnloadImage(image)
 
