@@ -83,6 +83,8 @@ vert_scroll_base :: proc(
 	content: $U,
 	loc := #caller_location,
 ) where ((T != void && U == type_of(Content_Proc(T){}.procedure)) || (T == void && U == proc())) {
+	@(static) scroll_thumb_press_offset: rl.Vector2
+
 	if ui.layout(loc = loc).config(
 		width = ui.grow(),
 		height = ui.grow(),
@@ -108,23 +110,39 @@ vert_scroll_base :: proc(
 		}
 
 		SCROLL_THUMB_WIDTH :: 32
-		SCROLL_THUMB_MAX_HEIGHT :: 64
 		SCROLL_THUMB_PERCENT_HEIGHT :: .5
-
-		scroll_thumb_size: rl.Vector2 = {
-			SCROLL_THUMB_WIDTH,
-			min(SCROLL_THUMB_PERCENT_HEIGHT * scroll_data.view_size.y, SCROLL_THUMB_MAX_HEIGHT),
-		}
 
 		scroll_bar_id := ui.local_id("scroll_bar")
 		scroll_thumb_id := ui.local_id("scroll_thumb")
 
-		if ui.is_id_selected(scroll_thumb_id) && ui.mouse_state() == .Down {
-			scroll_thumb_move_range := (scroll_data.view_size.y - scroll_thumb_size.y)
-			scroll_normalized_offset.y +=
-				scroll_thumb_move_range > 0 ? (rl.GetMouseDelta().y / scroll_thumb_move_range) : 0
-			scroll_normalized_offset.y = clamp(scroll_normalized_offset.y, 0, 1)
-			ui.set_scroll_offset(scroll_normalized_offset * scroll_data.min_offset)
+		if ui.is_id_selected(scroll_thumb_id) {
+			bar_rect := ui.rect_by_id(scroll_bar_id)
+			thumb_rect := ui.rect_by_id(scroll_thumb_id)
+
+			// When pressed, store the offset from mouse to thumb top‑left
+			if ui.mouse_state() == .Pressed {
+				scroll_thumb_press_offset = ui.mouse_position() - {thumb_rect.x, thumb_rect.y}
+			}
+
+			if ui.mouse_state() == .Down {
+				// Desired thumb top‑left (absolute)
+				thumb_desired := ui.mouse_position() - scroll_thumb_press_offset
+
+				// Position relative to bar
+				thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
+
+				// Available movement range
+				thumb_range: rl.Vector2 = {bar_rect.width, bar_rect.height} - {thumb_rect.width, thumb_rect.height}
+
+				// Normalize (clamped)
+				offset: rl.Vector2 = {
+					thumb_range.x > 0 ? clamp(thumb_local.x / thumb_range.x, 0, 1) : 0,
+					thumb_range.y > 0 ? clamp(thumb_local.y / thumb_range.y, 0, 1) : 0,
+				}
+
+				// Apply to scroll
+				ui.set_scroll_offset(offset * scroll_data.min_offset)
+			}
 		}
 
 		if ui.layout(scroll_bar_id).config(
@@ -137,7 +155,7 @@ vert_scroll_base :: proc(
 		) {
 			if ui.layout(scroll_thumb_id).config(
 				width = ui.fixed(SCROLL_THUMB_WIDTH),
-				height = ui.percent(SCROLL_THUMB_PERCENT_HEIGHT, nil, SCROLL_THUMB_MAX_HEIGHT),
+				height = ui.percent(SCROLL_THUMB_PERCENT_HEIGHT),
 				background_color = ui.mouse_state_on_this() == .Hovered ? get_random_color(0.1) : (ui.mouse_state_on_this() == .Down ? get_random_color(-0.1) : get_random_color()),
 			) {}
 		}

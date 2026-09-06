@@ -1,6 +1,7 @@
 package ui
 
 import "base:runtime"
+import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:os"
@@ -43,6 +44,7 @@ UI_Layout_Mouse_Mode :: enum {
 
 UI_Input :: struct {
 	mouse_position: rl.Vector2,
+	mouse_delta:    rl.Vector2,
 	mouse_state:    UI_Mouse_State,
 	scroll:         rl.Vector2,
 }
@@ -60,7 +62,6 @@ UI_Scroll_Data :: struct #all_or_none {
 	offset:         rl.Vector2,
 	content_size:   rl.Vector2,
 	min_offset:     rl.Vector2,
-	view_size:      rl.Vector2,
 	pending_offset: Maybe(rl.Vector2),
 }
 
@@ -142,11 +143,12 @@ UI_Context :: struct {
 	screen_size:        rl.Vector2,
 	input_event:        UI_Input_Event,
 	clip:               UI_ClipData,
-	ids:                map[u32]UI_Id_Entry,
+	ids:                map[u32]UI_Id_Info,
 	floats:             [dynamic]UI_Index,
+	element_bounds:     map[u32]rl.Rectangle,
 }
 
-UI_Id_Entry :: struct {
+UI_Id_Info :: struct {
 	base:       u32,
 	index:      UI_Index,
 	loop_count: i32,
@@ -323,6 +325,11 @@ UI_Element :: struct {
 		Layout_Attributes,
 		Text_Attributes,
 	},
+}
+
+UI_Element_Bound :: struct {
+	position: rl.Vector2,
+	size:     rl.Vector2,
 }
 
 UI_Axis_Limits :: struct {
@@ -1001,8 +1008,9 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 			scrolls = make(map[u32]UI_Scroll_Data, 4),
 		},
 		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
-		ids = make(map[u32]UI_Id_Entry, 50),
+		ids = make(map[u32]UI_Id_Info, 50),
 		floats = make([dynamic]UI_Index, 0, 4),
+		element_bounds = make(map[u32]rl.Rectangle, 50),
 	}
 }
 
@@ -1026,6 +1034,7 @@ context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
 	delete(ctx.floats)
+	delete(ctx.element_bounds)
 }
 
 @(require_results, deferred_in_out = end_layout)
@@ -1037,19 +1046,8 @@ begin_layout: type_of(begin_layout_no_defer) : proc(ctx: ^UI_Context, screen_siz
 begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	builder.current_context = ctx
 
-	MOUSE_BTN :: rl.MouseButton.LEFT
-	ctx.input.mouse_position = rl.GetMousePosition()
-	if rl.IsMouseButtonPressed(MOUSE_BTN) {
-		ctx.input.mouse_state = .Pressed
-	} else if rl.IsMouseButtonDown(MOUSE_BTN) {
-		ctx.input.mouse_state = .Down
-	} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
-		ctx.input.mouse_state = .Released
-	} else {
-		ctx.input.mouse_state = .None
-	}
-
 	ctx.screen_size = screen_size
+
 	clear(&ctx.ids)
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
@@ -1094,8 +1092,22 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 		generate_commands(ctx, idx)
 	}
 
-	// mouse detection
+	// mouse input
 	{
+		ctx.input.mouse_position = rl.GetMousePosition()
+		ctx.input.mouse_delta = rl.GetMouseDelta()
+
+		MOUSE_BTN :: rl.MouseButton.LEFT
+		if rl.IsMouseButtonPressed(MOUSE_BTN) {
+			ctx.input.mouse_state = .Pressed
+		} else if rl.IsMouseButtonDown(MOUSE_BTN) {
+			ctx.input.mouse_state = .Down
+		} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
+			ctx.input.mouse_state = .Released
+		} else {
+			ctx.input.mouse_state = .None
+		}
+
 		ctx.input_event.mouse_captured = false
 		ctx.input_event.scroll_captured = false
 		ctx.input_event.selected_once = false
@@ -1112,8 +1124,12 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 		detect_mouse(ctx, 0)
 	}
 
-	clear(&ctx.elements)
-	clear(&ctx.open_layout_stack)
+
+	// write bounds, forward to later frame
+	clear(&ctx.element_bounds)
+	for ele in ctx.elements {
+		ctx.element_bounds[ele.id] = ele_get_rect(ele)
+	}
 }
 
 @(private = "file")
@@ -1315,7 +1331,6 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 						pending_offset = nil,
 						content_size   = content_size,
 						min_offset     = min_offset,
-						view_size      = ele.size,
 					}
 
 					ctx.input_event.scroll_captured = true
@@ -1772,6 +1787,20 @@ mouse_state_on_id :: proc(id: u32) -> UI_Layout_Mouse_State {
 
 mouse_state :: proc() -> UI_Mouse_State {
 	return builder.current_context.input.mouse_state
+}
+
+mouse_delta :: proc() -> rl.Vector2 {
+	return builder.current_context.input.mouse_delta
+}
+
+mouse_position :: proc() -> rl.Vector2 {
+	return builder.current_context.input.mouse_position
+}
+
+rect_by_id :: proc(id: u32) -> rl.Rectangle {
+	rect, ok := builder.current_context.element_bounds[id]
+	assert(ok)
+	return rect
 }
 
 is_id_selected :: proc(id: u32) -> bool {
