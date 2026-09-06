@@ -1,26 +1,25 @@
 package main
 
 import "core:fmt"
-
-@(deferred_none = end_func)
-func :: proc() -> bool {
-	fmt.println("Start func")
-	return true
+Stateful_Content_Wrapper :: struct($T: typeid) {
+	content: proc(data: T),
 }
 
-end_func :: proc() {
-	fmt.println("End func")
+Stateless_Content :: proc()
+
+Stateful_Content :: type_of(Stateful_Content_Wrapper(i32){}.content)
+
+gen_proc :: proc(
+	data: $T,
+	content: $U,
+) where (T == 0 && U == Stateless_Content) ||
+	(U == type_of(Stateful_Content_Wrapper(T){}.content)) {
+
 }
 
-Func_Struct :: struct {
-	func_field: type_of(func),
-}
 
 main :: proc() {
-	func_struct: Func_Struct = {
-		func_field = func,
-	}
-	if func_struct.func_field() {
-		fmt.println("Body")
-	}
+	gen_proc(0, proc() {
+
+	})
 }

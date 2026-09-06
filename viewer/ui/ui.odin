@@ -1050,16 +1050,20 @@ context_delete :: proc(ctx: UI_Context) {
 }
 
 @(require_results, deferred_in_out = end_layout)
-begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) -> bool {
+begin_layout: type_of(begin_layout_no_defer) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+	return begin_layout_no_defer(ctx, screen_size)
+}
+
+@(require_results)
+begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	builder.current_context = ctx
 
-	ctx.screen_size = {screen_width, screen_height}
-
+	ctx.screen_size = screen_size
 	clear(&ctx.ids)
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 
-	append(&ctx.elements, root_layout(screen_width, screen_height))
+	append(&ctx.elements, root_layout(screen_size))
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -1069,8 +1073,7 @@ begin_layout :: proc(ctx: ^UI_Context, screen_width: f32, screen_height: f32) ->
 	return true
 }
 
-@(private = "file")
-end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
+end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	if !ok do return
 
 	close_layout(ctx)
@@ -1094,6 +1097,7 @@ end_layout :: proc(ctx: ^UI_Context, _: f32, _: f32, ok: bool) {
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 }
+
 
 @(private = "file")
 generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
@@ -1274,17 +1278,17 @@ travel_tree_reverse :: proc(
 }
 
 @(private = "file")
-root_layout :: proc(width: f32, height: f32) -> UI_Element {
+root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 	return UI_Element {
 		id = 0,
 		position = {0, 0},
-		size = {width, height},
+		size = {screen_size.x, screen_size.y},
 		limits = {},
 		attributes = Layout_Attributes {
 			config = UI_Layout_Config {
 				child_gap = 8,
-				width = Fixed_Size{width},
-				height = Fixed_Size{height},
+				width = Fixed_Size{screen_size.x},
+				height = Fixed_Size{screen_size.y},
 				layout_direction = .Top_To_Bottom,
 				padding = pad_all(8),
 				background_color = {},
