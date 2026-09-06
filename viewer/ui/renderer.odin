@@ -154,7 +154,7 @@ draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
 		return
 	}
 
-	if radius.x == 0 && radius.y == 0 && radius.z == 0 && radius.w == 0 {
+	if radius.top_left == 0 && radius.top_right == 0 && radius.bottom_left == 0 && radius.bottom_right == 0 {
 		rl.DrawRectangleRec(rect, color)
 		if command.border.thickness > 0 {
 			rl.DrawRectangleLinesEx(rect, command.border.thickness, command.border.color)
@@ -170,16 +170,16 @@ draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
 }
 
 @(private)
-draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: rl.Vector4) {
+draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: Corner_Radius) {
 	x := rect.x
 	y := rect.y
 	w := rect.width
 	h := rect.height
 
-	r_tl := clamp(radius.x, 0, min(w / 2, h / 2))
-	r_tr := clamp(radius.y, 0, min(w / 2, h / 2))
-	r_br := clamp(radius.z, 0, min(w / 2, h / 2))
-	r_bl := clamp(radius.w, 0, min(w / 2, h / 2))
+	r_tl := clamp(radius.top_left, 0, min(w / 2, h / 2))
+	r_tr := clamp(radius.top_right, 0, min(w / 2, h / 2))
+	r_br := clamp(radius.bottom_right, 0, min(w / 2, h / 2))
+	r_bl := clamp(radius.bottom_left, 0, min(w / 2, h / 2))
 
 	max_r := max(r_tl, r_tr, r_br, r_bl)
 
@@ -214,16 +214,16 @@ draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: rl
 }
 
 @(private)
-draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: rl.Vector4, thickness: f32) {
+draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: Corner_Radius, thickness: f32) {
 	x := rect.x
 	y := rect.y
 	w := rect.width
 	h := rect.height
 
-	r_tl := clamp(radius.x, 0, min(w / 2, h / 2))
-	r_tr := clamp(radius.y, 0, min(w / 2, h / 2))
-	r_br := clamp(radius.z, 0, min(w / 2, h / 2))
-	r_bl := clamp(radius.w, 0, min(w / 2, h / 2))
+	r_tl := clamp(radius.top_left, 0, min(w / 2, h / 2))
+	r_tr := clamp(radius.top_right, 0, min(w / 2, h / 2))
+	r_br := clamp(radius.bottom_right, 0, min(w / 2, h / 2))
+	r_bl := clamp(radius.bottom_left, 0, min(w / 2, h / 2))
 
 	if thickness <= 0 {
 		return

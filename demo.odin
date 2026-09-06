@@ -1,25 +1,14 @@
 package main
 
 import "core:fmt"
-Stateful_Content_Wrapper :: struct($T: typeid) {
-	content: proc(data: T),
+Union :: union {
+	f32,
+	string,
 }
-
-Stateless_Content :: proc()
-
-Stateful_Content :: type_of(Stateful_Content_Wrapper(i32){}.content)
-
-gen_proc :: proc(
-	data: $T,
-	content: $U,
-) where (T == 0 && U == Stateless_Content) ||
-	(U == type_of(Stateful_Content_Wrapper(T){}.content)) {
-
-}
-
 
 main :: proc() {
-	gen_proc(0, proc() {
+	u: Union = "hello world"
 
-	})
+	res, ok := u.(f32)
+	fmt.println(res, ok)
 }

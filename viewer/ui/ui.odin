@@ -1,7 +1,6 @@
 package ui
 
 import "base:runtime"
-import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:os"
@@ -88,7 +87,7 @@ Render_Command :: union {
 Rect_Command :: struct #all_or_none {
 	rect:          rl.Rectangle,
 	color:         rl.Color,
-	corner_radius: rl.Vector4,
+	corner_radius: Corner_Radius,
 	border:        Border_Config,
 }
 
@@ -187,6 +186,13 @@ Layout_Padding :: struct {
 	left:   f32,
 }
 
+Corner_Radius :: struct {
+	top_left:     f32,
+	top_right:    f32,
+	bottom_right: f32,
+	bottom_left:  f32,
+}
+
 Alignment :: struct {
 	x: union {
 		f32,
@@ -246,19 +252,19 @@ UI_Layout_Config :: struct {
 	layout_direction: Layout_Direction,
 	child_alignment:  rl.Vector2,
 	background_color: rl.Color,
-	corner_radius:    f32,
+	corner_radius:    Corner_Radius,
 	border:           Border_Config,
 	mouse_mode:       UI_Layout_Mouse_Mode,
 	callbacks:        UI_Layout_Mouse_Event_Callbacks,
 	clip:             bool,
 	scroll:           bool,
 	ignore_scroll:    bool,
-	float:            UI_Float,
+	float_mode:       UI_Float_Mode,
 	offset:           rl.Vector2,
 }
 
 
-UI_Float :: union {
+UI_Float_Mode :: union {
 	Float_None,
 	Float_At_Parent,
 	Float_At_Id,
@@ -330,23 +336,20 @@ UI_Limits :: struct {
 }
 
 Layout_Attributes :: struct {
-	element: UI_Index,
-	config:  UI_Layout_Config,
+	config: UI_Layout_Config,
 }
 
 Text_Attributes :: struct {
-	element:                  UI_Index,
 	config:                   UI_Text_Config,
 	preferred_size:           rl.Vector2,
-	size:                     rl.Vector2,
+	bound_size:               rl.Vector2,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
 
 Child_Iter :: struct {
-	ctx:            ^UI_Context,
-	next:           Maybe(UI_Index),
-	exclude_floats: bool,
+	ctx:  ^UI_Context,
+	next: Maybe(UI_Index),
 }
 
 @(private = "file", require_results)
@@ -393,7 +396,7 @@ push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
 	ele := &ctx.elements[index]
 	if attr, ok := ele.attributes.(Layout_Attributes); ok {
-		return attr.config.float != Float_None{}
+		return attr.config.float_mode != Float_None{}
 	}
 	return false
 }
@@ -405,7 +408,7 @@ open_layout :: proc(ctx: ^UI_Context, id: u32, config: UI_Layout_Config, limits:
 
 	ui_ele := UI_Element {
 		id = id,
-		attributes = Layout_Attributes{config = config, element = index},
+		attributes = Layout_Attributes{config = config},
 		limits = limits,
 	}
 
@@ -436,7 +439,7 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 
 	ui_ele := UI_Element {
 		id = id,
-		attributes = Text_Attributes{config = config, element = index},
+		attributes = Text_Attributes{config = config},
 		limits = {},
 	}
 
@@ -459,7 +462,6 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
-	fit_sizing(ctx, index, .X)
 }
 
 @(private = "file")
@@ -535,7 +537,7 @@ clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 }
 
 @(private = "file")
-fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats: bool = true) {
+fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok do return
@@ -553,7 +555,7 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats
 	children_min_size := f32(0)
 	child_count := 0
 
-	for it := child_iter_start(ctx, index, exclude_floats); child in child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		child_size := ele_get_size(child, axis)
 		child_min := ele_get_min(child, axis)
 
@@ -583,15 +585,15 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats
 }
 
 @(private = "file")
-fit_sizing_heights_tree :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: bool = true) {
-	for it := child_iter_start(ctx, index, exclude_floats); child, child_index in child_iter_next(&it) {
-		fit_sizing_heights_tree(ctx, child_index, exclude_floats)
+fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		fit_sizing_tree(ctx, child_index, axis)
 	}
-	fit_sizing(ctx, index, .Y, exclude_floats)
+	fit_sizing(ctx, index, axis)
 }
 
 @(private = "file")
-grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats: bool = true) {
+grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.link.last == nil do return
@@ -600,7 +602,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, e
 	percent_basis := available
 
 	if layout_is_across(layout, axis) {
-		for it := child_iter_start(ctx, index, exclude_floats); child in child_iter_next(&it) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			if is_grow_layout_or_text(child^, axis) {
 				ele_set_size(child, clamp_element_size(available, ele_get_lims(child, axis)), axis)
 			} else if percent_size, ok := layout_get_mode(child^, axis).(Percent_Size); ok {
@@ -619,14 +621,14 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, e
 	defer clear(growables)
 
 	child_count := 0
-	for it := child_iter_start(ctx, index, exclude_floats); child in child_iter_next(&it) do child_count += 1
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) do child_count += 1
 	assert(child_count > 0)
 	gap_total := f32(child_count - 1) * layout.config.child_gap
 
 	remaining := available - gap_total
 	percent_basis -= gap_total
 
-	for it := child_iter_start(ctx, index, exclude_floats); child, child_index in child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		if is_grow_layout_or_text(child^, axis) {
 			append(growables, child_index)
 		} else if percent_size, ok := layout_get_mode(child^, axis).(Percent_Size); ok {
@@ -748,10 +750,10 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, e
 }
 
 @(private = "file")
-grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats: bool = true) {
-	grow_and_percent_sizing(ctx, index, axis, exclude_floats)
-	for it := child_iter_start(ctx, index, exclude_floats); child, child_index in child_iter_next(&it) {
-		grow_and_percent_sizing_tree(ctx, child_index, axis, exclude_floats)
+grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+	grow_and_percent_sizing(ctx, index, axis)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		grow_and_percent_sizing_tree(ctx, child_index, axis)
 	}
 }
 
@@ -766,9 +768,13 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 }
 
 @(private = "file")
-wrap_texts :: proc(ctx: ^UI_Context) {
-	for &ele in ctx.elements {
-		text_attr := (&ele.attributes.(Text_Attributes)) or_continue
+wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+	for it := child_iter_start(ctx, index); ele, child_index in child_iter_next(&it) {
+		text_attr, ok := (&ele.attributes.(Text_Attributes))
+		if !ok { 	// layout
+			wrap_texts(ctx, child_index)
+			continue
+		}
 
 		content := text_attr.config.content
 		config := text_attr.config
@@ -785,13 +791,13 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 
 			if wrapped_count > 0 {
 				ele.size.y = config.font_size * f32(wrapped_count) + f32(wrapped_count - 1) * config.line_spacing
-				text_attr.size.x = ele.size.x
+				text_attr.bound_size.x = ele.size.x
 			} else {
 				ele.size.y = config.font_size
-				text_attr.size.x = text_attr.preferred_size.x
+				text_attr.bound_size.x = text_attr.preferred_size.x
 			}
 			ele.limits.y.min = ele.size.y
-			text_attr.size.y = ele.size.y
+			text_attr.bound_size.y = ele.size.y
 		}
 
 		byte_index := 0
@@ -849,74 +855,39 @@ wrap_texts :: proc(ctx: ^UI_Context) {
 	}
 }
 
-@(private = "file")
-calculate_floating_positions :: proc(ctx: ^UI_Context) {
-	for &ele in ctx.elements {
-		layout := ele.attributes.(Layout_Attributes) or_continue
-
-		target_ele: UI_Element
-		float_config: UI_Float_Config
-
-		switch float in layout.config.float {
-		case Float_At_Parent:
-			{
-				parent_idx := ele.link.parent
-				target_ele = ctx.elements[parent_idx]
-				float_config = float
-			}
-		case Float_At_Id:
-			{
-				id_entry, existed := ctx.ids[float.attach_id]
-				assert(existed)
-				target_ele = ctx.elements[id_entry.index]
-				float_config = float
-			}
-		case Float_At_Root:
-			{
-				target_ele = ctx.elements[0]
-				float_config = float
-			}
-		case Float_None:
-			continue
-		}
-
-		element_anchor := get_anchor_point(ele, float_config.attach_points.element)
-		target_anchor := get_anchor_point(target_ele, float_config.attach_points.parent)
-
-		pos := target_anchor - element_anchor + float_config.offset
-		ele.position = pos
-	}
-}
 
 @(private = "file")
 get_anchor_point :: proc(ele: UI_Element, anchor: AnchorPoint) -> rl.Vector2 {
-	pos := ele.position
-	size := ele.size
-	switch anchor {
-	case .LeftTop:
-		return {pos.x, pos.y}
-	case .LeftCenter:
-		return {pos.x, pos.y + size.y * 0.5}
-	case .LeftBottom:
-		return {pos.x, pos.y + size.y}
-	case .CenterTop:
-		return {pos.x + size.x * 0.5, pos.y}
-	case .CenterCenter:
-		return {pos.x + size.x * 0.5, pos.y + size.y * 0.5}
-	case .CenterBottom:
-		return {pos.x + size.x * 0.5, pos.y + size.y}
-	case .RightTop:
-		return {pos.x + size.x, pos.y}
-	case .RightCenter:
-		return {pos.x + size.x, pos.y + size.y * 0.5}
-	case .RightBottom:
-		return {pos.x + size.x, pos.y + size.y}
-	}
-	return pos
+	return ele.position + ele.size * get_anchor_offset(anchor)
 }
 
 @(private = "file")
-calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclude_floats: bool = true) {
+get_anchor_offset :: proc(anchor: AnchorPoint) -> rl.Vector2 {
+	switch anchor {
+	case .LeftTop:
+		return {0, 0}
+	case .LeftCenter:
+		return {0, 0.5}
+	case .LeftBottom:
+		return {0, 0}
+	case .CenterTop:
+		return {0.5, 0}
+	case .CenterCenter:
+		return {0.5, 0.5}
+	case .CenterBottom:
+		return {0.5, 1.0}
+	case .RightTop:
+		return {1.0, 0.0}
+	case .RightCenter:
+		return {1.0, 0.5}
+	case .RightBottom:
+		return {1.0, 1.0}
+	}
+	return {0, 0}
+}
+
+@(private = "file")
+calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
@@ -929,8 +900,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclud
 			ele_set_pos(current, ele_get_pos(current, axis) + align_offset, axis)
 		}
 
-		ele_set_size(current, text_attr.size.x, .X)
-		ele_set_size(current, text_attr.size.y, .Y)
+		ele_set_size(current, text_get_bound_size(text_attr, axis), axis)
 
 		return
 	}
@@ -943,7 +913,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclud
 		remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis)
 
 		child_count := 0
-		for it := child_iter_start(ctx, index, exclude_floats); child in child_iter_next(&it) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			remaining -= ele_get_size(child, axis)
 			child_count += 1
 		}
@@ -955,7 +925,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclud
 		offset += remaining * align_get_offset(layout.config.child_alignment, axis)
 	}
 
-	for it := child_iter_start(ctx, index, exclude_floats); child, child_index in child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		child_layout, is_child_layout := child.attributes.(Layout_Attributes)
 		child_offset :=
 			offset +
@@ -973,7 +943,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis, exclud
 			offset += ele_get_size(child, axis) + layout.config.child_gap
 		}
 
-		calculate_position(ctx, child_index, axis, exclude_floats)
+		calculate_position(ctx, child_index, axis)
 	}
 }
 
@@ -1065,8 +1035,19 @@ begin_layout: type_of(begin_layout_no_defer) : proc(ctx: ^UI_Context, screen_siz
 
 @(require_results)
 begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
-
 	builder.current_context = ctx
+
+	MOUSE_BTN :: rl.MouseButton.LEFT
+	ctx.input.mouse_position = rl.GetMousePosition()
+	if rl.IsMouseButtonPressed(MOUSE_BTN) {
+		ctx.input.mouse_state = .Pressed
+	} else if rl.IsMouseButtonDown(MOUSE_BTN) {
+		ctx.input.mouse_state = .Down
+	} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
+		ctx.input.mouse_state = .Released
+	} else {
+		ctx.input.mouse_state = .None
+	}
 
 	ctx.screen_size = screen_size
 	clear(&ctx.ids)
@@ -1086,62 +1067,49 @@ begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool
 end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	if !ok do return
 
+	// close root
 	close_layout(ctx)
 
+	fit_sizing_tree(ctx, 0, .X)
 	grow_and_percent_sizing_tree(ctx, 0, .X)
-	wrap_texts(ctx)
+	wrap_texts(ctx, 0)
 
-	fit_sizing_heights_tree(ctx, 0)
+	fit_sizing_tree(ctx, 0, .Y)
 	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
 	calculate_position(ctx, 0, .X)
 	calculate_position(ctx, 0, .Y)
 
-	// size floats
-	for idx in ctx.floats {
-		grow_and_percent_sizing_tree(ctx, idx, .X, exclude_floats = true)
-		fit_sizing_heights_tree(ctx, idx, exclude_floats = true)
-		grow_and_percent_sizing_tree(ctx, idx, .Y, exclude_floats = true)
-	}
-
-	// position floats (anchor)
-	calculate_floating_positions(ctx)
-
-	// position float children
-	for idx in ctx.floats {
-		calculate_position(ctx, idx, .X, exclude_floats = true)
-		calculate_position(ctx, idx, .Y, exclude_floats = true)
-	}
-
-	// re-wrap texts now that all sizes are final
-	wrap_texts(ctx)
+	size_position_floats(ctx)
 
 	// generate render commands
 	clear(&ctx.render_commands)
 	clear(&ctx.clip.open_clip_stack)
 
-	generate_commands(ctx, 0, exclude_floats = true)
+	generate_commands(ctx, 0)
 
-	// sort floats by z_index ascending
-	sort_float_indices_by_z(ctx, ctx.floats[:], ascending = true)
-
+	// sort floats by z_index ascending for rendering
+	sort_floats_by_zindex(ctx, ctx.floats[:])
 	for idx in ctx.floats {
-		generate_commands(ctx, idx, exclude_floats = true)
+		generate_commands(ctx, idx)
 	}
 
 	// mouse detection
-	ctx.input_event.mouse_captured = false
-	ctx.input_event.scroll_captured = false
-	ctx.input_event.selected_once = false
-	clear(&ctx.input_event.hovered_elements)
-	clear(&ctx.clip.open_clip_stack)
+	{
+		ctx.input_event.mouse_captured = false
+		ctx.input_event.scroll_captured = false
+		ctx.input_event.selected_once = false
 
-	detect_mouse(ctx, 0, exclude_floats = true)
+		clear(&ctx.input_event.hovered_elements)
+		clear(&ctx.clip.open_clip_stack)
 
-	sort_float_indices_by_z(ctx, ctx.floats[:], ascending = false)
-	for idx in ctx.floats {
-		detect_mouse(ctx, idx, exclude_floats = true)
-		if ctx.input_event.mouse_captured && ctx.input_event.scroll_captured do break
+		// detect mouse input on floats first, in reverse z index order
+		#reverse for idx in ctx.floats {
+			detect_mouse(ctx, idx)
+			if ctx.input_event.mouse_captured && ctx.input_event.scroll_captured do break
+		}
+		// then the normal layout layer
+		detect_mouse(ctx, 0)
 	}
 
 	clear(&ctx.elements)
@@ -1149,7 +1117,61 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 }
 
 @(private = "file")
-generate_commands :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: bool = true) {
+size_position_floats :: proc(ctx: ^UI_Context) {
+	grow_and_percent_float_root :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
+		current := &ctx.elements[index]
+		layout := ctx.elements[index].attributes.(Layout_Attributes)
+
+		float_parent_index, _ := get_float_target(ctx^, index, layout.config.float_mode)
+
+		float_parent := &ctx.elements[float_parent_index]
+
+		#partial switch mode in layout_get_mode(layout, axis) {
+		case Grow_Size:
+			size := clamp_element_size(ele_get_size(float_parent, axis), ele_get_lims(current, axis))
+			ele_set_size(current, size, axis)
+		case Percent_Size:
+			size := clamp_element_size(mode.value * ele_get_size(float_parent, axis), ele_get_lims(current, axis))
+			ele_set_size(current, size, axis)
+		}
+	}
+
+	calculate_float_root_position :: proc(ctx: ^UI_Context, index: UI_Index) {
+		ele := &ctx.elements[index]
+		layout := ele.attributes.(Layout_Attributes)
+
+		target_index, float_config := get_float_target(ctx^, index, layout.config.float_mode)
+
+		element_offset := ele.size * get_anchor_offset(float_config.attach_points.element)
+		target_anchor := get_anchor_point(ctx.elements[target_index], float_config.attach_points.parent)
+
+		pos := target_anchor - element_offset + float_config.offset
+		ele.position = pos
+	}
+
+	for float_index in ctx.floats {
+		// only fit sizing includes direct sizing on current layout,
+		// grow and percent sizing only calculate children sizing
+		fit_sizing_tree(ctx, float_index, .X)
+
+		grow_and_percent_float_root(ctx, float_index, .X)
+		grow_and_percent_sizing_tree(ctx, float_index, .X)
+		wrap_texts(ctx, float_index)
+
+		fit_sizing_tree(ctx, float_index, .Y)
+
+		grow_and_percent_float_root(ctx, float_index, .Y)
+		grow_and_percent_sizing_tree(ctx, float_index, .Y)
+
+		calculate_float_root_position(ctx, float_index)
+		calculate_position(ctx, float_index, .X)
+		calculate_position(ctx, float_index, .Y)
+	}
+}
+
+
+@(private = "file")
+generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	ele := &ctx.elements[index]
 
 	switch attr in ele.attributes {
@@ -1180,13 +1202,13 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: boo
 				line_spacing = attr.config.line_spacing,
 				color = attr.config.color,
 				wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
-				rect = {ele.position.x, ele.position.y, attr.size.x, attr.size.y},
+				rect = {ele.position.x, ele.position.y, attr.bound_size.x, attr.bound_size.y},
 			},
 		)
 	}
 
-	for it := child_iter_start(ctx, index, exclude_floats); child, child_index in child_iter_next(&it) {
-		generate_commands(ctx, child_index, exclude_floats)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		generate_commands(ctx, child_index)
 	}
 
 	if layout_attr, ok := ele.attributes.(Layout_Attributes);
@@ -1196,17 +1218,13 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: boo
 }
 
 @(private = "file")
-detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: bool = true) {
-	MOUSE_BTN :: rl.MouseButton.LEFT
-	ctx.input.mouse_position = rl.GetMousePosition()
-	if rl.IsMouseButtonPressed(MOUSE_BTN) {
-		ctx.input.mouse_state = .Pressed
-	} else if rl.IsMouseButtonDown(MOUSE_BTN) {
-		ctx.input.mouse_state = .Down
-	} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
-		ctx.input.mouse_state = .Released
-	} else {
-		ctx.input.mouse_state = .None
+detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
+	detect_mouse_should_stop :: proc(input_event: UI_Input_Event) -> bool {
+		return input_event.mouse_captured && input_event.scroll_captured
+	}
+
+	if detect_mouse_should_stop(ctx.input_event) {
+		return
 	}
 
 	travel_tree_reverse(ctx, index, on_down = proc(ctx: ^UI_Context, idx: i32) -> (stop: bool) {
@@ -1304,23 +1322,23 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index, exclude_floats: bool = t
 				}
 			}
 
-			stop = ctx.input_event.mouse_captured && ctx.input_event.scroll_captured
+			stop = detect_mouse_should_stop(ctx.input_event)
 
 			return
-		}, exclude_floats = exclude_floats)
+		})
 }
+
 
 travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index = 0,
 	on_up: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
 	on_down: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
-	exclude_floats: bool = true,
 ) -> bool {
 	if on_down != nil && on_down(ctx, index) do return true
-	it := child_iter_reverse_start(ctx, index, exclude_floats)
+	it := child_iter_reverse_start(ctx, index)
 	for child, child_index in child_iter_reverse_next(&it) {
-		if travel_tree_reverse(ctx, child_index, on_up, on_down, exclude_floats) {
+		if travel_tree_reverse(ctx, child_index, on_up, on_down) {
 			return true
 		}
 	}
@@ -1337,11 +1355,11 @@ root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 		limits = {},
 		attributes = Layout_Attributes {
 			config = UI_Layout_Config {
-				child_gap = 8,
+				child_gap = 2,
 				width = Fixed_Size{screen_size.x},
 				height = Fixed_Size{screen_size.y},
 				layout_direction = .Top_To_Bottom,
-				padding = pad_all(8),
+				padding = pad_all(2),
 				background_color = {},
 			},
 		},
@@ -1349,39 +1367,17 @@ root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 }
 
 @(private = "file")
-default_layout :: proc() -> UI_Layout_Config {
-	return UI_Layout_Config {
-		child_gap = 8,
-		width = Fit_Size{},
-		height = Fit_Size{},
-		layout_direction = .Left_To_Right,
-		padding = pad_all(8),
-		background_color = {},
-		corner_radius = 0,
-		border = {thickness = 0, color = rl.BLACK},
-	}
-}
-
-@(private = "file")
-default_text :: proc(ctx: UI_Context) -> UI_Text_Config {
-	return UI_Text_Config{font_index = 0, font_size = 16, line_spacing = 4, color = rl.BLACK}
-}
-
-@(private = "file")
-set_if_set :: #force_inline proc(dest: ^$T, src: Maybe(T)) {
-	if v, ok := src.(T); ok {
-		dest^ = v
-	}
-}
-
-@(private = "file")
-child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index, exclude_floats: bool = true) -> Child_Iter {
+child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
-	next_index: Maybe(UI_Index) = start.link.last == nil ? nil : start_index + 1
-	for next_index != nil && exclude_floats && is_floating_element(ctx, next_index.?) {
+
+	next_index: Maybe(UI_Index) = start.link.last != nil ? start_index + 1 : nil
+
+	// Forwards until we find non float
+	for next_index != nil && is_floating_element(ctx, next_index.?) {
 		next_index = ctx.elements[next_index.?].link.next
 	}
-	return {ctx = ctx, next = next_index, exclude_floats = exclude_floats}
+
+	return {ctx = ctx, next = next_index}
 }
 
 @(private = "file")
@@ -1390,14 +1386,13 @@ child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI
 		return
 	}
 
-	{
-		child_index = it.next.?
-		child = &it.ctx.elements[child_index]
-		cond = true
-	}
+	child_index = it.next.?
+	child = &it.ctx.elements[child_index]
+	cond = true
 
 	it.next = child.link.next
-	for it.next != nil && it.exclude_floats && is_floating_element(it.ctx, it.next.?) {
+
+	for it.next != nil && is_floating_element(it.ctx, it.next.?) {
 		it.next = it.ctx.elements[it.next.?].link.next
 	}
 
@@ -1405,13 +1400,16 @@ child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI
 }
 
 @(private = "file")
-child_iter_reverse_start :: proc(ctx: ^UI_Context, start_index: UI_Index, exclude_floats: bool = true) -> Child_Iter {
+child_iter_reverse_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
 	next_index := start.link.last
-	for next_index != nil && exclude_floats && is_floating_element(ctx, next_index.?) {
+
+	// Backwards until we find non float
+	for next_index != nil && is_floating_element(ctx, next_index.?) {
 		next_index = ctx.elements[next_index.?].link.prev
 	}
-	return {ctx = ctx, next = next_index, exclude_floats = exclude_floats}
+
+	return {ctx = ctx, next = next_index}
 }
 
 @(private = "file")
@@ -1420,17 +1418,51 @@ child_iter_reverse_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_i
 		return
 	}
 
-	{
-		child_index = it.next.?
-		child = &it.ctx.elements[child_index]
-		cond = true
-	}
+	child_index = it.next.?
+	child = &it.ctx.elements[child_index]
+	cond = true
 
 	it.next = child.link.prev
-	for it.next != nil && it.exclude_floats && is_floating_element(it.ctx, it.next.?) {
+
+	for it.next != nil && is_floating_element(it.ctx, it.next.?) {
 		it.next = it.ctx.elements[it.next.?].link.prev
 	}
 
+	return
+}
+
+@(private = "file")
+get_float_target :: proc(
+	ctx: UI_Context,
+	index: UI_Index,
+	float_mode: UI_Float_Mode,
+) -> (
+	target_index: UI_Index,
+	config: UI_Float_Config,
+) {
+	ele := ctx.elements[index]
+	switch mode in float_mode {
+	case Float_At_Parent:
+		{
+			parent_idx := ele.link.parent
+			target_index = parent_idx
+			config = mode
+		}
+	case Float_At_Id:
+		{
+			id_entry, existed := ctx.ids[mode.attach_id]
+			assert(existed)
+			target_index = id_entry.index
+			config = mode
+		}
+	case Float_At_Root:
+		{
+			target_index = 0
+			config = mode
+		}
+	case Float_None:
+		panic("Element doesn't float")
+	}
 	return
 }
 
@@ -1586,12 +1618,17 @@ text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 }
 
 @(private = "file")
+text_get_bound_size :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
+	return axis == .X ? text_attr.bound_size.x : text_attr.bound_size.y
+}
+
+@(private = "file")
 align_get_offset :: proc(alignment: rl.Vector2, axis: Axis) -> f32 {
 	return axis == .X ? alignment.x : alignment.y
 }
 
-@(private = "file")
-sort_float_indices_by_z :: proc(ctx: ^UI_Context, indices: []UI_Index, ascending: bool) {
+@(private = "file") // ascending sort
+sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	if len(indices) <= 1 do return
 	// simple insertion sort
 	for i in 1 ..< len(indices) {
@@ -1599,11 +1636,11 @@ sort_float_indices_by_z :: proc(ctx: ^UI_Context, indices: []UI_Index, ascending
 		for j > 0 {
 			a := &ctx.elements[indices[j]]
 			b := &ctx.elements[indices[j - 1]]
-			a_float := a.attributes.(Layout_Attributes).config.float
-			b_float := b.attributes.(Layout_Attributes).config.float
+			a_float := a.attributes.(Layout_Attributes).config.float_mode
+			b_float := b.attributes.(Layout_Attributes).config.float_mode
 			a_z := get_float_z_index(a_float)
 			b_z := get_float_z_index(b_float)
-			swap := ascending ? a_z < b_z : a_z > b_z
+			swap := a_z < b_z
 			if swap {
 				indices[j], indices[j - 1] = indices[j - 1], indices[j]
 				j -= 1
@@ -1615,7 +1652,7 @@ sort_float_indices_by_z :: proc(ctx: ^UI_Context, indices: []UI_Index, ascending
 }
 
 @(private = "file")
-get_float_z_index :: proc(float: UI_Float) -> i32 {
+get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
 	switch float_type in float {
 	case Float_None:
 		panic("Element doesn't float")
@@ -1635,19 +1672,19 @@ BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 draw_layout :: proc(
 	width: Sizing_Axis = {mode = Fit_Size{}},
 	height: Sizing_Axis = {mode = Fit_Size{}},
-	padding: Layout_Padding = {8, 8, 8, 8},
-	child_gap: f32 = 8,
+	padding: Layout_Padding = {2, 2, 2, 2},
+	child_gap: f32 = 2,
 	layout_direction: Layout_Direction = .Left_To_Right,
 	child_alignment: Alignment = {x = .Left, y = .Top},
 	background_color: rl.Color = {},
-	corner_radius: f32 = 8,
+	corner_radius: Corner_Radius = {4, 4, 4, 4},
 	border: Border_Config = BORDER_DEFAULT,
 	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
 	callbacks: UI_Layout_Mouse_Event_Callbacks = {},
 	clip: bool = false,
 	scroll: bool = false,
 	ignore_scroll: bool = false,
-	float: UI_Float = Float_None{},
+	float_mode: UI_Float_Mode = Float_None{},
 	offset: rl.Vector2 = {},
 ) -> bool {
 	return open_layout(
@@ -1663,11 +1700,11 @@ draw_layout :: proc(
 			background_color = background_color,
 			corner_radius = corner_radius,
 			mouse_mode = mouse_mode,
-			border = {thickness = 2, color = rl.ColorBrightness(background_color, -0.15)},
+			border = border,
 			callbacks = callbacks,
 			clip = clip,
 			scroll = scroll,
-			float = float,
+			float_mode = float_mode,
 			ignore_scroll = ignore_scroll,
 			offset = offset,
 		},

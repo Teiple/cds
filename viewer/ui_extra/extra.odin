@@ -42,11 +42,11 @@ initialize :: proc "contextless" () {
 	fetch_palette_colors(&debug_palette, "assets/images/colors.png", 2, 16)
 }
 
-get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false) -> rl.Color {
+get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32 = 1.0) -> rl.Color {
 	if !use_prev {
 		debug_palette_prev_index = rand.int_range(0, len(debug_palette), gen = debug_palette_rng)
 	}
-	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), 1.0)
+	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), alpha)
 }
 
 @(deferred_in_out = end_layout)

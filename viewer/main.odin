@@ -77,11 +77,11 @@ main :: proc() {
 			ui_extra.vert_scroll(proc() {
 				for i in 1 ..= 20 {
 					if ui.layout().config(
-						background_color = ui_extra.get_random_color(),
+						background_color = ui.mouse_state_on_this() == .Hovered ? ui_extra.get_random_color(-0.5) : ui_extra.get_random_color(),
 						width = ui.grow(),
 						height = ui.fixed(32),
 					) {
-						ui.text().config(fmt.tprintf("%d", i), alignment = {.Center, .Center})
+						ui.text().config(fmt.tprintf("Element %d", i), alignment = {.Center, .Center})
 					}
 				}
 			})
@@ -89,14 +89,19 @@ main :: proc() {
 			when ODIN_DEBUG {
 				if ui.layout().config(
 					width = ui.grow(),
-					background_color = ui_extra.get_random_color(),
-					float = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
+					height = ui.fixed(64),
+					background_color = ui.mouse_state_on_this() == .Hovered ? ui_extra.get_random_color(-0.5) : ui_extra.get_random_color(),
+					float_mode = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
+					corner_radius = {4, 4, 0, 0},
 				) {
-					if ui.layout().config(width = ui.grow()) {}
-					if ui.layout().config(background_color = ui_extra.get_random_color()) {
-						ui.text().config(fmt.tprintf("Allocated: %.2f KB", f32(track.current_memory_allocated) / 1024))
-						ui.text().config(fmt.tprintf("Frame rate: %.f FPS", interval_avg_fps))
-					}
+					ui.text().config(
+						fmt.tprintf(
+							"Allocated: %.2f KB | Frame rate: %.f FPS",
+							f32(track.current_memory_allocated) / 1024,
+							interval_avg_fps,
+						),
+						alignment = {.Center, .Center},
+					)
 				}
 			}
 		}
