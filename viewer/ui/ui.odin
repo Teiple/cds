@@ -1,7 +1,6 @@
 package ui
 
 import "base:runtime"
-import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:os"
@@ -1056,7 +1055,21 @@ begin_layout: type_of(begin_layout_no_defer) : proc(ctx: ^UI_Context, screen_siz
 
 @(require_results)
 begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+	MOUSE_BTN :: rl.MouseButton.LEFT
+
 	builder.current_context = ctx
+
+	ctx.input.mouse_position = rl.GetMousePosition()
+
+	if rl.IsMouseButtonPressed(MOUSE_BTN) {
+		ctx.input.mouse_state = .Pressed
+	} else if rl.IsMouseButtonDown(MOUSE_BTN) {
+		ctx.input.mouse_state = .Down
+	} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
+		ctx.input.mouse_state = .Released
+	} else {
+		ctx.input.mouse_state = .None
+	}
 
 	ctx.screen_size = screen_size
 	clear(&ctx.ids)
@@ -1147,12 +1160,6 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 @(private = "file")
 detect_mouse :: proc(ctx: ^UI_Context) {
-	MOUSE_BTN :: rl.MouseButton.LEFT
-
-	ctx.input.mouse_position = rl.GetMousePosition()
-	ctx.input.mouse_state =
-		rl.IsMouseButtonPressed(MOUSE_BTN) ? .Pressed : (rl.IsMouseButtonDown(MOUSE_BTN) ? .Down : (rl.IsMouseButtonReleased(MOUSE_BTN) ? .Released : .None))
-
 	ctx.input_event.mouse_captured = false
 	ctx.input_event.scroll_captured = false
 	ctx.input_event.selected_once = false
@@ -1220,7 +1227,6 @@ detect_mouse :: proc(ctx: ^UI_Context) {
 					}
 				}
 			}
-
 
 			if !ctx.input_event.scroll_captured && layout.config.scroll {
 				mouse_position := ctx.input.mouse_position

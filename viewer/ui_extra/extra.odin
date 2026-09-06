@@ -122,7 +122,9 @@ vert_scroll_base :: proc(
 		scroll_thumb_id := ui.local_id("scroll_thumb")
 
 		if ui.is_id_selected(scroll_thumb_id) && ui.mouse_state() == .Down {
-			scroll_normalized_offset.y += rl.GetMouseDelta().y / (scroll_data.view_size.y - scroll_thumb_size.y)
+			scroll_thumb_move_range := (scroll_data.view_size.y - scroll_thumb_size.y)
+			scroll_normalized_offset.y +=
+				scroll_thumb_move_range > 0 ? rl.GetMouseDelta().y / scroll_thumb_move_range : 0
 			scroll_normalized_offset.y = clamp(scroll_normalized_offset.y, 0, 1)
 			ui.set_scroll_offset(scroll_normalized_offset * scroll_data.min_offset)
 		}

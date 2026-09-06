@@ -1,6 +1,5 @@
 package main
 
-import "base:intrinsics"
 import fmt "core:fmt"
 import mem "core:mem"
 import ui "ui"
@@ -88,7 +87,11 @@ main :: proc() {
 			})
 
 			when ODIN_DEBUG {
-				if ui.layout().config(width = ui.grow(), background_color = ui_extra.get_random_color()) {
+				if ui.layout().config(
+					width = ui.grow(),
+					background_color = ui_extra.get_random_color(),
+					float = ui.Float_At_Root{attach_points = {}},
+				) {
 					if ui.layout().config(width = ui.grow()) {}
 					if ui.layout().config(background_color = ui_extra.get_random_color()) {
 						ui.text().config(fmt.tprintf("Allocated: %.2f KB", f32(track.current_memory_allocated) / 1024))
