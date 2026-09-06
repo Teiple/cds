@@ -90,7 +90,7 @@ main :: proc() {
 				if ui.layout().config(
 					width = ui.grow(),
 					background_color = ui_extra.get_random_color(),
-					float = ui.Float_At_Root{attach_points = {}},
+					float = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
 				) {
 					if ui.layout().config(width = ui.grow()) {}
 					if ui.layout().config(background_color = ui_extra.get_random_color()) {

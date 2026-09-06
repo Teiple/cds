@@ -1,11 +1,9 @@
 package ui_extra
 
 import ui "../ui"
-import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:math/rand"
-import "core:relative"
 import rl "vendor:raylib"
 
 debug_palette: [dynamic; 120]rl.Color
@@ -124,7 +122,7 @@ vert_scroll_base :: proc(
 		if ui.is_id_selected(scroll_thumb_id) && ui.mouse_state() == .Down {
 			scroll_thumb_move_range := (scroll_data.view_size.y - scroll_thumb_size.y)
 			scroll_normalized_offset.y +=
-				scroll_thumb_move_range > 0 ? rl.GetMouseDelta().y / scroll_thumb_move_range : 0
+				scroll_thumb_move_range > 0 ? (rl.GetMouseDelta().y / scroll_thumb_move_range) : 0
 			scroll_normalized_offset.y = clamp(scroll_normalized_offset.y, 0, 1)
 			ui.set_scroll_offset(scroll_normalized_offset * scroll_data.min_offset)
 		}
@@ -140,10 +138,8 @@ vert_scroll_base :: proc(
 			if ui.layout(scroll_thumb_id).config(
 				width = ui.fixed(SCROLL_THUMB_WIDTH),
 				height = ui.percent(SCROLL_THUMB_PERCENT_HEIGHT, nil, SCROLL_THUMB_MAX_HEIGHT),
-				background_color = ui.mouse_state_on_this() == .Hovered ? get_random_color(0.1) : get_random_color(),
-			) {
-
-			}
+				background_color = ui.mouse_state_on_this() == .Hovered ? get_random_color(0.1) : (ui.mouse_state_on_this() == .Down ? get_random_color(-0.1) : get_random_color()),
+			) {}
 		}
 	}
 }
