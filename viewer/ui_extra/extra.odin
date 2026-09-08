@@ -50,9 +50,9 @@ get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32
 }
 
 @(deferred_in_out = end_layout)
-begin_layout: type_of(ui.begin_layout_no_defer) : proc(ctx: ^ui.UI_Context, screen_size: rl.Vector2) -> bool {
+begin_layout: type_of(ui.begin_layout) : proc(ctx: ^ui.UI_Context, screen_size: rl.Vector2) -> bool {
 	rand.reset(123, gen = debug_palette_rng)
-	return ui.begin_layout_no_defer(ctx, screen_size)
+	return ui.begin_layout(ctx, screen_size)
 }
 
 @(private)

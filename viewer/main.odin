@@ -74,17 +74,7 @@ main :: proc() {
 		screen_size: rl.Vector2 = {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
 
 		if ui_extra.begin_layout(&ui_ctx, screen_size) {
-			ui_extra.vert_scroll(proc() {
-				for i in 1 ..= 20 {
-					if ui.layout().config(
-						background_color = ui.mouse_state_on_this() == .Hovered ? ui_extra.get_random_color(-0.5) : ui_extra.get_random_color(),
-						width = ui.grow(),
-						height = ui.fixed(32),
-					) {
-						ui.text().config(fmt.tprintf("Element %d", i), alignment = {.Center, .Center})
-					}
-				}
-			})
+
 
 			when ODIN_DEBUG {
 				if ui.layout().config(

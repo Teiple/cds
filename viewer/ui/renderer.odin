@@ -9,54 +9,27 @@ ARC_SEGMENTS :: 12
 
 render_commands :: proc(ctx: ^UI_Context) {
 	clear(&ctx.clip.open_clip_stack)
-
-	rl.BeginShaderMode(ctx.mask_shader.shader)
-	defer rl.EndShaderMode()
-
-	current_clip_rect: rl.Rectangle = {0, 0, 0, 0}
-	clip_set: bool = false
-	mask_data: [4]f32
+	scissor_active := false
+	defer if scissor_active do rl.EndScissorMode()
 
 	for variant in ctx.render_commands {
 		switch command in variant {
 		case Push_Clip_Command:
-			if len(ctx.clip.open_clip_stack) == 0 {
-				append(&ctx.clip.open_clip_stack, command.rect)
-			} else {
-				append(&ctx.clip.open_clip_stack, intersect_rect(back(ctx.clip.open_clip_stack), command.rect))
-			}
-
-			new_clip := back(ctx.clip.open_clip_stack)
-			if !clip_set || new_clip != current_clip_rect {
-				if clip_set && new_clip != current_clip_rect {
-					rl.EndShaderMode()
-					rl.BeginShaderMode(ctx.mask_shader.shader)
-				}
-				current_clip_rect = new_clip
-				clip_set = true
-				setup_mask_shader(ctx, current_clip_rect)
-			}
+			assert(!scissor_active, "Nested scissor mode is not supported")
+			append(&ctx.clip.open_clip_stack, command.rect)
+			rl.BeginScissorMode(
+				i32(command.rect.x),
+				i32(command.rect.y),
+				i32(command.rect.width),
+				i32(command.rect.height),
+			)
+			scissor_active = true
 
 		case Pop_Clip_Command:
+			assert(scissor_active, "No active scissor to pop")
 			pop(&ctx.clip.open_clip_stack)
-
-			new_clip: rl.Rectangle
-			if len(ctx.clip.open_clip_stack) > 0 {
-				new_clip = back(ctx.clip.open_clip_stack)
-			} else {
-				new_clip = {0, 0, 0, 0}
-			}
-
-			// Expensive but needed for nested clip, each clip close must flush the drawing
-			if !clip_set || new_clip != current_clip_rect {
-				if clip_set && new_clip != current_clip_rect {
-					rl.EndShaderMode()
-					rl.BeginShaderMode(ctx.mask_shader.shader)
-				}
-				current_clip_rect = new_clip
-				clip_set = true
-				setup_mask_shader(ctx, current_clip_rect)
-			}
+			rl.EndScissorMode()
+			scissor_active = false
 
 		case Rect_Command:
 			mask_rect: rl.Rectangle
@@ -81,28 +54,6 @@ render_commands :: proc(ctx: ^UI_Context) {
 			draw_text_command(ctx^, command)
 		}
 	}
-}
-
-@(private)
-setup_mask_shader :: proc(ctx: ^UI_Context, mask_rect: rl.Rectangle) {
-	mask_rect := mask_rect
-	mask_rect.y = ctx.screen_size.y - mask_rect.y - mask_rect.height
-	mask_data: [4]f32 = {mask_rect.x, mask_rect.y, mask_rect.width, mask_rect.height}
-	rl.SetShaderValue(ctx.mask_shader.shader, ctx.mask_shader.mask_rectangle, &mask_data, .VEC4)
-}
-
-@(private)
-draw_push_clip_command :: proc(ctx: ^UI_Context, command: Push_Clip_Command) {
-	if len(ctx.clip.open_clip_stack) == 0 {
-		append(&ctx.clip.open_clip_stack, command.rect)
-	} else {
-		append(&ctx.clip.open_clip_stack, intersect_rect(back(ctx.clip.open_clip_stack), command.rect))
-	}
-}
-
-@(private)
-draw_pop_clip_command :: proc(ctx: ^UI_Context) {
-	pop(&ctx.clip.open_clip_stack)
 }
 
 @(private)

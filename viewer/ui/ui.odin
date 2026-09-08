@@ -120,11 +120,6 @@ UI_Font_Config :: struct {
 	spacing:   f32,
 }
 
-Mask_Shader :: struct {
-	shader:         rl.Shader,
-	mask_rectangle: i32,
-}
-
 UI_Builder :: struct {
 	current_context: ^UI_Context,
 	last_id:         u32,
@@ -138,14 +133,13 @@ UI_Context :: struct {
 	render_commands:    [dynamic]Render_Command,
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
-	mask_shader:        Mask_Shader,
 	input:              UI_Input,
 	screen_size:        rl.Vector2,
 	input_event:        UI_Input_Event,
 	clip:               UI_ClipData,
 	ids:                map[u32]UI_Id_Info,
 	floats:             [dynamic]UI_Index,
-	element_bounds:     map[u32]rl.Rectangle,
+	bounds:             map[u32]rl.Rectangle,
 }
 
 UI_Id_Info :: struct {
@@ -629,7 +623,8 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 
 	child_count := 0
 	for it := child_iter_start(ctx, index); child in child_iter_next(&it) do child_count += 1
-	assert(child_count > 0)
+	if child_count == 0 do return
+
 	gap_total := f32(child_count - 1) * layout.config.child_gap
 
 	remaining := available - gap_total
@@ -980,12 +975,6 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	return {font = font, spacing = spacing}
 }
 
-@(private = "file")
-load_mask_shader :: proc() -> Mask_Shader {
-	shader := rl.LoadShader("./shaders/mask.vs", "./shaders/mask.fs")
-	return {shader = shader, mask_rectangle = rl.GetShaderLocation(shader, "maskRectangle")}
-}
-
 context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font_Config) -> UI_Context {
 	fonts := make([dynamic]UI_Font, 0, 4)
 	for config in font_configs {
@@ -1000,7 +989,6 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		measure_text = measure_text_proc,
 		fonts = fonts[:],
-		mask_shader = load_mask_shader(),
 		input_event = {
 			mouse_captured = false,
 			hovered_elements = make([dynamic]u32, 0, 4),
@@ -1010,7 +998,7 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
 		ids = make(map[u32]UI_Id_Info, 50),
 		floats = make([dynamic]UI_Index, 0, 4),
-		element_bounds = make(map[u32]rl.Rectangle, 50),
+		bounds = make(map[u32]rl.Rectangle, 50),
 	}
 }
 
@@ -1026,24 +1014,22 @@ context_delete :: proc(ctx: UI_Context) {
 	}
 	delete(ctx.fonts)
 
-	rl.UnloadShader(ctx.mask_shader.shader)
-
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.selected_elements)
 	delete(ctx.input_event.scrolls)
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
 	delete(ctx.floats)
-	delete(ctx.element_bounds)
+	delete(ctx.bounds)
 }
 
 @(require_results, deferred_in_out = end_layout)
-begin_layout: type_of(begin_layout_no_defer) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
-	return begin_layout_no_defer(ctx, screen_size)
+begin: type_of(begin_layout) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+	return begin_layout(ctx, screen_size)
 }
 
 @(require_results)
-begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+begin_layout :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	builder.current_context = ctx
 
 	ctx.screen_size = screen_size
@@ -1051,6 +1037,7 @@ begin_layout_no_defer :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool
 	clear(&ctx.ids)
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
+	clear(&ctx.floats)
 
 	append(&ctx.elements, root_layout(screen_size))
 	append(&ctx.open_layout_stack, 0)
@@ -1078,7 +1065,7 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	calculate_position(ctx, 0, .X)
 	calculate_position(ctx, 0, .Y)
 
-	size_position_floats(ctx)
+	handle_floats(ctx)
 
 	// generate render commands
 	clear(&ctx.render_commands)
@@ -1126,14 +1113,14 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 
 
 	// write bounds, forward to later frame
-	clear(&ctx.element_bounds)
+	clear(&ctx.bounds)
 	for ele in ctx.elements {
-		ctx.element_bounds[ele.id] = ele_get_rect(ele)
+		ctx.bounds[ele.id] = ele_get_rect(ele)
 	}
 }
 
 @(private = "file")
-size_position_floats :: proc(ctx: ^UI_Context) {
+handle_floats :: proc(ctx: ^UI_Context) {
 	grow_and_percent_float_root :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		current := &ctx.elements[index]
 		layout := ctx.elements[index].attributes.(Layout_Attributes)
@@ -1382,7 +1369,7 @@ root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 }
 
 @(private = "file")
-child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
+child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index, exclude_floats := true) -> Child_Iter {
 	start := ctx.elements[start_index]
 
 	next_index: Maybe(UI_Index) = start.link.last != nil ? start_index + 1 : nil
@@ -1798,7 +1785,7 @@ mouse_position :: proc() -> rl.Vector2 {
 }
 
 rect_by_id :: proc(id: u32) -> rl.Rectangle {
-	rect, ok := builder.current_context.element_bounds[id]
+	rect, ok := builder.current_context.bounds[id]
 	assert(ok)
 	return rect
 }
