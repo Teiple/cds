@@ -1,4 +1,4 @@
-package ui_extra
+package ui
 
 import ui "../ui"
 import "base:runtime"
@@ -14,7 +14,7 @@ Debug_Palette :: struct {
 
 debug_palette: Debug_Palette
 
-@(private)
+@(private = "file")
 fetch_palette_colors :: proc "contextless" (
 	palette: ^[dynamic; $N]rl.Color,
 	image_path: cstring,
@@ -40,10 +40,14 @@ fetch_palette_colors :: proc "contextless" (
 	}
 }
 
-@(init)
-initialize :: proc "contextless" () {
+@(init, private = "file")
+extra_init :: proc "contextless" () {
 	debug_palette.random_generator = runtime.default_random_generator(&debug_palette.random_state)
 	fetch_palette_colors(&debug_palette.colors, "assets/images/colors.png", 2, 16)
+
+	append(&builder.context_events.on_begin, proc() {
+		rand.reset(123, gen = debug_palette.random_generator)
+	})
 }
 
 get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32 = 1.0) -> rl.Color {
@@ -56,17 +60,6 @@ get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32
 	}
 	color := debug_palette.colors[debug_palette.previous_index]
 	return rl.ColorAlpha(rl.ColorBrightness(color, brightness), alpha)
-}
-
-@(deferred_in_out = ui.end_ui)
-begin: type_of(ui.begin_ui) : proc(ctx: ^ui.UI_Context, screen_size: rl.Vector2) -> bool {
-	rand.reset(123, gen = debug_palette.random_generator)
-	return ui.begin_ui(ctx, screen_size)
-}
-
-@(private)
-end: type_of(ui.end_ui) : proc(ctx: ^ui.UI_Context, _: rl.Vector2, ok: bool) {
-	ui.end_ui(ctx, {}, ok)
 }
 
 Content_Proc :: struct($T: typeid) {

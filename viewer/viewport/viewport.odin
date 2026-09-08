@@ -1,25 +1,26 @@
 package viewport
 import rl "vendor:raylib"
 
-Viewport_Context :: struct {
+Viewport :: struct {
 	base_size:        rl.Vector2,
 	destination_rect: rl.Rectangle,
+	scale:            rl.Vector2,
 	render_texture:   rl.RenderTexture,
 }
 
-init_viewport :: proc(base_size: rl.Vector2) -> Viewport_Context {
+init :: proc(base_size: rl.Vector2) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
 	return {base_size = base_size, render_texture = rt}
 }
 
-update :: proc(ctx: ^Viewport_Context, window_size: rl.Vector2) {
-	rt_src: rl.Rectangle = {0, 0, ctx.base_size.x, -ctx.base_size.y}
+update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
+	rt_src: rl.Rectangle = {0, 0, vp.base_size.x, -vp.base_size.y}
 	// keep aspect
-	scale := min(window_size.x / ctx.base_size.x, window_size.y / ctx.base_size.y)
+	vp.scale = min(window_size.x / vp.base_size.x, window_size.y / vp.base_size.y)
 
-	dest_size := ctx.base_size * scale
+	dest_size := vp.base_size * vp.scale
 
-	ctx.destination_rect = {
+	vp.destination_rect = {
 		(window_size.x - dest_size.x) * 0.5,
 		(window_size.y - dest_size.y) * 0.5,
 		dest_size.x,
@@ -27,12 +28,12 @@ update :: proc(ctx: ^Viewport_Context, window_size: rl.Vector2) {
 	}
 }
 
-begin :: proc(ctx: ^Viewport_Context) {
-	rl.BeginTextureMode(ctx.render_texture)
+begin :: proc(vp: ^Viewport) {
+	rl.BeginTextureMode(vp.render_texture)
 	rl.ClearBackground(rl.RAYWHITE)
 }
 
-end :: proc(ctx: ^Viewport_Context) {
+end :: proc(vp: ^Viewport) {
 	rl.EndTextureMode()
 
 	rl.BeginDrawing()
@@ -40,9 +41,9 @@ end :: proc(ctx: ^Viewport_Context) {
 	rl.ClearBackground(rl.BLACK)
 
 	rl.DrawTexturePro(
-		ctx.render_texture.texture,
-		{0, 0, ctx.base_size.x, -ctx.base_size.y},
-		ctx.destination_rect,
+		vp.render_texture.texture,
+		{0, 0, vp.base_size.x, -vp.base_size.y},
+		vp.destination_rect,
 		{0, 0},
 		0,
 		rl.WHITE,
@@ -52,6 +53,15 @@ end :: proc(ctx: ^Viewport_Context) {
 }
 
 
-close_viewport :: proc(ctx: ^Viewport_Context) {
+close_viewport :: proc(ctx: ^Viewport) {
 	rl.UnloadRenderTexture(ctx.render_texture)
+}
+
+window_to_viewport_position :: proc(vp: Viewport, postion: rl.Vector2) -> rl.Vector2 {
+	dest_rect_pos: rl.Vector2 = {vp.destination_rect.x, vp.destination_rect.y}
+	return (postion - dest_rect_pos) / vp.scale
+}
+
+window_to_viewport_vector :: proc(vp: Viewport, vec: rl.Vector2) -> rl.Vector2 {
+	return vec / vp.scale
 }

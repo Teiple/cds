@@ -1,5 +1,6 @@
 package ui
 
+import vp "../viewport"
 import "base:runtime"
 import "core:hash"
 import "core:math"
@@ -122,9 +123,17 @@ UI_Font_Config :: struct {
 UI_Builder :: struct {
 	current_context: ^UI_Context,
 	last_id:         u32,
+	context_events:  UI_Context_Events,
+}
+
+CTX_MAX_EVENT_LISTENERS :: 5
+UI_Context_Events :: struct {
+	on_begin: [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_end:   [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
 }
 
 UI_Context :: struct {
+	viewport:           vp.Viewport,
 	elements:           [dynamic]UI_Element,
 	open_layout_stack:  [dynamic]UI_Index,
 	growable_buffer:    [dynamic]UI_Index,
@@ -133,13 +142,13 @@ UI_Context :: struct {
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
 	input:              UI_Input,
-	screen_size:        rl.Vector2,
 	input_event:        UI_Input_Event,
 	clip:               UI_ClipData,
 	ids:                map[u32]UI_Id_Info,
 	floats:             [dynamic]UI_Index,
 	bounds:             map[u32]rl.Rectangle,
 }
+
 
 UI_Id_Info :: struct {
 	base:       u32,
@@ -1016,22 +1025,23 @@ context_delete :: proc(ctx: UI_Context) {
 }
 
 @(require_results, deferred_in_out = end_ui)
-begin: type_of(begin_ui) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
-	return begin_ui(ctx, screen_size)
+begin: type_of(begin_ui) : proc(ctx: ^UI_Context, viewport: vp.Viewport) -> bool {
+	return begin_ui(ctx, viewport)
 }
 
 @(require_results)
-begin_ui :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+begin_ui :: proc(ctx: ^UI_Context, viewport: vp.Viewport) -> bool {
 	builder.current_context = ctx
+	for p in builder.context_events.on_begin do p()
 
-	ctx.screen_size = screen_size
+	ctx.viewport = viewport
 
 	clear(&ctx.ids)
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
 
-	append(&ctx.elements, root_layout(screen_size))
+	append(&ctx.elements, root_layout(viewport.base_size))
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -1041,7 +1051,7 @@ begin_ui :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	return true
 }
 
-end_ui :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
+end_ui :: proc(ctx: ^UI_Context, _: vp.Viewport, ok: bool) {
 	if !ok do return
 
 	// close root
@@ -1073,8 +1083,8 @@ end_ui :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 
 	// mouse input
 	{
-		ctx.input.mouse_position = rl.GetMousePosition()
-		ctx.input.mouse_delta = rl.GetMouseDelta()
+		ctx.input.mouse_position = vp.window_to_viewport_position(ctx.viewport, rl.GetMousePosition())
+		ctx.input.mouse_delta = vp.window_to_viewport_vector(ctx.viewport, rl.GetMouseDelta())
 		ctx.input.mouse_scroll = rl.GetMouseWheelMoveV()
 
 		MOUSE_BTN :: rl.MouseButton.LEFT
@@ -1110,6 +1120,8 @@ end_ui :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	for ele in ctx.elements {
 		ctx.bounds[ele.id] = ele_get_rect(ele)
 	}
+
+	for p in builder.context_events.on_end do p()
 }
 
 @(private = "file")
@@ -1323,7 +1335,7 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 		})
 }
 
-
+@(private = "file")
 travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index = 0,

@@ -3,7 +3,6 @@ package main
 import fmt "core:fmt"
 import mem "core:mem"
 import ui "ui"
-import ui_extra "ui_extra"
 import rl "vendor:raylib"
 import vp "viewport"
 
@@ -38,8 +37,8 @@ main :: proc() {
 	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Unnamed")
 	defer rl.CloseWindow()
 
-	vp_ctx := vp.init_viewport(BASE_WINDOW_SIZE)
-	defer vp.close_viewport(&vp_ctx)
+	main_viewport := vp.init(BASE_WINDOW_SIZE)
+	defer vp.close_viewport(&main_viewport)
 
 	ui_ctx: ui.UI_Context = ui.context_make(
 		ui.measure_text,
@@ -76,14 +75,14 @@ main :: proc() {
 		defer free_all(context.temp_allocator)
 
 		window_size: rl.Vector2 = {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
-		vp.update(&vp_ctx, window_size)
+		vp.update(&main_viewport, window_size)
 
 		// Draw to viewport
-		vp.begin(&vp_ctx)
-		defer vp.end(&vp_ctx)
+		vp.begin(&main_viewport)
+		defer vp.end(&main_viewport)
 
-		if ui_extra.begin(&ui_ctx, vp_ctx.base_size) {
-			ui_extra.vert_scroll(proc() {
+		if ui.begin(&ui_ctx, main_viewport) {
+			ui.vert_scroll(proc() {
 				ui.text().config(
 					"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed pharetra interdum luctus. Ut pharetra vehicula euismod. Donec dapibus, ante eget imperdiet sodales, dolor tellus venenatis est, non venenatis nisl ipsum a risus. Pellentesque enim velit, pretium vitae mollis et, facilisis at metus. Curabitur elementum in nulla eu rutrum. Vestibulum lacus erat, porta ut augue non, mollis vehicula erat. Cras nibh nisl, pretium non sodales eget, aliquet vitae nunc. In egestas, justo sed mollis posuere, sem tortor finibus risus, sed ullamcorper nibh ipsum accumsan magna. Nulla facilisi. Sed vehicula, justo eu auctor ornare, nunc odio iaculis urna, in iaculis urna eros vitae ex." +
 					"Fusce sit amet lorem ac justo suscipit condimentum dapibus ultricies dui. Suspendisse elementum diam a suscipit mattis. Duis euismod neque ac leo dignissim, mattis hendrerit leo lacinia. Fusce rhoncus fringilla mauris, eget porttitor sem facilisis ut. Quisque dui lacus, molestie eget pulvinar id, dictum et neque. Donec molestie elit vitae nisi pellentesque tempus. Praesent bibendum condimentum quam nec ultrices. Phasellus mollis vitae odio vitae finibus. ",
@@ -94,7 +93,7 @@ main :: proc() {
 				if ui.layout().config(
 					width = ui.grow(),
 					height = ui.fixed(64),
-					background_color = ui.mouse_state_on_this() == .Hovered ? ui_extra.get_random_color(-0.5) : ui_extra.get_random_color(),
+					background_color = ui.mouse_state_on_this() == .Hovered ? ui.get_random_color(-0.5) : ui.get_random_color(),
 					float_mode = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
 					corner_radius = {4, 4, 0, 0},
 				) {
