@@ -2,14 +2,17 @@ package ui_extra
 
 import ui "../ui"
 import "base:runtime"
-import "core:fmt"
 import "core:math/rand"
 import rl "vendor:raylib"
 
-debug_palette: [dynamic; 120]rl.Color
-debug_palette_prev_index: int = 0
-debug_palette_rng_state: runtime.Default_Random_State
-debug_palette_rng := runtime.default_random_generator(&debug_palette_rng_state)
+Debug_Palette :: struct {
+	colors:           [dynamic; 120]rl.Color,
+	previous_index:   int,
+	random_state:     runtime.Default_Random_State,
+	random_generator: rand.Generator,
+}
+
+debug_palette: Debug_Palette
 
 @(private)
 fetch_palette_colors :: proc "contextless" (
@@ -39,25 +42,31 @@ fetch_palette_colors :: proc "contextless" (
 
 @(init)
 initialize :: proc "contextless" () {
-	fetch_palette_colors(&debug_palette, "assets/images/colors.png", 2, 16)
+	debug_palette.random_generator = runtime.default_random_generator(&debug_palette.random_state)
+	fetch_palette_colors(&debug_palette.colors, "assets/images/colors.png", 2, 16)
 }
 
 get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32 = 1.0) -> rl.Color {
 	if !use_prev {
-		debug_palette_prev_index = rand.int_range(0, len(debug_palette), gen = debug_palette_rng)
+		debug_palette.previous_index = rand.int_range(
+			0,
+			len(debug_palette.colors),
+			gen = debug_palette.random_generator,
+		)
 	}
-	return rl.ColorAlpha(rl.ColorBrightness(debug_palette[debug_palette_prev_index], brightness), alpha)
+	color := debug_palette.colors[debug_palette.previous_index]
+	return rl.ColorAlpha(rl.ColorBrightness(color, brightness), alpha)
 }
 
-@(deferred_in_out = end_layout)
-begin_layout: type_of(ui.begin_layout) : proc(ctx: ^ui.UI_Context, screen_size: rl.Vector2) -> bool {
-	rand.reset(123, gen = debug_palette_rng)
-	return ui.begin_layout(ctx, screen_size)
+@(deferred_in_out = ui.end_ui)
+begin: type_of(ui.begin_ui) : proc(ctx: ^ui.UI_Context, screen_size: rl.Vector2) -> bool {
+	rand.reset(123, gen = debug_palette.random_generator)
+	return ui.begin_ui(ctx, screen_size)
 }
 
 @(private)
-end_layout: type_of(ui.end_layout) : proc(ctx: ^ui.UI_Context, _: rl.Vector2, ok: bool) {
-	ui.end_layout(ctx, {}, ok)
+end: type_of(ui.end_ui) : proc(ctx: ^ui.UI_Context, _: rl.Vector2, ok: bool) {
+	ui.end_ui(ctx, {}, ok)
 }
 
 Content_Proc :: struct($T: typeid) {
@@ -119,28 +128,19 @@ vert_scroll_base :: proc(
 			bar_rect := ui.rect_by_id(scroll_bar_id)
 			thumb_rect := ui.rect_by_id(scroll_thumb_id)
 
-			// When pressed, store the offset from mouse to thumb top‑left
 			if ui.mouse_state() == .Pressed {
 				scroll_thumb_press_offset = ui.mouse_position() - {thumb_rect.x, thumb_rect.y}
 			}
 
 			if ui.mouse_state() == .Down {
-				// Desired thumb top‑left (absolute)
 				thumb_desired := ui.mouse_position() - scroll_thumb_press_offset
-
-				// Position relative to bar
 				thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
-
-				// Available movement range
 				thumb_range: rl.Vector2 = {bar_rect.width, bar_rect.height} - {thumb_rect.width, thumb_rect.height}
 
-				// Normalize (clamped)
 				offset: rl.Vector2 = {
 					thumb_range.x > 0 ? clamp(thumb_local.x / thumb_range.x, 0, 1) : 0,
 					thumb_range.y > 0 ? clamp(thumb_local.y / thumb_range.y, 0, 1) : 0,
 				}
-
-				// Apply to scroll
 				ui.set_scroll_offset(offset * scroll_data.min_offset)
 			}
 		}

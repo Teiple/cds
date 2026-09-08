@@ -1,7 +1,6 @@
 package ui
 
 import "base:runtime"
-import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:os"
@@ -46,7 +45,7 @@ UI_Input :: struct {
 	mouse_position: rl.Vector2,
 	mouse_delta:    rl.Vector2,
 	mouse_state:    UI_Mouse_State,
-	scroll:         rl.Vector2,
+	mouse_scroll:   rl.Vector2,
 }
 
 UI_Input_Event :: struct {
@@ -221,14 +220,7 @@ Border_Config :: struct #all_or_none {
 	color:     rl.Color,
 }
 
-Shadow_Config :: struct #all_or_none {
-	enabled: bool,
-	color:   rl.Color,
-	radius:  f32,
-	offset:  rl.Vector2,
-}
-
-NormalizedEnd :: enum {
+Normalized_End :: enum {
 	Start,
 	End,
 }
@@ -1023,13 +1015,13 @@ context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.bounds)
 }
 
-@(require_results, deferred_in_out = end_layout)
-begin: type_of(begin_layout) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
-	return begin_layout(ctx, screen_size)
+@(require_results, deferred_in_out = end_ui)
+begin: type_of(begin_ui) : proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+	return begin_ui(ctx, screen_size)
 }
 
 @(require_results)
-begin_layout :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
+begin_ui :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	builder.current_context = ctx
 
 	ctx.screen_size = screen_size
@@ -1049,7 +1041,7 @@ begin_layout :: proc(ctx: ^UI_Context, screen_size: rl.Vector2) -> bool {
 	return true
 }
 
-end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
+end_ui :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	if !ok do return
 
 	// close root
@@ -1083,6 +1075,7 @@ end_layout :: proc(ctx: ^UI_Context, _: rl.Vector2, ok: bool) {
 	{
 		ctx.input.mouse_position = rl.GetMousePosition()
 		ctx.input.mouse_delta = rl.GetMouseDelta()
+		ctx.input.mouse_scroll = rl.GetMouseWheelMoveV()
 
 		MOUSE_BTN :: rl.MouseButton.LEFT
 		if rl.IsMouseButtonPressed(MOUSE_BTN) {
@@ -1309,7 +1302,7 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 					cur_scroll := ctx.input_event.scrolls[ele.id]
 					pending_offset, is_pending := cur_scroll.pending_offset.?
-					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + rl.GetMouseWheelMoveV() * 20.0
+					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + ctx.input.mouse_scroll * 20.0
 
 					next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
 
@@ -1517,7 +1510,7 @@ layout_get_content_size :: proc(ctx: ^UI_Context, index: UI_Index, layout: Layou
 }
 
 @(private = "file")
-layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: NormalizedEnd) -> f32 {
+layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: Normalized_End) -> f32 {
 	return(
 		axis == .X ? (end == .Start ? layout.config.padding.left : layout.config.padding.right) : (end == .Start ? layout.config.padding.top : layout.config.padding.bottom) \
 	)
