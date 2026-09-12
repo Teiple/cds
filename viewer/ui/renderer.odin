@@ -36,6 +36,17 @@ render_commands :: proc(ctx: ^UI_Context) {
 			}
 			draw_rect_command(ctx^, command)
 
+		case Image_Command:
+			mask_rect: rl.Rectangle
+			has_clip := len(ctx.clip.open_clip_stack) > 0
+			if has_clip {
+				mask_rect = back(ctx.clip.open_clip_stack)
+				if _, ok := intersect_rect(command.dest, mask_rect); !ok {
+					continue
+				}
+			}
+			draw_image_command(ctx^, command)
+
 		case Text_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
@@ -47,6 +58,42 @@ render_commands :: proc(ctx: ^UI_Context) {
 			}
 			draw_text_command(ctx^, command)
 		}
+	}
+}
+
+@(private)
+draw_image_command :: proc(ctx: UI_Context, command: Image_Command) {
+	if command.texture.id == 0 || command.dest.width <= 0 || command.dest.height <= 0 {
+		return
+	}
+
+	source := command.source
+	if source.width == 0 || source.height == 0 {
+		source = {0, 0, f32(command.texture.width), f32(command.texture.height)}
+	}
+
+	tint := command.tint
+	if tint.a == 0 && tint.r == 0 && tint.g == 0 && tint.b == 0 {
+		tint = rl.WHITE
+	}
+
+	if npatch, ok := command.npatch.?; ok {
+		npatch_source := npatch.source
+		if npatch_source.width == 0 || npatch_source.height == 0 {
+			npatch_source = source
+		}
+
+		info := rl.NPatchInfo {
+			source = npatch_source,
+			left   = npatch.left,
+			top    = npatch.top,
+			right  = npatch.right,
+			bottom = npatch.bottom,
+			layout = npatch.layout,
+		}
+		rl.DrawTextureNPatch(command.texture, info, command.dest, {}, 0, tint)
+	} else {
+		rl.DrawTexturePro(command.texture, source, command.dest, {}, 0, tint)
 	}
 }
 
@@ -133,15 +180,22 @@ draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: Co
 		return
 	}
 
-	center_w := w - r_tl - r_tr
-	center_h := h - r_tl - r_bl
+	top_h := max(r_tl, r_tr)
+	bot_h := max(r_bl, r_br)
+	mid_h := h - top_h - bot_h
 
-	if center_w > 0 {
-		rl.DrawRectangleRec({x + r_tl, y, center_w, h}, color)
+	if mid_h > 0 {
+		rl.DrawRectangleRec({x, y + top_h, w, mid_h}, color)
 	}
 
-	if center_h > 0 {
-		rl.DrawRectangleRec({x, y + r_tl, w, center_h}, color)
+	top_w := w - r_tl - r_tr
+	if top_h > 0 && top_w > 0 {
+		rl.DrawRectangleRec({x + r_tl, y, top_w, top_h}, color)
+	}
+
+	bot_w := w - r_bl - r_br
+	if bot_h > 0 && bot_w > 0 {
+		rl.DrawRectangleRec({x + r_bl, y + h - bot_h, bot_w, bot_h}, color)
 	}
 
 	if r_tl > 0 {

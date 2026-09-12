@@ -24,9 +24,6 @@ UI_Layout_Mouse_State :: enum {
 	Down,
 	Released,
 	Hovered,
-	PressedAway,
-	DownAway,
-	ReleasedAway,
 }
 
 UI_Mouse_State :: enum {
@@ -55,6 +52,8 @@ UI_Input_Event :: struct {
 	selected_once:     bool,
 	hovered_elements:  [dynamic]u32,
 	selected_elements: [dynamic]u32,
+	held_elements:     [dynamic]u32,
+	clicked_elements:  [dynamic]u32,
 	scrolls:           map[u32]UI_Scroll_Data,
 }
 
@@ -69,17 +68,35 @@ UI_ClipData :: struct {
 	open_clip_stack: [dynamic]rl.Rectangle,
 }
 
-UI_Layout_Mouse_Event_Callbacks :: struct {
-	on_pressed:  proc(),
-	on_released: proc(),
-	on_down:     proc(),
-	on_hovered:  proc(),
+UI_Measure_Text :: proc(draw_text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
+
+Nine_Patch :: struct {
+	source: rl.Rectangle,
+	left:   i32,
+	top:    i32,
+	right:  i32,
+	bottom: i32,
+	layout: rl.NPatchLayout,
 }
 
-UI_Measure_Text :: proc(draw_text: UI_Text_Config, font_info: UI_Font) -> (width: f32)
+UI_Image :: struct {
+	texture: rl.Texture2D,
+	source:  rl.Rectangle,
+	tint:    rl.Color,
+	npatch:  Maybe(Nine_Patch),
+}
+
+Image_Command :: struct #all_or_none {
+	texture: rl.Texture2D,
+	source:  rl.Rectangle,
+	dest:    rl.Rectangle,
+	tint:    rl.Color,
+	npatch:  Maybe(Nine_Patch),
+}
 
 Render_Command :: union {
 	Rect_Command,
+	Image_Command,
 	Text_Command,
 	Push_Clip_Command,
 	Pop_Clip_Command,
@@ -251,10 +268,10 @@ UI_Layout_Config :: struct {
 	layout_direction: Layout_Direction,
 	child_alignment:  rl.Vector2,
 	background_color: rl.Color,
+	background_image: Maybe(UI_Image),
 	corner_radius:    Corner_Radius,
 	border:           Border_Config,
 	mouse_mode:       UI_Layout_Mouse_Mode,
-	callbacks:        UI_Layout_Mouse_Event_Callbacks,
 	clip:             bool,
 	scroll:           bool,
 	ignore_scroll:    bool,
@@ -282,16 +299,18 @@ Float_At_Root :: struct {
 	using _: UI_Float_Config,
 }
 
+Float_Attach_Points :: struct {
+	element: Anchor_Point,
+	parent:  Anchor_Point,
+}
+
 UI_Float_Config :: struct {
-	attach_points: struct {
-		element: AnchorPoint,
-		parent:  AnchorPoint,
-	},
+	attach_points: Float_Attach_Points,
 	offset:        rl.Vector2,
 	z_index:       i32,
 }
 
-AnchorPoint :: enum {
+Anchor_Point :: enum {
 	LeftTop,
 	LeftCenter,
 	LeftBottom,
@@ -383,7 +402,7 @@ push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 	}
 }
 
-@(private = "file")
+@(private)
 push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 	_, existed := ctx.ids[id]
 	if existed {
@@ -396,7 +415,7 @@ push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 	}
 }
 
-@(private = "file")
+@(private)
 is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
 	ele := &ctx.elements[index]
 	if attr, ok := ele.attributes.(Layout_Attributes); ok {
@@ -405,7 +424,7 @@ is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
 	return false
 }
 
-@(private = "file")
+@(private)
 open_layout :: proc(ctx: ^UI_Context, id: u32, config: UI_Layout_Config, limits: UI_Limits) -> bool {
 	parent := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
@@ -436,7 +455,7 @@ open_layout :: proc(ctx: ^UI_Context, id: u32, config: UI_Layout_Config, limits:
 	return true
 }
 
-@(private = "file")
+@(private)
 open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	parent_idx := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
@@ -462,13 +481,13 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	calculate_text_width(ctx, index)
 }
 
-@(private = "file")
+@(private)
 close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
 }
 
-@(private = "file")
+@(private)
 calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	text_attr, ok := &current.attributes.(Text_Attributes)
@@ -528,7 +547,7 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current.size.x = clamp_element_size(current.size.x, current.limits.x)
 }
 
-@(private = "file")
+@(private)
 clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	res := current_size
 	if min_size, ok := limits.min.(f32); ok && res <= min_size {
@@ -540,7 +559,7 @@ clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	return res
 }
 
-@(private = "file")
+@(private)
 fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
@@ -588,7 +607,7 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	ele_set_size(current, clamp_element_size(children_size, ele_get_lims(current, axis)), axis)
 }
 
-@(private = "file")
+@(private)
 fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		fit_sizing_tree(ctx, child_index, axis)
@@ -596,7 +615,7 @@ fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	fit_sizing(ctx, index, axis)
 }
 
-@(private = "file")
+@(private)
 grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
@@ -754,7 +773,7 @@ grow_and_percent_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	}
 }
 
-@(private = "file")
+@(private)
 grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	grow_and_percent_sizing(ctx, index, axis)
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
@@ -762,7 +781,7 @@ grow_and_percent_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: Ax
 	}
 }
 
-@(private = "file")
+@(private)
 is_separator :: #force_inline proc(r: rune) -> bool {
 	for sep in WORD_SEPARATION_CHARS {
 		if r == sep {
@@ -772,7 +791,7 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 	return false
 }
 
-@(private = "file")
+@(private)
 wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 	for it := child_iter_start(ctx, index); ele, child_index in child_iter_next(&it) {
 		text_attr, ok := (&ele.attributes.(Text_Attributes))
@@ -861,13 +880,13 @@ wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 }
 
 
-@(private = "file")
-get_anchor_point :: proc(ele: UI_Element, anchor: AnchorPoint) -> rl.Vector2 {
+@(private)
+get_anchor_point :: proc(ele: UI_Element, anchor: Anchor_Point) -> rl.Vector2 {
 	return ele.position + ele.size * get_anchor_offset(anchor)
 }
 
-@(private = "file")
-get_anchor_offset :: proc(anchor: AnchorPoint) -> rl.Vector2 {
+@(private)
+get_anchor_offset :: proc(anchor: Anchor_Point) -> rl.Vector2 {
 	switch anchor {
 	case .LeftTop:
 		return {0, 0}
@@ -891,7 +910,7 @@ get_anchor_offset :: proc(anchor: AnchorPoint) -> rl.Vector2 {
 	return {0, 0}
 }
 
-@(private = "file")
+@(private)
 calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
@@ -952,7 +971,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 	}
 }
 
-@(private = "file")
+@(private)
 load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	assert(os.exists(string(font_path)))
 
@@ -1000,6 +1019,8 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 			mouse_captured = false,
 			hovered_elements = make([dynamic]u32, 0, 4),
 			selected_elements = make([dynamic]u32, 0, 4),
+			held_elements = make([dynamic]u32, 0, 4),
+			clicked_elements = make([dynamic]u32, 0, 4),
 			scrolls = make(map[u32]UI_Scroll_Data, 4),
 		},
 		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
@@ -1027,6 +1048,8 @@ context_delete :: proc(ctx: UI_Context) {
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.selected_elements)
+	delete(ctx.input_event.held_elements)
+	delete(ctx.input_event.clicked_elements)
 	delete(ctx.input_event.scrolls)
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
@@ -1113,6 +1136,7 @@ end_ui :: proc(ctx: ^UI_Context, _: vp.Viewport, ok: bool) {
 		ctx.input_event.selected_once = false
 
 		clear(&ctx.input_event.hovered_elements)
+		clear(&ctx.input_event.clicked_elements)
 		clear(&ctx.clip.open_clip_stack)
 
 		// detect mouse input on floats first, in reverse z index order
@@ -1122,6 +1146,10 @@ end_ui :: proc(ctx: ^UI_Context, _: vp.Viewport, ok: bool) {
 		}
 		// then the normal layout layer
 		detect_mouse(ctx, 0)
+
+		if ctx.input.mouse_state == .Released {
+			clear(&ctx.input_event.held_elements)
+		}
 	}
 
 
@@ -1134,7 +1162,7 @@ end_ui :: proc(ctx: ^UI_Context, _: vp.Viewport, ok: bool) {
 	for p in builder.context_events.on_end do p()
 }
 
-@(private = "file")
+@(private)
 handle_floats :: proc(ctx: ^UI_Context) {
 	grow_and_percent_float_root :: proc(ctx: ^UI_Context, index: UI_Index, axis: Axis) {
 		current := &ctx.elements[index]
@@ -1188,21 +1216,35 @@ handle_floats :: proc(ctx: ^UI_Context) {
 }
 
 
-@(private = "file")
+@(private)
 generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	ele := &ctx.elements[index]
 
 	switch attr in ele.attributes {
 	case Layout_Attributes:
-		append(
-			&ctx.render_commands,
-			Rect_Command{
-				rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
-				color = attr.config.background_color,
-				corner_radius = attr.config.corner_radius,
-				border = attr.config.border,
-			},
-		)
+		if attr.config.background_color.a > 0 || attr.config.border.thickness > 0 {
+			append(
+				&ctx.render_commands,
+				Rect_Command{
+					rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
+					color = attr.config.background_color,
+					corner_radius = attr.config.corner_radius,
+					border = attr.config.border,
+				},
+			)
+		}
+		if bg_img, ok := attr.config.background_image.?; ok {
+			append(
+				&ctx.render_commands,
+				Image_Command{
+					texture = bg_img.texture,
+					source = bg_img.source,
+					dest = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
+					tint = bg_img.tint.a == 0 && bg_img.tint.r == 0 && bg_img.tint.g == 0 && bg_img.tint.b == 0 ? rl.WHITE : bg_img.tint,
+					npatch = bg_img.npatch,
+				},
+			)
+		}
 		if attr.config.clip && !is_floating_element(ctx, index) {
 			append(
 				&ctx.render_commands,
@@ -1235,7 +1277,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	}
 }
 
-@(private = "file")
+@(private)
 detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 	detect_mouse_should_stop :: proc(input_event: UI_Input_Event) -> bool {
 		return input_event.mouse_captured && input_event.scroll_captured
@@ -1280,23 +1322,20 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 				}
 
 				if rect_contains(ctx.input.mouse_position, clipped_rect) {
-					switch callbacks := layout.config.callbacks; ctx.input.mouse_state {
-					case .None:
-						if callbacks.on_hovered != nil do callbacks.on_hovered()
+					switch ctx.input.mouse_state {
 					case .Pressed:
-						{
-							if callbacks.on_pressed != nil do callbacks.on_pressed()
-
-							if !ctx.input_event.selected_once {
-								clear(&ctx.input_event.selected_elements)
-								ctx.input_event.selected_once = true
-							}
-							append(&ctx.input_event.selected_elements, ele.id)
+						if !ctx.input_event.selected_once {
+							clear(&ctx.input_event.selected_elements)
+							clear(&ctx.input_event.held_elements)
+							ctx.input_event.selected_once = true
 						}
-					case .Down:
-						if callbacks.on_down != nil do callbacks.on_down()
+						append(&ctx.input_event.selected_elements, ele.id)
+						append(&ctx.input_event.held_elements, ele.id)
 					case .Released:
-						if callbacks.on_released != nil do callbacks.on_released()
+						if is_id_held(ele.id) {
+							append(&ctx.input_event.clicked_elements, ele.id)
+						}
+					case .None, .Down:
 					}
 
 					append(&ctx.input_event.hovered_elements, ele.id)
@@ -1345,7 +1384,7 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 		})
 }
 
-@(private = "file")
+@(private)
 travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index = 0,
@@ -1363,7 +1402,7 @@ travel_tree_reverse :: proc(
 	return false
 }
 
-@(private = "file")
+@(private)
 root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 	return UI_Element {
 		id = 0,
@@ -1383,7 +1422,7 @@ root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 	}
 }
 
-@(private = "file")
+@(private)
 child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index, exclude_floats := true) -> Child_Iter {
 	start := ctx.elements[start_index]
 
@@ -1397,7 +1436,7 @@ child_iter_start :: proc(ctx: ^UI_Context, start_index: UI_Index, exclude_floats
 	return {ctx = ctx, next = next_index}
 }
 
-@(private = "file")
+@(private)
 child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI_Index, cond: bool) {
 	if it.next == nil {
 		return
@@ -1416,7 +1455,7 @@ child_iter_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI
 	return
 }
 
-@(private = "file")
+@(private)
 child_iter_reverse_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Child_Iter {
 	start := ctx.elements[start_index]
 	next_index := start.link.last
@@ -1429,7 +1468,7 @@ child_iter_reverse_start :: proc(ctx: ^UI_Context, start_index: UI_Index) -> Chi
 	return {ctx = ctx, next = next_index}
 }
 
-@(private = "file")
+@(private)
 child_iter_reverse_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_index: UI_Index, cond: bool) {
 	if it.next == nil {
 		return
@@ -1448,7 +1487,7 @@ child_iter_reverse_next :: proc(it: ^Child_Iter) -> (child: ^UI_Element, child_i
 	return
 }
 
-@(private = "file")
+@(private)
 get_float_target :: proc(
 	ctx: UI_Context,
 	index: UI_Index,
@@ -1483,7 +1522,7 @@ get_float_target :: proc(
 	return
 }
 
-@(private = "file")
+@(private)
 is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
 	case Text_Attributes:
@@ -1504,14 +1543,14 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: Axis) -> bool {
 	return false
 }
 
-@(private = "file")
+@(private)
 layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return(
 		axis == .X ? layout.config.padding.left + layout.config.padding.right : layout.config.padding.top + layout.config.padding.bottom \
 	)
 }
 
-@(private = "file")
+@(private)
 layout_get_content_size :: proc(ctx: ^UI_Context, index: UI_Index, layout: Layout_Attributes, axis: Axis) -> f32 {
 	content_size: f32 = 0
 	if layout_is_along(layout, axis) {
@@ -1531,120 +1570,120 @@ layout_get_content_size :: proc(ctx: ^UI_Context, index: UI_Index, layout: Layou
 	return content_size
 }
 
-@(private = "file")
+@(private)
 layout_get_pad_at :: proc(layout: Layout_Attributes, axis: Axis, end: Normalized_End) -> f32 {
 	return(
 		axis == .X ? (end == .Start ? layout.config.padding.left : layout.config.padding.right) : (end == .Start ? layout.config.padding.top : layout.config.padding.bottom) \
 	)
 }
 
-@(private = "file")
+@(private)
 layout_get_mode :: proc {
 	layout_get_mode_from_attr,
 	layout_get_mode_from_ele,
 }
 
-@(private = "file")
+@(private)
 layout_get_mode_from_attr :: proc(layout: Layout_Attributes, axis: Axis) -> Size_Mode {
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
-@(private = "file")
+@(private)
 layout_get_mode_from_ele :: proc(element: UI_Element, axis: Axis) -> Size_Mode {
 	layout := element.attributes.(Layout_Attributes)
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
-@(private = "file")
+@(private)
 layout_is_along :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	return(
 		axis == .X ? layout.config.layout_direction == .Left_To_Right : layout.config.layout_direction == .Top_To_Bottom \
 	)
 }
 
-@(private = "file")
+@(private)
 layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	return(
 		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
 	)
 }
 
-@(private = "file")
+@(private)
 layout_get_final_offset :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? layout.config.offset.x : layout.config.offset.y
 }
 
-@(private = "file")
+@(private)
 ele_set_size :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.size.x = value
 	else do element.size.y = value
 }
 
-@(private = "file")
+@(private)
 ele_set_min :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.limits.x.min = value
 	else do element.limits.y.min = value
 }
 
-@(private = "file")
+@(private)
 ele_set_max :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.limits.x.max = value
 	else do element.limits.y.max = value
 }
 
-@(private = "file")
+@(private)
 ele_get_size :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	return axis == .X ? element.size.x : element.size.y
 }
 
-@(private = "file")
+@(private)
 ele_get_min :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	return axis == .X ? element.limits.x.min.? or_else 0 : element.limits.y.min.? or_else 0
 }
 
-@(private = "file")
+@(private)
 ele_get_max :: proc(element: ^UI_Element, axis: Axis) -> Maybe(f32) {
 	return axis == .X ? element.limits.x.max : element.limits.y.max
 }
 
-@(private = "file")
+@(private)
 ele_get_lims :: proc(element: ^UI_Element, axis: Axis) -> UI_Axis_Limits {
 	return axis == .X ? element.limits.x : element.limits.y
 }
 
-@(private = "file")
+@(private)
 ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: Axis) {
 	if axis == .X do element.position.x = value
 	else do element.position.y = value
 }
 
-@(private = "file")
+@(private)
 ele_get_pos :: proc(element: ^UI_Element, axis: Axis) -> f32 {
 	if axis == .X do return element.position.x
 	else do return element.position.y
 }
 
-@(private = "file")
+@(private)
 ele_get_rect :: #force_inline proc(element: UI_Element) -> rl.Rectangle {
 	return {x = element.position.x, y = element.position.y, width = element.size.x, height = element.size.y}
 }
 
-@(private = "file")
+@(private)
 text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
 }
 
-@(private = "file")
+@(private)
 text_get_bound_size :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? text_attr.bound_size.x : text_attr.bound_size.y
 }
 
-@(private = "file")
+@(private)
 align_get_offset :: proc(alignment: rl.Vector2, axis: Axis) -> f32 {
 	return axis == .X ? alignment.x : alignment.y
 }
 
-@(private = "file") // ascending sort
+@(private) // ascending sort
 sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	if len(indices) <= 1 do return
 	// simple insertion sort
@@ -1668,7 +1707,7 @@ sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	}
 }
 
-@(private = "file")
+@(private)
 get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
 	switch float_type in float {
 	case Float_None:
@@ -1695,10 +1734,10 @@ draw_layout :: proc(
 	layout_direction: Layout_Direction = .Left_To_Right,
 	child_alignment: Alignment = {x = .Left, y = .Top},
 	background_color: rl.Color = {},
+	background_image: Maybe(UI_Image) = nil,
 	corner_radius: Corner_Radius = {4, 4, 4, 4},
 	border: Border_Config = BORDER_DEFAULT,
 	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
-	callbacks: UI_Layout_Mouse_Event_Callbacks = {},
 	clip: bool = false,
 	scroll: bool = false,
 	ignore_scroll: bool = false,
@@ -1716,10 +1755,10 @@ draw_layout :: proc(
 			layout_direction = layout_direction,
 			child_alignment = get_alignment_offset(child_alignment),
 			background_color = background_color,
+			background_image = background_image,
 			corner_radius = corner_radius,
 			mouse_mode = mouse_mode,
 			border = border,
-			callbacks = callbacks,
 			clip = clip,
 			scroll = scroll,
 			float_mode = float_mode,
@@ -1730,7 +1769,7 @@ draw_layout :: proc(
 	)
 }
 
-@(private = "file")
+@(private)
 draw_text :: proc(
 	content: string,
 	font_index: Font_Index = 0,
@@ -1775,6 +1814,11 @@ pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
 	return Layout_Padding{value, value, value, value}
 }
 
+corner_radius_all :: #force_inline proc(value: f32) -> Corner_Radius {
+	return Corner_Radius{value, value, value, value}
+}
+
+
 mouse_state_on_this :: proc() -> UI_Layout_Mouse_State {
 	return get_layout_mouse_state_by_id(builder.current_context^, builder.last_id)
 }
@@ -1812,6 +1856,39 @@ is_this_selected :: proc() -> bool {
 	return is_id_selected(builder.last_id)
 }
 
+is_id_held :: proc(id: u32) -> bool {
+	for ele_id in builder.current_context.input_event.held_elements {
+		if ele_id == id do return true
+	}
+	return false
+}
+
+is_this_held :: proc() -> bool {
+	return is_id_held(builder.last_id)
+}
+
+is_id_hovered :: proc(id: u32) -> bool {
+	for ele_id in builder.current_context.input_event.hovered_elements {
+		if ele_id == id do return true
+	}
+	return false
+}
+
+is_this_hovered :: proc() -> bool {
+	return is_id_hovered(builder.last_id)
+}
+
+is_id_clicked :: proc(id: u32) -> bool {
+	for ele_id in builder.current_context.input_event.clicked_elements {
+		if ele_id == id do return true
+	}
+	return false
+}
+
+is_this_clicked :: proc() -> bool {
+	return is_id_clicked(builder.last_id)
+}
+
 current_scroll_data :: proc() -> UI_Scroll_Data {
 	return get_layout_scroll_data(builder.current_context^)
 }
@@ -1821,7 +1898,7 @@ set_scroll_offset :: proc(scroll: rl.Vector2) {
 }
 
 // Internal ultilities
-@(private = "file")
+@(private)
 set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: rl.Vector2) {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	scroll := ctx.input_event.scrolls[ctx.elements[open_ele].id]
@@ -1830,14 +1907,14 @@ set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: rl.Vector2) {
 	ctx.input_event.scrolls[ctx.elements[open_ele].id] = scroll
 }
 
-@(private = "file")
+@(private)
 get_layout_scroll_data :: proc(ctx: UI_Context) -> UI_Scroll_Data {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	return ctx.input_event.scrolls[ctx.elements[open_ele].id]
 }
 
 
-@(private = "file")
+@(private)
 get_layout_mouse_state_by_id :: proc(ctx: UI_Context, id: u32) -> UI_Layout_Mouse_State {
 	for ele_id in ctx.input_event.hovered_elements {
 		if ele_id == id {
@@ -1853,20 +1930,10 @@ get_layout_mouse_state_by_id :: proc(ctx: UI_Context, id: u32) -> UI_Layout_Mous
 			}
 		}
 	}
-	switch ctx.input.mouse_state {
-	case .None:
-		return .Away
-	case .Pressed:
-		return .PressedAway
-	case .Down:
-		return .DownAway
-	case .Released:
-		return .ReleasedAway
-	}
 	return .Away
 }
 
-@(private = "file")
+@(private)
 get_alignment_offset :: proc(alignment: Alignment) -> rl.Vector2 {
 	offset: rl.Vector2
 	switch variant in alignment.x {
@@ -1961,7 +2028,7 @@ family_id :: proc(id: string, owner: string) -> u32 {
 }
 
 @(private)
-declare_id :: proc(id: Maybe(u32) = nil, loc := #caller_location) {
+declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	index := i32(len(builder.current_context.elements))
 
 	new_id: u32
@@ -1984,14 +2051,26 @@ UI_Element_Config :: struct($T: typeid) {
 
 
 @(deferred_none = end_layout)
-layout :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_layout)) {
-	declare_id(id, loc)
+layout :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+	reuse_id: bool = false,
+) -> UI_Element_Config(type_of(draw_layout)) {
+	return begin_layout(id, loc, reuse_id)
+}
+
+begin_layout :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+	reuse_id: bool = false,
+) -> UI_Element_Config(type_of(draw_layout)) {
+	if !reuse_id {
+		declare_id(id, loc)
+	}
 	return {draw_layout}
 }
 
-begin_layout := layout
-
-@(private = "file")
+@(private)
 end_layout :: proc() {
 	close_layout(builder.current_context)
 }
