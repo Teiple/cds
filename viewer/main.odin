@@ -30,8 +30,8 @@ main :: proc() {
 		}
 	}
 
-	BASE_WINDOW_SIZE :: rl.Vector2{320, 240}
-	TARGET_WINDOW_SIZE :: rl.Vector2{960, 540}
+	BASE_WINDOW_SIZE :: rl.Vector2{960, 540}
+	TARGET_WINDOW_SIZE :: rl.Vector2{1280, 720}
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Unnamed")
@@ -82,12 +82,28 @@ main :: proc() {
 		defer vp.end(&main_viewport)
 
 		if ui.begin(&ui_ctx, main_viewport) {
-			ui.vert_scroll(proc() {
-				ui.text().config(
-					"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed pharetra interdum luctus. Ut pharetra vehicula euismod. Donec dapibus, ante eget imperdiet sodales, dolor tellus venenatis est, non venenatis nisl ipsum a risus. Pellentesque enim velit, pretium vitae mollis et, facilisis at metus. Curabitur elementum in nulla eu rutrum. Vestibulum lacus erat, porta ut augue non, mollis vehicula erat. Cras nibh nisl, pretium non sodales eget, aliquet vitae nunc. In egestas, justo sed mollis posuere, sem tortor finibus risus, sed ullamcorper nibh ipsum accumsan magna. Nulla facilisi. Sed vehicula, justo eu auctor ornare, nunc odio iaculis urna, in iaculis urna eros vitae ex." +
-					"Fusce sit amet lorem ac justo suscipit condimentum dapibus ultricies dui. Suspendisse elementum diam a suscipit mattis. Duis euismod neque ac leo dignissim, mattis hendrerit leo lacinia. Fusce rhoncus fringilla mauris, eget porttitor sem facilisis ut. Quisque dui lacus, molestie eget pulvinar id, dictum et neque. Donec molestie elit vitae nisi pellentesque tempus. Praesent bibendum condimentum quam nec ultrices. Phasellus mollis vitae odio vitae finibus. ",
-				)
-			})
+			if ui.vert_scroll().config() {
+				for i in 0 ..= 10 {
+					ui.text().config(
+						"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed pharetra interdum luctus. Ut pharetra vehicula euismod. Donec dapibus, ante eget imperdiet sodales, dolor tellus venenatis est, non venenatis nisl ipsum a risus. Pellentesque enim velit, pretium vitae mollis et, facilisis at metus. Curabitur elementum in nulla eu rutrum. Vestibulum lacus erat, porta ut augue non, mollis vehicula erat. Cras nibh nisl, pretium non sodales eget, aliquet vitae nunc. In egestas, justo sed mollis posuere, sem tortor finibus risus, sed ullamcorper nibh ipsum accumsan magna. Nulla facilisi. Sed vehicula, justo eu auctor ornare, nunc odio iaculis urna, in iaculis urna eros vitae ex." +
+						"Fusce sit amet lorem ac justo suscipit condimentum dapibus ultricies dui. Suspendisse elementum diam a suscipit mattis. Duis euismod neque ac leo dignissim, mattis hendrerit leo lacinia. Fusce rhoncus fringilla mauris, eget porttitor sem facilisis ut. Quisque dui lacus, molestie eget pulvinar id, dictum et neque. Donec molestie elit vitae nisi pellentesque tempus. Praesent bibendum condimentum quam nec ultrices. Phasellus mollis vitae odio vitae finibus. ",
+					)
+				}
+				if ui.vert_scroll().config(height = ui.fixed(100), background_color = rl.BLUE) {
+					for i in 0 ..= 10 {
+						ui.text().config(
+							"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed pharetra interdum luctus. Ut pharetra vehicula euismod. Donec dapibus, ante eget imperdiet sodales, dolor tellus venenatis est, non venenatis nisl ipsum a risus. Pellentesque enim velit, pretium vitae mollis et, facilisis at metus. Curabitur elementum in nulla eu rutrum. Vestibulum lacus erat, porta ut augue non, mollis vehicula erat. Cras nibh nisl, pretium non sodales eget, aliquet vitae nunc. In egestas, justo sed mollis posuere, sem tortor finibus risus, sed ullamcorper nibh ipsum accumsan magna. Nulla facilisi. Sed vehicula, justo eu auctor ornare, nunc odio iaculis urna, in iaculis urna eros vitae ex." +
+							"Fusce sit amet lorem ac justo suscipit condimentum dapibus ultricies dui. Suspendisse elementum diam a suscipit mattis. Duis euismod neque ac leo dignissim, mattis hendrerit leo lacinia. Fusce rhoncus fringilla mauris, eget porttitor sem facilisis ut. Quisque dui lacus, molestie eget pulvinar id, dictum et neque. Donec molestie elit vitae nisi pellentesque tempus. Praesent bibendum condimentum quam nec ultrices. Phasellus mollis vitae odio vitae finibus. ",
+						)
+					}
+				}
+				for i in 0 ..= 10 {
+					ui.text().config(
+						"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed pharetra interdum luctus. Ut pharetra vehicula euismod. Donec dapibus, ante eget imperdiet sodales, dolor tellus venenatis est, non venenatis nisl ipsum a risus. Pellentesque enim velit, pretium vitae mollis et, facilisis at metus. Curabitur elementum in nulla eu rutrum. Vestibulum lacus erat, porta ut augue non, mollis vehicula erat. Cras nibh nisl, pretium non sodales eget, aliquet vitae nunc. In egestas, justo sed mollis posuere, sem tortor finibus risus, sed ullamcorper nibh ipsum accumsan magna. Nulla facilisi. Sed vehicula, justo eu auctor ornare, nunc odio iaculis urna, in iaculis urna eros vitae ex." +
+						"Fusce sit amet lorem ac justo suscipit condimentum dapibus ultricies dui. Suspendisse elementum diam a suscipit mattis. Duis euismod neque ac leo dignissim, mattis hendrerit leo lacinia. Fusce rhoncus fringilla mauris, eget porttitor sem facilisis ut. Quisque dui lacus, molestie eget pulvinar id, dictum et neque. Donec molestie elit vitae nisi pellentesque tempus. Praesent bibendum condimentum quam nec ultrices. Phasellus mollis vitae odio vitae finibus. ",
+					)
+				}
+			}
 
 			when ODIN_DEBUG {
 				if ui.layout().config(

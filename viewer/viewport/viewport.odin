@@ -10,6 +10,7 @@ Viewport :: struct {
 
 init :: proc(base_size: rl.Vector2) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
+	rl.SetTextureFilter(rt.texture, .BILINEAR)
 	return {base_size = base_size, render_texture = rt}
 }
 

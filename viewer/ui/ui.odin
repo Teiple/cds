@@ -126,10 +126,12 @@ UI_Builder :: struct {
 	context_events:  UI_Context_Events,
 }
 
-CTX_MAX_EVENT_LISTENERS :: 5
+CTX_MAX_EVENT_LISTENERS :: 3
 UI_Context_Events :: struct {
-	on_begin: [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
-	on_end:   [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_make:   [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_delete: [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_begin:  [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_end:    [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
 }
 
 UI_Context :: struct {
@@ -977,6 +979,10 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 }
 
 context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font_Config) -> UI_Context {
+	for event in builder.context_events.on_make {
+		event()
+	}
+
 	fonts := make([dynamic]UI_Font, 0, 4)
 	for config in font_configs {
 		append(&fonts, load_font(config.base_size, config.spacing, config.font_path))
@@ -1004,6 +1010,10 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 }
 
 context_delete :: proc(ctx: UI_Context) {
+	for event in builder.context_events.on_delete {
+		event()
+	}
+
 	delete(ctx.elements)
 	delete(ctx.open_layout_stack)
 	delete(ctx.render_commands)
@@ -1675,7 +1685,8 @@ get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
 
 BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 
-@(require_results, private = "file")
+
+@(require_results, private)
 draw_layout :: proc(
 	width: Sizing_Axis = {mode = Fit_Size{}},
 	height: Sizing_Axis = {mode = Fit_Size{}},
@@ -1717,11 +1728,6 @@ draw_layout :: proc(
 		},
 		{x = {min = width.min, max = width.max}, y = {min = height.min, max = height.max}},
 	)
-}
-
-@(private = "file")
-close_layout_deffered :: proc() {
-	close_layout(builder.current_context)
 }
 
 @(private = "file")
@@ -1954,7 +1960,7 @@ family_id :: proc(id: string, owner: string) -> u32 {
 	return id
 }
 
-@(private = "file")
+@(private)
 declare_id :: proc(id: Maybe(u32) = nil, loc := #caller_location) {
 	index := i32(len(builder.current_context.elements))
 
@@ -1972,26 +1978,33 @@ declare_id :: proc(id: Maybe(u32) = nil, loc := #caller_location) {
 	builder.last_id = new_id
 }
 
-UI_Element_Builder :: struct($T: typeid) {
+UI_Element_Config :: struct($T: typeid) {
 	config: T,
 }
 
 
-@(deferred_none = end_declare_layout)
-layout :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Builder(type_of(draw_layout)) {
+@(deferred_none = end_layout)
+layout :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_layout)) {
 	declare_id(id, loc)
 	return {draw_layout}
 }
 
-text :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Builder(type_of(draw_text)) {
-	declare_id(id, loc)
-	return {draw_text}
+begin_layout := layout
+
+@(private = "file")
+end_layout :: proc() {
+	close_layout(builder.current_context)
+}
+
+@(deferred_none = end_layout)
+defer_end_layout :: proc() -> bool {
+	return true
 }
 
 
-@(private = "file")
-end_declare_layout :: proc() {
-	close_layout(builder.current_context)
+text :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_text)) {
+	declare_id(id, loc)
+	return {draw_text}
 }
 
 

@@ -9,13 +9,10 @@ ARC_SEGMENTS :: 12
 
 render_commands :: proc(ctx: ^UI_Context) {
 	clear(&ctx.clip.open_clip_stack)
-	scissor_active := false
-	defer if scissor_active do rl.EndScissorMode()
 
 	for variant in ctx.render_commands {
 		switch command in variant {
 		case Push_Clip_Command:
-			assert(!scissor_active, "Nested scissor mode is not supported")
 			append(&ctx.clip.open_clip_stack, command.rect)
 			rl.BeginScissorMode(
 				i32(command.rect.x),
@@ -23,13 +20,10 @@ render_commands :: proc(ctx: ^UI_Context) {
 				i32(command.rect.width),
 				i32(command.rect.height),
 			)
-			scissor_active = true
 
 		case Pop_Clip_Command:
-			assert(scissor_active, "No active scissor to pop")
 			pop(&ctx.clip.open_clip_stack)
 			rl.EndScissorMode()
-			scissor_active = false
 
 		case Rect_Command:
 			mask_rect: rl.Rectangle
