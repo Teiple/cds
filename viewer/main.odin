@@ -1,6 +1,8 @@
 package main
 
 import fmt "core:fmt"
+import "core:math"
+import lg "core:math/linalg"
 import mem "core:mem"
 import ui "ui"
 import b3 "vendor:box3d"
@@ -40,7 +42,15 @@ main :: proc() {
 	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
 
-	main_viewport := vp.init(BASE_WINDOW_SIZE)
+	// viewport
+	camera: rl.Camera3D = {
+		position   = {0, 3, 14},
+		up         = {0, 1, 0},
+		fovy       = 25,
+		projection = .PERSPECTIVE,
+	}
+
+	main_viewport := vp.init(BASE_WINDOW_SIZE, camera)
 	defer vp.close_viewport(&main_viewport)
 
 	// ui
@@ -70,13 +80,6 @@ main :: proc() {
 	}
 
 	// physics
-	camera: rl.Camera3D = {
-		position   = {0, 15, 40},
-		up         = {0, 1, 0},
-		fovy       = 45,
-		projection = .PERSPECTIVE,
-	}
-
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -30, 0}
 	world := b3.CreateWorld(world_def)
@@ -116,8 +119,12 @@ main :: proc() {
 	physics_time_step: f32 = 1. / 60.
 	physics_substep: i32 = 4
 
+	// models
+	test_model := rl.LoadModel("assets/models/test.glb")
+	defer rl.UnloadModel(test_model)
+
 	for running := true; running && !rl.WindowShouldClose(); {
-		b3.World_Step(world, physics_time_step, physics_substep)
+		// b3.World_Step(world, physics_time_step, physics_substep)
 
 		contact_events := b3.World_GetContactEvents(world)
 
@@ -162,28 +169,51 @@ main :: proc() {
 
 			rl.DrawGrid(20, 5)
 
-			draw_box :: proc(box_body: b3.BodyId, size: rl.Vector3, color: rl.Color) {
-				pos := b3.Body_GetPosition(box_body)
-				rot := b3.Body_GetRotation(box_body)
+			// draw_box :: proc(box_body: b3.BodyId, size: rl.Vector3, color: rl.Color) {
+			// 	pos := b3.Body_GetPosition(box_body)
+			// 	rot := b3.Body_GetRotation(box_body)
 
-				angle, axis := b3.GetAxisAngle(rot)
+			// 	angle, axis := b3.GetAxisAngle(rot)
 
-				angle_deg := angle * rl.RAD2DEG
+			// 	angle_deg := angle * rl.RAD2DEG
 
-				gl.PushMatrix()
-				{
-					defer gl.PopMatrix()
+			// 	gl.PushMatrix()
+			// 	{
+			// 		defer gl.PopMatrix()
 
-					gl.Translatef(pos.x, pos.y, pos.z)
-					gl.Rotatef(angle_deg, axis.x, axis.y, axis.z)
+			// 		gl.Translatef(pos.x, pos.y, pos.z)
+			// 		gl.Rotatef(angle_deg, axis.x, axis.y, axis.z)
 
-					rl.DrawCubeV({}, size, color)
-					rl.DrawCubeWiresV({}, size, rl.ColorBrightness(color, -0.2))
-				}
+			// 		rl.DrawCubeV({}, size, color)
+			// 		rl.DrawCubeWiresV({}, size, rl.ColorBrightness(color, -0.2))
+			// 	}
+			// }
+
+			// draw_box(ground, {20, 2, 20}, rl.GRAY)
+			// draw_box(box, {2, 2, 2}, rl.BLUE)
+
+			target_pos := vp.get_mouse_world_position_z_plane(main_viewport)
+			target_pos.z = 0
+
+			aim_angle := math.atan2(target_pos.y, target_pos.x)
+
+			rl.DrawSphere(target_pos, 0.25, rl.RED)
+
+			default_y := lg.quaternion_angle_axis_f32(math.PI * 0.5, {0, 1, 0})
+			rotate_z := lg.quaternion_angle_axis_f32(aim_angle, {0, 0, 1})
+			rot := rotate_z * default_y
+
+			gl.PushMatrix()
+			{
+				defer gl.PopMatrix()
+
+				gl.Translatef(0, 0, 0)
+
+				angle, axis := lg.angle_axis_from_quaternion(rot)
+				gl.Rotatef(math.to_degrees_f32(angle), axis.x, axis.y, axis.z)
+
+				rl.DrawModel(test_model, {}, 10, rl.BLACK)
 			}
-
-			draw_box(ground, {20, 2, 20}, rl.GRAY)
-			draw_box(box, {2, 2, 2}, rl.BLUE)
 		}
 
 		if ui.begin(&ui_ctx, main_viewport) {
