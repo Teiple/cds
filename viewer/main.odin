@@ -3,7 +3,9 @@ package main
 import fmt "core:fmt"
 import mem "core:mem"
 import ui "ui"
+import b3 "vendor:box3d"
 import rl "vendor:raylib"
+import gl "vendor:raylib/rlgl"
 import vp "viewport"
 
 
@@ -30,23 +32,35 @@ main :: proc() {
 		}
 	}
 
-	BASE_WINDOW_SIZE :: rl.Vector2{960, 540}
-	TARGET_WINDOW_SIZE :: rl.Vector2{1280, 720}
+	BASE_WINDOW_SIZE :: rl.Vector2{800, 480}
+	TARGET_WINDOW_SIZE :: rl.Vector2{960, 540}
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
-	rl.SetTargetFPS(60)
 	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Unnamed")
+	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
 
 	main_viewport := vp.init(BASE_WINDOW_SIZE)
 	defer vp.close_viewport(&main_viewport)
 
+	// ui
 	ui_ctx: ui.UI_Context = ui.context_make(
 		ui.measure_text,
 		{{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
 	)
 	defer ui.context_delete(ui_ctx)
 
+	test_texture := rl.LoadTexture("assets/images/pucchi.png")
+	defer rl.UnloadTexture(test_texture)
+
+	// audio
+	rl.InitAudioDevice()
+	defer rl.CloseAudioDevice()
+
+	test_sound := rl.LoadSound("assets/sounds/test.wav")
+	defer rl.UnloadSound(test_sound)
+
+	// debug
 	when ODIN_DEBUG {
 		interval: f32 = 1.0
 		interval_sum_fps: f32 = 0
@@ -55,10 +69,67 @@ main :: proc() {
 		interval_avg_fps: f32 = 0
 	}
 
-	test_texture := rl.LoadTexture("assets/images/pucchi.png")
-	defer rl.UnloadTexture(test_texture)
+	// physics
+	camera: rl.Camera3D = {
+		position   = {0, 15, 40},
+		up         = {0, 1, 0},
+		fovy       = 45,
+		projection = .PERSPECTIVE,
+	}
+
+	world_def := b3.DefaultWorldDef()
+	world_def.gravity = {0, -30, 0}
+	world := b3.CreateWorld(world_def)
+
+	ground: b3.BodyId
+	{
+		body_def := b3.DefaultBodyDef()
+		body_def.type = .staticBody
+		body_def.position = {0, 0, 0}
+		ground = b3.CreateBody(world, body_def)
+
+		hull := b3.MakeBoxHull(10, 1, 10)
+		shape_def := b3.DefaultShapeDef()
+		shape_def.baseMaterial.friction = .3
+		shape_def.baseMaterial.restitution = 0.5
+		shape_def.density = 1
+		shape_def.enableHitEvents = true
+
+		_ = b3.CreateHullShape(ground, shape_def, &hull.base)
+	}
+
+	box: b3.BodyId
+	{
+		body_def := b3.DefaultBodyDef()
+		body_def.type = .dynamicBody
+		body_def.position = {0, 10, 0}
+		box = b3.CreateBody(world, body_def)
+
+		hull := b3.MakeCubeHull(1)
+		shape_def := b3.DefaultShapeDef()
+		shape_def.baseMaterial.friction = .3
+		shape_def.density = 1
+
+		_ = b3.CreateHullShape(box, shape_def, &hull.base)
+	}
+
+	physics_time_step: f32 = 1. / 60.
+	physics_substep: i32 = 4
 
 	for running := true; running && !rl.WindowShouldClose(); {
+		b3.World_Step(world, physics_time_step, physics_substep)
+
+		contact_events := b3.World_GetContactEvents(world)
+
+		for i in 0 ..< contact_events.hitCount {
+			hit := contact_events.hitEvents[i]
+
+			if hit.approachSpeed > 1.0 {
+				volume := clamp(hit.approachSpeed / 20.0, 0.1, 1.0)
+				rl.SetSoundVolume(test_sound, volume)
+				rl.PlaySound(test_sound)
+			}
+		}
 
 		when ODIN_DEBUG {
 			delta := rl.GetFrameTime()
@@ -85,38 +156,49 @@ main :: proc() {
 		vp.begin(&main_viewport)
 		defer vp.end(&main_viewport)
 
-		if ui.begin(&ui_ctx, main_viewport) {
-			if ui.layout().config(
-				width = ui.fit(),
-				height = ui.fit(),
-				float_mode = ui.Float_At_Root{attach_points = {element = .RightCenter, parent = .CenterCenter}},
-			) {
-				ui.image().config(test_texture, width = ui.fit(200), height = ui.fixed(200), fit = .Cover)
+		rl.BeginMode3D(camera)
+		{
+			defer rl.EndMode3D()
+
+			rl.DrawGrid(20, 5)
+
+			draw_box :: proc(box_body: b3.BodyId, size: rl.Vector3, color: rl.Color) {
+				pos := b3.Body_GetPosition(box_body)
+				rot := b3.Body_GetRotation(box_body)
+
+				angle, axis := b3.GetAxisAngle(rot)
+
+				angle_deg := angle * rl.RAD2DEG
+
+				gl.PushMatrix()
+				{
+					defer gl.PopMatrix()
+
+					gl.Translatef(pos.x, pos.y, pos.z)
+					gl.Rotatef(angle_deg, axis.x, axis.y, axis.z)
+
+					rl.DrawCubeV({}, size, color)
+					rl.DrawCubeWiresV({}, size, rl.ColorBrightness(color, -0.2))
+				}
 			}
 
-			if ui.layout().config(
-				width = ui.fixed(200),
-				height = ui.fit(),
-				layout_direction = .Top_To_Bottom,
-				float_mode = ui.Float_At_Root{attach_points = {element = .LeftCenter, parent = .CenterCenter}},
-			) {
-				if ui.button().config("Start Game") {
-					fmt.println("Start Game")
-				}
-				target := ui.last_id()
-				ui.tooltip().config(target, "Start a new game session")
+			draw_box(ground, {20, 2, 20}, rl.GRAY)
+			draw_box(box, {2, 2, 2}, rl.BLUE)
+		}
 
-				ui.button().config("Options")
-				if ui.button().config("Quit") {
-					running = false
-				}
+		if ui.begin(&ui_ctx, main_viewport) {
+			if ui.button().config("Play test sound") {
+				rl.PlaySound(test_sound)
+			}
+			if ui.button().config("Make box jump") {
+				b3.Body_ApplyLinearImpulseToCenter(box, {0, 120, 0}, true)
 			}
 
 			when ODIN_DEBUG {
 				if ui.layout().config(
 					width = ui.grow(),
 					height = ui.fixed(64),
-					background_color = ui.mouse_state_on_this() == .Hovered ? ui.get_random_color(-0.5) : ui.get_random_color(),
+					background_color = {127, 255, 142, 100},
 					float_mode = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
 					corner_radius = {4, 4, 0, 0},
 				) {
@@ -126,14 +208,12 @@ main :: proc() {
 							f32(track.current_memory_allocated) / 1024,
 							interval_avg_fps,
 						),
-						alignment = {.Center, .Center},
+						alignment = {.Right, .Center},
 					)
 				}
 			}
 		}
 
 		ui.render_commands(&ui_ctx)
-
-
 	}
 }

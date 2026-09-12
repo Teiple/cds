@@ -1,6 +1,5 @@
 package ui
 
-import ui "../ui"
 import "base:runtime"
 import "core:math/rand"
 import rl "vendor:raylib"
