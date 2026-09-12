@@ -55,6 +55,9 @@ main :: proc() {
 		interval_avg_fps: f32 = 0
 	}
 
+	test_texture := rl.LoadTexture("assets/images/pucchi.png")
+	defer rl.UnloadTexture(test_texture)
+
 	for running := true; running && !rl.WindowShouldClose(); {
 
 		when ODIN_DEBUG {
@@ -84,13 +87,18 @@ main :: proc() {
 
 		if ui.begin(&ui_ctx, main_viewport) {
 			if ui.layout().config(
+				width = ui.fit(),
+				height = ui.fit(),
+				float_mode = ui.Float_At_Root{attach_points = {element = .RightCenter, parent = .CenterCenter}},
+			) {
+				ui.image().config(test_texture, width = ui.fit(200), height = ui.fixed(200), fit = .Cover)
+			}
+
+			if ui.layout().config(
 				width = ui.fixed(200),
 				height = ui.fit(),
 				layout_direction = .Top_To_Bottom,
-				float_mode = ui.Float_At_Root {
-					attach_points = {element = .CenterCenter, parent = .CenterCenter},
-					offset = {150, 0},
-				},
+				float_mode = ui.Float_At_Root{attach_points = {element = .LeftCenter, parent = .CenterCenter}},
 			) {
 				if ui.button().config("Start Game") {
 					fmt.println("Start Game")

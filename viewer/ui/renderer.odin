@@ -77,6 +77,8 @@ draw_image_command :: proc(ctx: UI_Context, command: Image_Command) {
 		tint = rl.WHITE
 	}
 
+	dest := command.dest
+
 	if npatch, ok := command.npatch.?; ok {
 		npatch_source := npatch.source
 		if npatch_source.width == 0 || npatch_source.height == 0 {
@@ -91,9 +93,37 @@ draw_image_command :: proc(ctx: UI_Context, command: Image_Command) {
 			bottom = npatch.bottom,
 			layout = npatch.layout,
 		}
-		rl.DrawTextureNPatch(command.texture, info, command.dest, {}, 0, tint)
+		rl.DrawTextureNPatch(command.texture, info, dest, {}, 0, tint)
 	} else {
-		rl.DrawTexturePro(command.texture, source, command.dest, {}, 0, tint)
+		switch command.fit {
+		case .Stretch:
+		case .Contain:
+			scale := min(dest.width / source.width, dest.height / source.height)
+			fit_w := source.width * scale
+			fit_h := source.height * scale
+			dest = {dest.x + (dest.width - fit_w) * 0.5, dest.y + (dest.height - fit_h) * 0.5, fit_w, fit_h}
+		case .Cover:
+			dest_ratio := dest.width / dest.height
+			src_ratio := source.width / source.height
+			if src_ratio > dest_ratio {
+				crop_w := source.height * dest_ratio
+				source.x += (source.width - crop_w) * 0.5
+				source.width = crop_w
+			} else {
+				crop_h := source.width / dest_ratio
+				source.y += (source.height - crop_h) * 0.5
+				source.height = crop_h
+			}
+		case .Center:
+			dest = {
+				dest.x + (dest.width - source.width) * 0.5,
+				dest.y + (dest.height - source.height) * 0.5,
+				source.width,
+				source.height,
+			}
+		}
+
+		rl.DrawTexturePro(command.texture, source, dest, {}, 0, tint)
 	}
 }
 

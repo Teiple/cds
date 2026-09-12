@@ -79,10 +79,18 @@ Nine_Patch :: struct {
 	layout: rl.NPatchLayout,
 }
 
+UI_Image_Fit :: enum {
+	Stretch,
+	Contain,
+	Cover,
+	Center,
+}
+
 UI_Image :: struct {
 	texture: rl.Texture2D,
 	source:  rl.Rectangle,
 	tint:    rl.Color,
+	fit:     UI_Image_Fit,
 	npatch:  Maybe(Nine_Patch),
 }
 
@@ -91,6 +99,7 @@ Image_Command :: struct #all_or_none {
 	source:  rl.Rectangle,
 	dest:    rl.Rectangle,
 	tint:    rl.Color,
+	fit:     UI_Image_Fit,
 	npatch:  Maybe(Nine_Patch),
 }
 
@@ -1241,6 +1250,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 					source = bg_img.source,
 					dest = {ele.position.x, ele.position.y, ele.size.x, ele.size.y},
 					tint = bg_img.tint.a == 0 && bg_img.tint.r == 0 && bg_img.tint.g == 0 && bg_img.tint.b == 0 ? rl.WHITE : bg_img.tint,
+					fit = bg_img.fit,
 					npatch = bg_img.npatch,
 				},
 			)

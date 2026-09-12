@@ -286,15 +286,18 @@ image :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Confi
 
 draw_image :: proc(
 	texture: rl.Texture2D,
-	width: Sizing_Axis = {mode = Fit_Size{}},
-	height: Sizing_Axis = {mode = Fit_Size{}},
+	width: Sizing_Axis = {mode = Fixed_Size{200}},
+	height: Sizing_Axis = {mode = Fixed_Size{200}},
 	source: rl.Rectangle = {},
 	tint: rl.Color = rl.WHITE,
+	fit: UI_Image_Fit = .Stretch,
 	npatch: Maybe(Nine_Patch) = nil,
 ) {
-	draw_layout(
+	// don't need this since only one element
+	// wrap_id()
+	if draw_layout(
 		width = width,
 		height = height,
-		background_image = UI_Image{texture = texture, source = source, tint = tint, npatch = npatch},
-	)
+		background_image = UI_Image{texture = texture, source = source, tint = tint, fit = fit, npatch = npatch},
+	) {}
 }
