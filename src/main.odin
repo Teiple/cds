@@ -221,9 +221,9 @@ main :: proc() {
 		if ui_begin(&ui_ctx, main_viewport) {
 			when ODIN_DEBUG {
 				if ui_layout().config(
-					width = ui.grow(),
-					height = ui.fixed(64),
-					float_mode = ui.Float_At_Root {
+					width = ui_grow(),
+					height = ui_fixed(64),
+					float_mode = UI_Float_At_Root {
 						attach_points = {
 							element = .RightBottom,
 							parent = .RightBottom,

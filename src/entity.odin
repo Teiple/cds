@@ -3,14 +3,14 @@ package game
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
 
-Character_Visual :: struct {
+Entity_Visual :: struct {
 	model:    rl.Model,
 	position: [3]f32,
 	rotation: quaternion128,
 }
 
-Character :: struct {
+Entity :: struct {
 	body:   b3.BodyId,
-	visual: Character_Visual,
-	health: Health,
+	visual: Entity_Visual,
+	health: M_Health,
 }

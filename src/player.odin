@@ -7,36 +7,34 @@ import b3 "vendor:box3d"
 import rl "vendor:raylib"
 
 
-Character_Player_Animation :: enum {
+Player_Animation :: enum {
 	Idle,
 	Fire,
 }
 
-CHARACTER_PLAYER_ANIMATION_NAMES :: [Character_Player_Animation]string {
+Enemy_Animation :: enum {
+	Idle,
+	Fire,
+}
+
+PLAYER_ANIMATION_NAMES :: [Player_Animation]string {
 	.Idle = "idle",
 	.Fire = "fire",
 }
 
 
-Character_Player :: struct {
-	using base:              Character,
-	animation:               Model_Animation,
-	recoil_offset:           [3]f32,
-	sounds:                  struct {
+Entity_Player :: struct {
+	using base:    Entity,
+	animation:     M_Model_Anim(Player_Animation),
+	recoil_offset: [3]f32,
+	sounds:        struct {
 		primary_fire:   rl.Sound,
 		secondary_fire: rl.Sound,
 	},
-	current_animation:       Character_Player_Animation,
-	current_animation_frame: i32,
-	animations:              []rl.ModelAnimation,
-	animation_indices:       map[Character_Player_Animation]i32,
 }
 
-player_make :: proc(
-	world: b3.WorldId,
-	position: rl.Vector3,
-) -> Character_Player {
-	player: Character_Player
+player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Entity_Player {
+	player: Entity_Player
 
 	player.visual.model = rl.LoadModel("assets/models/pistol.glb")
 	player.sounds.primary_fire = rl.LoadSound("assets/sounds/fire_primary.mp3")
@@ -44,38 +42,11 @@ player_make :: proc(
 		"assets/sounds/fire_secondary.mp3",
 	)
 
-	anim_count: i32
-	raw_anims := rl.LoadModelAnimations(
-		"assets/models/pistol.glb",
-		&anim_count,
+	player.animation = m_model_anim_make(
+		model = player.visual.model,
+		anim_path = "assets/models/pistol.glb",
+		anim_names = PLAYER_ANIMATION_NAMES,
 	)
-	assert(anim_count > 0, "Model has no animations")
-	player.animations = raw_anims[:anim_count]
-
-	player.animation_indices = make(map[Character_Player_Animation]i32, 2)
-	// Figure out the animation index
-	{
-		for &anim, anim_index in player.animations {
-			anim_name := string(cstring(&anim.name[0]))
-			for name, enum_code in CHARACTER_PLAYER_ANIMATION_NAMES {
-				if anim_name == name {
-					_, existed := player.animation_indices[enum_code]
-					assert(!existed, "Animation already existed")
-					player.animation_indices[enum_code] = i32(anim_index)
-
-					break
-				}
-			}
-		}
-		assert(
-			len(player.animation_indices) ==
-			len(CHARACTER_PLAYER_ANIMATION_NAMES),
-			"Mismatch animation count",
-		)
-	}
-
-	player.current_animation_frame = 0
-	player.current_animation = .Idle
 
 	player.visual.position = {0.030, -0.039, 0}
 	player.visual.rotation = euler_degrees_to_quat({0, 90, 0})
@@ -126,7 +97,7 @@ player_make :: proc(
 	return player
 }
 
-player_draw :: proc(player: Character_Player) {
+player_draw :: proc(player: Entity_Player) {
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
@@ -137,7 +108,7 @@ player_draw :: proc(player: Character_Player) {
 	}
 }
 
-player_update_input :: proc(player: ^Character_Player) {
+player_update_input :: proc(player: ^Entity_Player) {
 	if rl.IsMouseButtonPressed(.LEFT) {
 		recoil_point := b3.Body_GetWorldPoint(
 			player.body,
@@ -151,8 +122,7 @@ player_update_input :: proc(player: ^Character_Player) {
 			true,
 		)
 
-		player.current_animation_frame = 0
-		player.current_animation = .Fire
+		m_model_anim_play(&player.animation, Player_Animation.Fire)
 
 		audio_play_sound_wrandomness(player.sounds.primary_fire)
 	} else if rl.IsMouseButtonPressed(.RIGHT) {
@@ -173,7 +143,7 @@ player_update_input :: proc(player: ^Character_Player) {
 }
 
 player_update_aim :: proc(
-	player: ^Character_Player,
+	player: ^Entity_Player,
 	target_pos: [3]f32,
 	max_turn_speed: f32 = 25.0,
 	turn_mult: f32 = 1.0,
@@ -214,33 +184,18 @@ player_update_aim :: proc(
 	b3.Body_SetAngularVelocity(player.body, target_angular_vel)
 }
 
-player_update_animation :: proc(player: ^Character_Player) {
-	cur_anim :=
-		player.animations[player.animation_indices[player.current_animation]]
-	names := CHARACTER_PLAYER_ANIMATION_NAMES
-
-	if player.current_animation_frame < cur_anim.keyframeCount {
-		rl.UpdateModelAnimation(
-			player.visual.model,
-			cur_anim,
-			f32(player.current_animation_frame),
-		)
-		player.current_animation_frame += 1
-	}
+player_update_animation :: proc(player: ^Entity_Player) {
+	m_model_anim_update(&player.animation)
 }
 
-player_delete :: proc(player: ^Character_Player) {
-	delete(player.animation_indices)
+player_delete :: proc(player: ^Entity_Player) {
+	m_model_anim_delete(&player.animation)
 
 	rl.UnloadModel(player.visual.model)
-	rl.UnloadModelAnimations(
-		raw_data(player.animations),
-		i32(len(player.animations)),
-	)
 	rl.UnloadSound(player.sounds.primary_fire)
 	rl.UnloadSound(player.sounds.secondary_fire)
 }
 
-player_get_cam_focus_point :: proc(player: ^Character_Player) -> rl.Vector3 {
+player_get_cam_focus_point :: proc(player: ^Entity_Player) -> rl.Vector3 {
 	return b3.Body_GetPosition(player.body) + {0, 0, 0}
 }
