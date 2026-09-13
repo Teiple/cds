@@ -1,8 +1,6 @@
 package main
 
 import fmt "core:fmt"
-import "core:math"
-import lg "core:math/linalg"
 import mem "core:mem"
 import ent "ent"
 import ui "ui"
@@ -56,8 +54,8 @@ main :: proc() {
 
 	// ui
 	ui_ctx: ui.UI_Context = ui.context_make(
-		ui.measure_text,
-		{{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
+		font_configs = {{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
+		pointer = {texture = "assets/images/pointer.png", size = 16, offset = {-2, -2}},
 	)
 	defer ui.context_delete(ui_ctx)
 
@@ -91,7 +89,7 @@ main :: proc() {
 
 		hull := b3.MakeBoxHull(10, 1, 10)
 		shape_def := b3.DefaultShapeDef()
-		shape_def.baseMaterial.friction = .3
+		shape_def.baseMaterial.friction = .5
 		shape_def.density = 1
 		shape_def.enableHitEvents = true
 
@@ -172,10 +170,12 @@ main :: proc() {
 
 			draw_box(ground, {20, 2, 20}, rl.GRAY)
 
-			ent.player_draw(player)
+			ent.player_update_input(&player)
+			target_pos := vp.get_mouse_world_position_z_plane(main_viewport, 0)
+			rl.DrawSphere(target_pos, 0.01, rl.RED)
+			ent.player_update_aim(&player, target_pos)
 
-			camera.target = ent.player_get_cam_focus_point(&player)
-			rl.UpdateCamera(&camera, .ORBITAL)
+			ent.player_draw(player)
 		}
 
 		if ui.begin(&ui_ctx, main_viewport) {

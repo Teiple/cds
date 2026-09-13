@@ -135,6 +135,18 @@ Push_Clip_Command :: struct {
 
 Pop_Clip_Command :: struct {}
 
+Pointer_Config :: struct {
+	texture: cstring,
+	size:    f32,
+	offset:  [2]f32,
+}
+
+Pointer_Attributes :: struct {
+	config:  Pointer_Config,
+	texture: rl.Texture2D,
+}
+
+
 UI_Font :: struct {
 	font:    rl.Font,
 	spacing: f32,
@@ -167,6 +179,7 @@ UI_Context :: struct {
 	growable_buffer:    [dynamic]UI_Index,
 	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]Render_Command,
+	pointer:            Pointer_Attributes,
 	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
 	input:              UI_Input,
@@ -1006,7 +1019,7 @@ load_font :: proc(base_size: f32, spacing: f32, font_path: cstring) -> UI_Font {
 	return {font = font, spacing = spacing}
 }
 
-context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font_Config) -> UI_Context {
+context_make :: proc(font_configs: []UI_Font_Config, pointer: Pointer_Config) -> UI_Context {
 	for event in builder.context_events.on_make {
 		event()
 	}
@@ -1022,7 +1035,8 @@ context_make :: proc(measure_text_proc: UI_Measure_Text, font_configs: []UI_Font
 		render_commands = make([dynamic]Render_Command, 0, 5),
 		growable_buffer = make([dynamic]UI_Index, 0, 5),
 		wrapped_text_lines = make([dynamic]string, 0, 5),
-		measure_text = measure_text_proc,
+		pointer = {texture = rl.LoadTexture(pointer.texture), config = pointer},
+		measure_text = measure_text,
 		fonts = fonts[:],
 		input_event = {
 			mouse_captured = false,
@@ -1049,6 +1063,8 @@ context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
+
+	rl.UnloadTexture(ctx.pointer.texture)
 
 	for f in ctx.fonts {
 		rl.UnloadFont(f.font)
@@ -1125,8 +1141,8 @@ end_ui :: proc(ctx: ^UI_Context, _: vp.Viewport, ok: bool) {
 
 	// mouse input
 	{
-		ctx.input.mouse_position = vp.window_to_viewport_position(ctx.viewport, rl.GetMousePosition())
-		ctx.input.mouse_delta = vp.window_to_viewport_vector(ctx.viewport, rl.GetMouseDelta())
+		ctx.input.mouse_position = vp.get_viewport_mouse_position(ctx.viewport)
+		ctx.input.mouse_delta = vp.get_viewport_mouse_delta(ctx.viewport)
 		ctx.input.mouse_scroll = rl.GetMouseWheelMoveV()
 
 		MOUSE_BTN :: rl.MouseButton.LEFT

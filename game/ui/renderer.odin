@@ -59,6 +59,22 @@ render_commands :: proc(ctx: ^UI_Context) {
 			draw_text_command(ctx^, command)
 		}
 	}
+
+	// Draw pointer
+	mouse_position := ctx.input.mouse_position
+	rl.DrawTexturePro(
+		ctx.pointer.texture,
+		{0, 0, f32(ctx.pointer.texture.width), f32(ctx.pointer.texture.height)},
+		{
+			mouse_position.x + ctx.pointer.config.offset.x,
+			mouse_position.y + ctx.pointer.config.offset.y,
+			ctx.pointer.config.size,
+			ctx.pointer.config.size,
+		},
+		{},
+		0,
+		rl.WHITE,
+	)
 }
 
 @(private)

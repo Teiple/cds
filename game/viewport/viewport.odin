@@ -7,12 +7,17 @@ Viewport :: struct {
 	destination_rect: rl.Rectangle,
 	scale:            rl.Vector2,
 	render_texture:   rl.RenderTexture,
+	vmouse_position:  rl.Vector2,
 }
 
 init :: proc(base_size: rl.Vector2, camera: rl.Camera) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
 	rl.SetTextureFilter(rt.texture, .BILINEAR)
-	return {base_size = base_size, render_texture = rt, camera = camera}
+
+	// use virtual position to have confined cursor
+	rl.DisableCursor()
+
+	return {base_size = base_size, render_texture = rt, camera = camera, vmouse_position = base_size * 0.5}
 }
 
 update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
@@ -27,6 +32,13 @@ update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
 		(window_size.y - dest_size.y) * 0.5,
 		dest_size.x,
 		dest_size.y,
+	}
+
+	if rl.IsWindowFocused() {
+		delta := rl.GetMouseDelta() / vp.scale
+		vp.vmouse_position += delta
+		vp.vmouse_position.x = clamp(vp.vmouse_position.x, 0, vp.base_size.x)
+		vp.vmouse_position.y = clamp(vp.vmouse_position.y, 0, vp.base_size.y)
 	}
 }
 
@@ -56,20 +68,26 @@ end :: proc(vp: ^Viewport) {
 
 
 close_viewport :: proc(ctx: ^Viewport) {
+	rl.EnableCursor()
 	rl.UnloadRenderTexture(ctx.render_texture)
 }
 
+@(private)
 window_to_viewport_position :: proc(vp: Viewport, postion: rl.Vector2) -> rl.Vector2 {
 	dest_rect_pos: rl.Vector2 = {vp.destination_rect.x, vp.destination_rect.y}
 	return (postion - dest_rect_pos) / vp.scale
 }
 
-window_to_viewport_vector :: proc(vp: Viewport, vec: rl.Vector2) -> rl.Vector2 {
-	return vec / vp.scale
+get_viewport_mouse_position :: proc(vp: Viewport) -> rl.Vector2 {
+	return vp.vmouse_position
+}
+
+get_viewport_mouse_delta :: proc(vp: Viewport) -> rl.Vector2 {
+	return rl.GetMouseDelta() / vp.scale
 }
 
 get_mouse_to_world_ray :: proc(vp: Viewport) -> rl.Ray {
-	vp_mouse_position := window_to_viewport_position(vp, rl.GetMousePosition())
+	vp_mouse_position := get_viewport_mouse_position(vp)
 	return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera, i32(vp.base_size.x), i32(vp.base_size.y))
 }
 
@@ -83,12 +101,9 @@ get_mouse_world_position_z_plane :: proc(
 ) #optional_ok {
 	ray := get_mouse_to_world_ray(vp)
 
-	// Ray is parallel to the plane
 	if abs(ray.direction.z) < 0.00001 do return {}, false
 
 	t := (z_plane - ray.position.z) / ray.direction.z
-
-	// Intersection is behind the camera
 	if t < 0 do return {}, false
 
 	hit_pos := ray.position + ray.direction * t
