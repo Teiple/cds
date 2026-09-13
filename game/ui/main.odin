@@ -98,9 +98,9 @@ Image_Command :: struct #all_or_none {
 	texture: rl.Texture2D,
 	source:  rl.Rectangle,
 	dest:    rl.Rectangle,
+	npatch:  Maybe(Nine_Patch),
 	tint:    rl.Color,
 	fit:     UI_Image_Fit,
-	npatch:  Maybe(Nine_Patch),
 }
 
 Render_Command :: union {
@@ -113,20 +113,20 @@ Render_Command :: union {
 
 Rect_Command :: struct #all_or_none {
 	rect:          rl.Rectangle,
-	color:         rl.Color,
 	corner_radius: Corner_Radius,
 	border:        Border_Config,
+	color:         rl.Color,
 }
 
 Text_Command :: struct #all_or_none {
+	font:          rl.Font,
+	rect:          rl.Rectangle,
+	wrapped_lines: []string,
+	content:       string,
 	font_size:     f32,
 	spacing:       f32,
 	line_spacing:  f32,
-	content:       string,
-	font:          rl.Font,
 	color:         rl.Color,
-	rect:          rl.Rectangle,
-	wrapped_lines: []string,
 }
 
 Push_Clip_Command :: struct {

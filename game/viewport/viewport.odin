@@ -3,14 +3,14 @@ import rl "vendor:raylib"
 
 Viewport :: struct {
 	base_size:        rl.Vector2,
-	camera:           rl.Camera,
+	camera:           ^rl.Camera,
 	destination_rect: rl.Rectangle,
 	scale:            rl.Vector2,
 	render_texture:   rl.RenderTexture,
 	vmouse_position:  rl.Vector2,
 }
 
-init :: proc(base_size: rl.Vector2, camera: rl.Camera) -> Viewport {
+init :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
 	rl.SetTextureFilter(rt.texture, .BILINEAR)
 
@@ -88,7 +88,7 @@ get_viewport_mouse_delta :: proc(vp: Viewport) -> rl.Vector2 {
 
 get_mouse_to_world_ray :: proc(vp: Viewport) -> rl.Ray {
 	vp_mouse_position := get_viewport_mouse_position(vp)
-	return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera, i32(vp.base_size.x), i32(vp.base_size.y))
+	return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera^, i32(vp.base_size.x), i32(vp.base_size.y))
 }
 
 

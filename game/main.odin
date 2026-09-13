@@ -33,8 +33,8 @@ main :: proc() {
 		}
 	}
 
-	BASE_WINDOW_SIZE :: rl.Vector2{800, 480}
-	TARGET_WINDOW_SIZE :: rl.Vector2{960, 540}
+	BASE_WINDOW_SIZE :: rl.Vector2{960, 540}
+	TARGET_WINDOW_SIZE :: rl.Vector2{1024, 576}
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
 	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Unnamed")
@@ -49,7 +49,7 @@ main :: proc() {
 		projection = .PERSPECTIVE,
 	}
 
-	main_viewport := vp.init(BASE_WINDOW_SIZE, camera)
+	main_viewport := vp.init(BASE_WINDOW_SIZE, &camera)
 	defer vp.close_viewport(&main_viewport)
 
 	// ui
@@ -174,22 +174,15 @@ main :: proc() {
 			target_pos := vp.get_mouse_world_position_z_plane(main_viewport, 0)
 			rl.DrawSphere(target_pos, 0.01, rl.RED)
 			ent.player_update_aim(&player, target_pos)
+			ent.player_update_animation(&player)
+
+			camera.target = ent.player_get_cam_focus_point(&player)
+			rl.UpdateCamera(&camera, .THIRD_PERSON)
 
 			ent.player_draw(player)
 		}
 
 		if ui.begin(&ui_ctx, main_viewport) {
-			if ui.layout().config(width = ui.grow(), height = ui.grow(), mouse_mode = .Ignore) {
-
-			}
-
-			if ui.button().config("Play test sound") {
-				rl.PlaySound(test_sound)
-			}
-			if ui.button().config("Make player jump") {
-				b3.Body_ApplyLinearImpulseToCenter(player.body, {0, 3.5, 0}, true)
-			}
-
 			when ODIN_DEBUG {
 				if ui.layout().config(
 					width = ui.grow(),

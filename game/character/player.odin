@@ -1,64 +1,74 @@
-package ent
 
+package ent
 import au "../audio"
+import m "../modules"
+import utils "../utils"
 import "core:math"
 import lg "core:math/linalg"
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
-import gl "vendor:raylib/rlgl"
 
-@(private, require_results, deferred_none = gl.PopMatrix)
-gl_transform :: proc(position: [3]f32, rotation: quaternion128) -> bool {
-	gl.PushMatrix()
 
-	angle, axis := lg.angle_axis_from_quaternion(rotation)
-	gl.Translatef(position.x, position.y, position.z)
-	gl.Rotatef(angle * math.DEG_PER_RAD, axis.x, axis.y, axis.z)
-
-	return true
+Player_Animation :: enum {
+	Idle,
+	Fire,
 }
 
-@(private, require_results)
-euler_to_quat :: proc(euler_angles: [3]f32) -> quaternion128 {
-	return lg.quaternion_from_euler_angles(euler_angles.y, euler_angles.x, euler_angles.z, .YXZ)
-}
-
-@(private, require_results)
-euler_deg_to_quat :: proc(euler_angle_degrees: [3]f32) -> quaternion128 {
-	angles := euler_angle_degrees * math.RAD_PER_DEG
-	return lg.quaternion_from_euler_angles(angles.y, angles.x, angles.z, .YXZ)
+PLAYER_ANIMATION_NAMES :: [Player_Animation]string {
+	.Idle = "idle",
+	.Fire = "fire",
 }
 
 
-Ent_Player :: struct {
-	body:          b3.BodyId,
-	physic_shapes: [2]b3.ShapeId,
-	physic_boxes:  [2]struct {
-		size:     [3]f32,
-		position: [3]f32,
-		rotation: quaternion128,
-	},
-	visual:        struct {
-		model:    rl.Model,
-		position: [3]f32,
-		rotation: quaternion128,
-	},
-	recoil_offset: [3]f32,
-	sounds:        struct {
+Character_Player :: struct {
+	using base:              Character,
+	animation:               m.Model_Animation,
+	recoil_offset:           [3]f32,
+	sounds:                  struct {
 		primary_fire:   rl.Sound,
 		secondary_fire: rl.Sound,
 	},
+	current_animation:       Player_Animation,
+	current_animation_frame: i32,
+	animations:              []rl.ModelAnimation,
+	animation_indices:       map[Player_Animation]i32,
 }
 
-player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Ent_Player {
-	player: Ent_Player
+player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Character_Player {
+	player: Character_Player
 
 	player.visual.model = rl.LoadModel("assets/models/pistol.glb")
 	player.sounds.primary_fire = rl.LoadSound("assets/sounds/fire_primary.mp3")
 	player.sounds.secondary_fire = rl.LoadSound("assets/sounds/fire_secondary.mp3")
 
+	anim_count: i32
+	raw_anims := rl.LoadModelAnimations("assets/models/pistol.glb", &anim_count)
+	assert(anim_count > 0, "Model has no animations")
+	player.animations = raw_anims[:anim_count]
+
+	player.animation_indices = make(map[Player_Animation]i32, 2)
+	// Figure out the animation index
+	{
+		for &anim, anim_index in player.animations {
+			anim_name := string(cstring(&anim.name[0]))
+			for name, enum_code in PLAYER_ANIMATION_NAMES {
+				if anim_name == name {
+					_, existed := player.animation_indices[enum_code]
+					assert(!existed, "Animation already existed")
+					player.animation_indices[enum_code] = i32(anim_index)
+
+					break
+				}
+			}
+		}
+		assert(len(player.animation_indices) == len(ENT_PLAYER_ANIMATION_NAMES), "Mismatch animation count")
+	}
+
+	player.current_animation_frame = 0
+	player.current_animation = .Idle
+
 	player.visual.position = {0.030, -0.039, 0}
-	player.visual.rotation = euler_deg_to_quat({0, 90, 0})
+	player.visual.rotation = utils.math_euler_deg_to_quat({0, 90, 0})
 	player.recoil_offset = {-0.023, 0.001, 0.000}
 
 	player.physic_boxes = {
@@ -69,7 +79,7 @@ player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Ent_Player {
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .dynamicBody
 	body_def.position = position
-	body_def.rotation = euler_to_quat({})
+	body_def.rotation = utils.math_euler_to_quat({})
 	body_def.motionLocks.linearZ = true
 
 	player.body = b3.CreateBody(world, body_def)
@@ -95,28 +105,25 @@ player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Ent_Player {
 	return player
 }
 
-player_draw :: proc(player: Ent_Player) {
+player_draw :: proc(player: Character_Player) {
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
-	if gl_transform(pos, rot) {
-		rl.DrawSphere({}, 0.01, rl.RED)
-		if gl_transform(player.visual.position, player.visual.rotation) {
-			rl.DrawModelWires(player.visual.model, {}, 1, rl.BLACK)
-		}
-		for box in player.physic_boxes {
-			if gl_transform(box.position, box.rotation) {
-				rl.DrawCubeWires({0, 0, 0}, box.size.x, box.size.y, box.size.z, rl.YELLOW)
-			}
+	if utils.draw_push_gl_transform(pos, rot) {
+		if utils.draw_push_gl_transform(player.visual.position, player.visual.rotation) {
+			rl.DrawModel(player.visual.model, {}, 1, rl.BLACK)
 		}
 	}
 }
 
-player_update_input :: proc(player: ^Ent_Player) {
+player_update_input :: proc(player: ^Character_Player) {
 	if rl.IsMouseButtonPressed(.LEFT) {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
 		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2, recoil_point, true)
+
+		player.current_animation_frame = 0
+		player.current_animation = .Fire
 
 		au.play_sound_with_random_pitch_and_volume(player.sounds.primary_fire)
 	} else if rl.IsMouseButtonPressed(.RIGHT) {
@@ -165,8 +172,21 @@ player_update_aim :: proc(player: ^Ent_Player, target_pos: [3]f32, max_turn_spee
 	b3.Body_SetAngularVelocity(player.body, target_angular_vel)
 }
 
+player_update_animation :: proc(player: ^Ent_Player) {
+	cur_anim := player.animations[player.animation_indices[player.current_animation]]
+	names := ENT_PLAYER_ANIMATION_NAMES
+
+	if player.current_animation_frame < cur_anim.keyframeCount {
+		rl.UpdateModelAnimation(player.visual.model, cur_anim, f32(player.current_animation_frame))
+		player.current_animation_frame += 1
+	}
+}
+
 player_delete :: proc(player: ^Ent_Player) {
+	delete(player.animation_indices)
+
 	rl.UnloadModel(player.visual.model)
+	rl.UnloadModelAnimations(raw_data(player.animations), i32(len(player.animations)))
 	rl.UnloadSound(player.sounds.primary_fire)
 	rl.UnloadSound(player.sounds.secondary_fire)
 }
