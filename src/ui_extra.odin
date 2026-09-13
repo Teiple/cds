@@ -1,4 +1,4 @@
-package ui
+package game
 
 import "base:runtime"
 import "core:math/rand"
@@ -106,8 +106,8 @@ vert_scroll :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element
 }
 
 draw_vert_scroll :: proc(
-	width: Sizing_Axis = {mode = Grow_Size{}},
-	height: Sizing_Axis = {mode = Grow_Size{}},
+	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
+	height: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
 	background_color: rl.Color = rl.WHITE,
 	scroll_thumb_width: f32 = 16,
 	scroll_thumb_height: f32 = 64,
@@ -213,8 +213,8 @@ button :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Conf
 
 draw_button :: proc(
 	label: string,
-	width: Sizing_Axis = {mode = Grow_Size{}},
-	height: Sizing_Axis = {mode = Fit_Size{}},
+	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
+	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
 	color: rl.Color = rl.BLUE,
 ) -> bool {
 	wrap_id()
@@ -252,7 +252,7 @@ draw_tooltip :: proc(
 	content: string,
 	background_color: rl.Color = {25, 25, 25, 240},
 	text_color: rl.Color = rl.WHITE,
-	attach_points: Float_Attach_Points = {element = .LeftCenter, parent = .RightCenter},
+	attach_points: UI_Float_Attach_Points = {element = .LeftCenter, parent = .RightCenter},
 	offset: rl.Vector2 = {4, 0},
 ) {
 	wrap_id()
@@ -265,7 +265,7 @@ draw_tooltip :: proc(
 			padding = pad_all(6),
 			corner_radius = corner_radius_all(4),
 			mouse_mode = .Ignore,
-			float_mode = Float_At_Id {
+			float_mode = UI_Float_At_Id {
 				attach_id = target_id,
 				offset = offset,
 				attach_points = attach_points,
@@ -285,12 +285,12 @@ image :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Confi
 
 draw_image :: proc(
 	texture: rl.Texture2D,
-	width: Sizing_Axis = {mode = Fixed_Size{200}},
-	height: Sizing_Axis = {mode = Fixed_Size{200}},
+	width: UI_Sizing_Axis = {mode = UI_Fixed_Size{200}},
+	height: UI_Sizing_Axis = {mode = UI_Fixed_Size{200}},
 	source: rl.Rectangle = {},
 	tint: rl.Color = rl.WHITE,
 	fit: UI_Image_Fit = .Stretch,
-	npatch: Maybe(Nine_Patch) = nil,
+	npatch: Maybe(UI_Nine_Patch_Config) = nil,
 ) {
 	// don't need this since only one element
 	// wrap_id()

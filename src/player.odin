@@ -1,8 +1,6 @@
 
-package ent
-import au "../audio"
-import m "../modules"
-import utils "../utils"
+package game
+
 import "core:math"
 import lg "core:math/linalg"
 import b3 "vendor:box3d"

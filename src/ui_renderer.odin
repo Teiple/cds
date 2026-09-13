@@ -1,4 +1,4 @@
-package ui
+package game
 
 import "core:c"
 import "core:math"
@@ -12,7 +12,7 @@ render_commands :: proc(ctx: ^UI_Context) {
 
 	for variant in ctx.render_commands {
 		switch command in variant {
-		case Push_Clip_Command:
+		case UI_Push_Clip_Command:
 			append(&ctx.clip.open_clip_stack, command.rect)
 			rl.BeginScissorMode(
 				i32(command.rect.x),
@@ -21,11 +21,11 @@ render_commands :: proc(ctx: ^UI_Context) {
 				i32(command.rect.height),
 			)
 
-		case Pop_Clip_Command:
+		case UI_Pop_Clip_Command:
 			pop(&ctx.clip.open_clip_stack)
 			rl.EndScissorMode()
 
-		case Rect_Command:
+		case UI_Rect_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
@@ -36,7 +36,7 @@ render_commands :: proc(ctx: ^UI_Context) {
 			}
 			draw_rect_command(ctx^, command)
 
-		case Image_Command:
+		case UI_Image_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
@@ -47,7 +47,7 @@ render_commands :: proc(ctx: ^UI_Context) {
 			}
 			draw_image_command(ctx^, command)
 
-		case Text_Command:
+		case UI_Text_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
@@ -78,7 +78,7 @@ render_commands :: proc(ctx: ^UI_Context) {
 }
 
 @(private)
-draw_image_command :: proc(ctx: UI_Context, command: Image_Command) {
+draw_image_command :: proc(ctx: UI_Context, command: UI_Image_Command) {
 	if command.texture.id == 0 || command.dest.width <= 0 || command.dest.height <= 0 {
 		return
 	}
@@ -144,7 +144,7 @@ draw_image_command :: proc(ctx: UI_Context, command: Image_Command) {
 }
 
 @(private)
-draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
+draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
 	draw_line :: proc(pen: ^rl.Vector2, text: string, font: rl.Font, font_scale: f32, color: rl.Color, spacing: f32) {
 		for character in text {
 			glyph_index := rl.GetGlyphIndex(font, character)
@@ -183,7 +183,7 @@ draw_text_command :: proc(ctx: UI_Context, command: Text_Command) {
 }
 
 @(private)
-draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
+draw_rect_command :: proc(ctx: UI_Context, command: UI_Rect_Command) {
 	rect := command.rect
 	radius := command.corner_radius
 	color := command.color
@@ -208,7 +208,7 @@ draw_rect_command :: proc(ctx: UI_Context, command: Rect_Command) {
 }
 
 @(private)
-draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: Corner_Radius) {
+draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI_Corner_Radius) {
 	x := rect.x
 	y := rect.y
 	w := rect.width
@@ -259,7 +259,7 @@ draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: Co
 }
 
 @(private)
-draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: Corner_Radius, thickness: f32) {
+draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI_Corner_Radius, thickness: f32) {
 	x := rect.x
 	y := rect.y
 	w := rect.width

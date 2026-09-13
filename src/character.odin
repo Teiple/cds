@@ -1,6 +1,6 @@
-package ent
+package game
 
-import m "../modules"
+
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
 

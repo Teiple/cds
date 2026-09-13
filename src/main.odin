@@ -1,13 +1,11 @@
-package main
+package game
 
 import fmt "core:fmt"
 import mem "core:mem"
-import ent "ent"
 import ui "ui"
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
 import gl "vendor:raylib/rlgl"
-import vp "viewport"
 
 
 main :: proc() {
@@ -136,10 +134,10 @@ main :: proc() {
 		defer free_all(context.temp_allocator)
 
 		window_size: rl.Vector2 = {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
-		vp.update(&main_viewport, window_size)
+		viewport_update(&main_viewport, window_size)
 
 		// Draw to viewport
-		vp.begin(&main_viewport)
+		viewport_begin(&main_viewport)
 		defer vp.end(&main_viewport)
 
 		rl.BeginMode3D(camera)

@@ -1,4 +1,4 @@
-package viewport
+package game
 import rl "vendor:raylib"
 
 Viewport :: struct {
@@ -10,7 +10,7 @@ Viewport :: struct {
 	vmouse_position:  rl.Vector2,
 }
 
-init :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
+viewport_init :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
 	rl.SetTextureFilter(rt.texture, .BILINEAR)
 
@@ -20,7 +20,7 @@ init :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
 	return {base_size = base_size, render_texture = rt, camera = camera, vmouse_position = base_size * 0.5}
 }
 
-update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
+viewport_update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
 	rt_src: rl.Rectangle = {0, 0, vp.base_size.x, -vp.base_size.y}
 	// keep aspect
 	vp.scale = min(window_size.x / vp.base_size.x, window_size.y / vp.base_size.y)
@@ -42,12 +42,12 @@ update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
 	}
 }
 
-begin :: proc(vp: ^Viewport) {
+viewport_begin :: proc(vp: ^Viewport) {
 	rl.BeginTextureMode(vp.render_texture)
 	rl.ClearBackground(rl.RAYWHITE)
 }
 
-end :: proc(vp: ^Viewport) {
+viewport_end :: proc(vp: ^Viewport) {
 	rl.EndTextureMode()
 
 	rl.BeginDrawing()
@@ -66,17 +66,11 @@ end :: proc(vp: ^Viewport) {
 	rl.EndDrawing()
 }
 
-
-close_viewport :: proc(ctx: ^Viewport) {
+viewport_close :: proc(ctx: ^Viewport) {
 	rl.EnableCursor()
 	rl.UnloadRenderTexture(ctx.render_texture)
 }
 
-@(private)
-window_to_viewport_position :: proc(vp: Viewport, postion: rl.Vector2) -> rl.Vector2 {
-	dest_rect_pos: rl.Vector2 = {vp.destination_rect.x, vp.destination_rect.y}
-	return (postion - dest_rect_pos) / vp.scale
-}
 
 get_viewport_mouse_position :: proc(vp: Viewport) -> rl.Vector2 {
 	return vp.vmouse_position
@@ -86,12 +80,6 @@ get_viewport_mouse_delta :: proc(vp: Viewport) -> rl.Vector2 {
 	return rl.GetMouseDelta() / vp.scale
 }
 
-get_mouse_to_world_ray :: proc(vp: Viewport) -> rl.Ray {
-	vp_mouse_position := get_viewport_mouse_position(vp)
-	return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera^, i32(vp.base_size.x), i32(vp.base_size.y))
-}
-
-
 get_mouse_world_position_z_plane :: proc(
 	vp: Viewport,
 	z_plane: f32 = 0,
@@ -99,6 +87,11 @@ get_mouse_world_position_z_plane :: proc(
 	world_pos: rl.Vector3,
 	hit: bool,
 ) #optional_ok {
+	get_mouse_to_world_ray :: proc(vp: Viewport) -> rl.Ray {
+		vp_mouse_position := get_viewport_mouse_position(vp)
+		return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera^, i32(vp.base_size.x), i32(vp.base_size.y))
+	}
+
 	ray := get_mouse_to_world_ray(vp)
 
 	if abs(ray.direction.z) < 0.00001 do return {}, false

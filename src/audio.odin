@@ -1,4 +1,4 @@
-package audio
+package game
 import lg "core:math/linalg"
 import "core:math/rand"
 import rl "vendor:raylib"

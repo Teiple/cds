@@ -1,5 +1,4 @@
-package modules
-import d "../data"
+package game
 
 Health :: struct {
 	current:     f32,
