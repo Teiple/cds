@@ -1,6 +1,5 @@
 package game
 
-
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
 
@@ -13,5 +12,5 @@ Character_Visual :: struct {
 Character :: struct {
 	body:   b3.BodyId,
 	visual: Character_Visual,
-	health: m.Health,
+	health: Health,
 }

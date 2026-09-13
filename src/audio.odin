@@ -9,7 +9,12 @@ Listener :: struct {
 	position: [3]f32,
 }
 
-play_sound_at_position :: proc(sound: rl.Sound, listener: Listener, position: [3]f32, maxDist: f32 = 20) {
+audio_play_sound_at_position :: proc(
+	sound: rl.Sound,
+	listener: Listener,
+	position: [3]f32,
+	maxDist: f32 = 20,
+) {
 	direction := position - listener.position
 	distance := lg.length(direction)
 
@@ -33,7 +38,7 @@ play_sound_at_position :: proc(sound: rl.Sound, listener: Listener, position: [3
 	rl.PlaySound(sound)
 }
 
-play_sound_with_random_pitch_and_volume :: proc(
+audio_play_sound_wrandomness :: proc(
 	sound: rl.Sound,
 	volume_min: f32 = 0.8,
 	volume_max: f32 = 1.0,

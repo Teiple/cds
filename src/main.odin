@@ -2,7 +2,6 @@ package game
 
 import fmt "core:fmt"
 import mem "core:mem"
-import ui "ui"
 import b3 "vendor:box3d"
 import rl "vendor:raylib"
 import gl "vendor:raylib/rlgl"
@@ -16,13 +15,23 @@ main :: proc() {
 
 		defer {
 			if len(track.allocation_map) > 0 {
-				fmt.eprintf("=== %v allocations not freed: ===\n", len(track.allocation_map))
+				fmt.eprintf(
+					"=== %v allocations not freed: ===\n",
+					len(track.allocation_map),
+				)
 				for _, entry in track.allocation_map {
-					fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
+					fmt.eprintf(
+						"- %v bytes @ %v\n",
+						entry.size,
+						entry.location,
+					)
 				}
 			}
 			if len(track.bad_free_array) > 0 {
-				fmt.eprintf("=== %v incorrect frees: ===\n", len(track.bad_free_array))
+				fmt.eprintf(
+					"=== %v incorrect frees: ===\n",
+					len(track.bad_free_array),
+				)
 				for entry in track.bad_free_array {
 					fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
 				}
@@ -35,7 +44,11 @@ main :: proc() {
 	TARGET_WINDOW_SIZE :: rl.Vector2{1024, 576}
 
 	rl.SetConfigFlags({.WINDOW_RESIZABLE})
-	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Unnamed")
+	rl.InitWindow(
+		i32(TARGET_WINDOW_SIZE.x),
+		i32(TARGET_WINDOW_SIZE.y),
+		"Unnamed",
+	)
 	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
 
@@ -47,15 +60,25 @@ main :: proc() {
 		projection = .PERSPECTIVE,
 	}
 
-	main_viewport := vp.init(BASE_WINDOW_SIZE, &camera)
-	defer vp.close_viewport(&main_viewport)
+	main_viewport := viewport_make(BASE_WINDOW_SIZE, &camera)
+	defer viewport_close(&main_viewport)
 
 	// ui
-	ui_ctx: ui.UI_Context = ui.context_make(
-		font_configs = {{base_size = 16, font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf", spacing = 0}},
-		pointer = {texture = "assets/images/pointer.png", size = 16, offset = {-2, -2}},
+	ui_ctx: UI_Context = ui_context_make(
+		font_configs = {
+			{
+				base_size = 16,
+				font_path = "assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf",
+				spacing = 0,
+			},
+		},
+		pointer = {
+			texture = "assets/images/pointer.png",
+			size = 16,
+			offset = {-2, -2},
+		},
 	)
-	defer ui.context_delete(ui_ctx)
+	defer ui_context_delete(ui_ctx)
 
 	// audio
 	rl.InitAudioDevice()
@@ -94,8 +117,8 @@ main :: proc() {
 		_ = b3.CreateHullShape(ground, shape_def, &hull.base)
 	}
 
-	player := ent.player_make(world, {0, 0.5, 0})
-	defer ent.player_delete(&player)
+	player := player_make(world, {0, 0.5, 0})
+	defer player_delete(&player)
 
 	physics_time_step: f32 = 1. / 60.
 	physics_substep: i32 = 4
@@ -124,7 +147,8 @@ main :: proc() {
 
 			if interval_time_count >= interval {
 				if interval_frame_count > 0 {
-					interval_avg_fps = interval_sum_fps / f32(interval_frame_count)
+					interval_avg_fps =
+						interval_sum_fps / f32(interval_frame_count)
 				}
 				interval_frame_count = 0
 				interval_time_count = 0
@@ -133,12 +157,15 @@ main :: proc() {
 		}
 		defer free_all(context.temp_allocator)
 
-		window_size: rl.Vector2 = {f32(rl.GetScreenWidth()), f32(rl.GetScreenHeight())}
+		window_size: rl.Vector2 = {
+			f32(rl.GetScreenWidth()),
+			f32(rl.GetScreenHeight()),
+		}
 		viewport_update(&main_viewport, window_size)
 
 		// Draw to viewport
 		viewport_begin(&main_viewport)
-		defer vp.end(&main_viewport)
+		defer viewport_end(&main_viewport)
 
 		rl.BeginMode3D(camera)
 		{
@@ -146,7 +173,11 @@ main :: proc() {
 
 			rl.DrawGrid(20, 5)
 
-			draw_box :: proc(box_body: b3.BodyId, size: rl.Vector3, color: rl.Color) {
+			draw_box :: proc(
+				box_body: b3.BodyId,
+				size: rl.Vector3,
+				color: rl.Color,
+			) {
 				pos := b3.Body_GetPosition(box_body)
 				rot := b3.Body_GetRotation(box_body)
 
@@ -162,34 +193,46 @@ main :: proc() {
 					gl.Rotatef(angle_deg, axis.x, axis.y, axis.z)
 
 					rl.DrawCubeV({}, size, color)
-					rl.DrawCubeWiresV({}, size, rl.ColorBrightness(color, -0.2))
+					rl.DrawCubeWiresV(
+						{},
+						size,
+						rl.ColorBrightness(color, -0.2),
+					)
 				}
 			}
 
 			draw_box(ground, {20, 2, 20}, rl.GRAY)
 
-			ent.player_update_input(&player)
-			target_pos := vp.get_mouse_world_position_z_plane(main_viewport, 0)
+			player_update_input(&player)
+			target_pos := viewport_get_mouse_world_position_on_zplane(
+				main_viewport,
+				0,
+			)
 			rl.DrawSphere(target_pos, 0.01, rl.RED)
-			ent.player_update_aim(&player, target_pos)
-			ent.player_update_animation(&player)
+			player_update_aim(&player, target_pos)
+			player_update_animation(&player)
 
-			camera.target = ent.player_get_cam_focus_point(&player)
+			camera.target = player_get_cam_focus_point(&player)
 			rl.UpdateCamera(&camera, .THIRD_PERSON)
 
-			ent.player_draw(player)
+			player_draw(player)
 		}
 
-		if ui.begin(&ui_ctx, main_viewport) {
+		if ui_begin(&ui_ctx, main_viewport) {
 			when ODIN_DEBUG {
-				if ui.layout().config(
+				if ui_layout().config(
 					width = ui.grow(),
 					height = ui.fixed(64),
-					float_mode = ui.Float_At_Root{attach_points = {element = .RightBottom, parent = .RightBottom}},
+					float_mode = ui.Float_At_Root {
+						attach_points = {
+							element = .RightBottom,
+							parent = .RightBottom,
+						},
+					},
 					corner_radius = {4, 4, 0, 0},
 					mouse_mode = .Ignore,
 				) {
-					ui.text().config(
+					ui_text().config(
 						fmt.tprintf(
 							"Allocated: %.2f KB | Frame rate: %.f FPS",
 							f32(track.current_memory_allocated) / 1024,
@@ -201,6 +244,6 @@ main :: proc() {
 			}
 		}
 
-		ui.render_commands(&ui_ctx)
+		ui_render_commands(&ui_ctx)
 	}
 }

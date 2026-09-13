@@ -4,8 +4,8 @@ import "base:runtime"
 import "core:math/rand"
 import rl "vendor:raylib"
 
-@(private)
-builder_extra: UI_Extra_Builder
+@(private = "file")
+g_ui_extra_builder: UI_Extra_Builder
 
 UI_Extra_Builder :: struct {
 	last_id:                Maybe(u32),
@@ -19,7 +19,8 @@ Debug_Palette :: struct {
 	random_generator: rand.Generator,
 }
 
-debug_palette: Debug_Palette
+@(private = "file")
+g_debug_palette: Debug_Palette
 
 @(private = "file")
 fetch_palette_colors :: proc "contextless" (
@@ -48,45 +49,60 @@ fetch_palette_colors :: proc "contextless" (
 }
 
 
-get_random_color :: proc(brightness: f32 = 0, use_prev: bool = false, alpha: f32 = 1.0) -> rl.Color {
+ui_get_random_color :: proc(
+	brightness: f32 = 0,
+	use_prev: bool = false,
+	alpha: f32 = 1.0,
+) -> rl.Color {
 	if !use_prev {
-		debug_palette.previous_index = rand.int_range(
+		g_debug_palette.previous_index = rand.int_range(
 			0,
-			len(debug_palette.colors),
-			gen = debug_palette.random_generator,
+			len(g_debug_palette.colors),
+			gen = g_debug_palette.random_generator,
 		)
 	}
-	color := debug_palette.colors[debug_palette.previous_index]
+	color := g_debug_palette.colors[g_debug_palette.previous_index]
 	return rl.ColorAlpha(rl.ColorBrightness(color, brightness), alpha)
 }
 
 @(private = "file", deferred_out = end_wrap_id)
 wrap_id :: proc() -> u32 {
-	return last_id()
+	return ui_last_id()
 }
 
 @(private = "file")
 end_wrap_id :: proc(id: u32) {
-	builder.last_id = id
+	ui_get_builder().last_id = id
 }
 
 
 @(init, private = "file")
 extra_init :: proc "contextless" () {
-	debug_palette.random_generator = runtime.default_random_generator(&debug_palette.random_state)
-	fetch_palette_colors(&debug_palette.colors, "assets/images/colors.png", 2, 16)
+	g_debug_palette.random_generator = runtime.default_random_generator(
+		&g_debug_palette.random_state,
+	)
+	fetch_palette_colors(
+		&g_debug_palette.colors,
+		"assets/images/colors.png",
+		2,
+		16,
+	)
 
-	append(&builder.context_events.on_make, proc() {
-		builder_extra.open_vert_scroll_stack = make([dynamic]Vert_Scroll_Data, 0, 4)
+	append(&ui_get_builder().context_events.on_make, proc() {
+		g_ui_extra_builder.open_vert_scroll_stack = make(
+			[dynamic]Vert_Scroll_Data,
+			0,
+			4,
+		)
 	})
 
-	append(&builder.context_events.on_begin, proc() {
-		rand.reset(123, gen = debug_palette.random_generator)
-		clear(&builder_extra.open_vert_scroll_stack)
+	append(&ui_get_builder().context_events.on_begin, proc() {
+		rand.reset(123, gen = g_debug_palette.random_generator)
+		clear(&g_ui_extra_builder.open_vert_scroll_stack)
 	})
 
-	append(&builder.context_events.on_delete, proc() {
-		delete(builder_extra.open_vert_scroll_stack)
+	append(&ui_get_builder().context_events.on_delete, proc() {
+		delete(g_ui_extra_builder.open_vert_scroll_stack)
 	})
 }
 
@@ -100,8 +116,11 @@ Vert_Scroll_Data :: struct #all_or_none {
 
 
 @(deferred_none = end_draw_vert_scroll)
-vert_scroll :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_vert_scroll)) {
-	declare_id(id, loc)
+vert_scroll :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> UI_Element_Config(type_of(draw_vert_scroll)) {
+	ui_declare_id(id, loc)
 	return {draw_vert_scroll}
 }
 
@@ -117,7 +136,7 @@ draw_vert_scroll :: proc(
 	wrap_id()
 
 	append(
-		&builder_extra.open_vert_scroll_stack,
+		&g_ui_extra_builder.open_vert_scroll_stack,
 		(Vert_Scroll_Data){
 			scroll_bar_background_color = scroll_bar_background_color,
 			scroll_thumb_color = scroll_thumb_color,
@@ -127,7 +146,7 @@ draw_vert_scroll :: proc(
 	)
 
 	// use draw_layout to use the last pushed id trhough vert_scroll
-	if draw_layout(
+	if ui_draw_layout(
 		width = width,
 		height = height,
 		clip = true,
@@ -136,7 +155,11 @@ draw_vert_scroll :: proc(
 		child_gap = 0,
 		background_color = background_color,
 	) {
-		if begin_layout().config(width = grow(), height = fit(), layout_direction = .Top_To_Bottom) {
+		if ui_begin_layout().config(
+			width = ui_grow(),
+			height = ui_fit(),
+			layout_direction = .Top_To_Bottom,
+		) {
 			// content
 		}
 	}
@@ -145,58 +168,66 @@ draw_vert_scroll :: proc(
 
 
 end_draw_vert_scroll :: proc() {
-	ele_data := pop(&builder_extra.open_vert_scroll_stack)
+	ele_data := pop(&g_ui_extra_builder.open_vert_scroll_stack)
 
 	@(static) scroll_thumb_press_offset: rl.Vector2
 
-	if defer_end_layout() {
-		if defer_end_layout() {
+	if ui_defer_end_layout() {
+		if ui_defer_end_layout() {
 			// content
 		}
 
 		// important wrapper, so local id can work locally without collide with content's scrolls
-		if begin_layout().config(width = grow(), height = grow(), padding = {}) {
-			scroll_data := current_scroll_data()
+		if ui_begin_layout().config(
+			width = ui_grow(),
+			height = ui_grow(),
+			padding = {},
+		) {
+			scroll_data := ui_current_scroll_data()
 			scroll_normalized_offset: rl.Vector2 = {
 				scroll_data.min_offset.x < 0 ? scroll_data.offset.x / scroll_data.min_offset.x : 0,
 				scroll_data.min_offset.y < 0 ? scroll_data.offset.y / scroll_data.min_offset.y : 0,
 			}
 
-			scroll_bar_id := local_id("scroll_bar")
-			scroll_thumb_id := local_id("scroll_thumb")
+			scroll_bar_id := ui_local_id("scroll_bar")
+			scroll_thumb_id := ui_local_id("scroll_thumb")
 
-			if is_id_held(scroll_thumb_id) {
-				bar_rect := rect_by_id(scroll_bar_id)
-				thumb_rect := rect_by_id(scroll_thumb_id)
+			if ui_is_id_held(scroll_thumb_id) {
+				bar_rect := ui_rect_by_id(scroll_bar_id)
+				thumb_rect := ui_rect_by_id(scroll_thumb_id)
 
-				if mouse_state() == .Pressed {
-					scroll_thumb_press_offset = mouse_position() - {thumb_rect.x, thumb_rect.y}
+				if ui_mouse_state() == .Pressed {
+					scroll_thumb_press_offset =
+						ui_mouse_position() - {thumb_rect.x, thumb_rect.y}
 				}
 
-				if mouse_state() == .Down {
-					thumb_desired := mouse_position() - scroll_thumb_press_offset
+				if ui_mouse_state() == .Down {
+					thumb_desired :=
+						ui_mouse_position() - scroll_thumb_press_offset
 					thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
-					thumb_range: rl.Vector2 = {bar_rect.width, bar_rect.height} - {thumb_rect.width, thumb_rect.height}
+					thumb_range: rl.Vector2 =
+						{bar_rect.width, bar_rect.height} -
+						{thumb_rect.width, thumb_rect.height}
 
 					offset: rl.Vector2 = {
 						thumb_range.x > 0 ? clamp(thumb_local.x / thumb_range.x, 0, 1) : 0,
 						thumb_range.y > 0 ? clamp(thumb_local.y / thumb_range.y, 0, 1) : 0,
 					}
-					set_scroll_offset(offset * scroll_data.min_offset)
+					ui_set_scroll_offset(offset * scroll_data.min_offset)
 				}
 			}
 
-			if layout(scroll_bar_id).config(
-				width = fit(),
-				height = grow(),
+			if ui_layout(scroll_bar_id).config(
+				width = ui_fit(),
+				height = ui_grow(),
 				background_color = ele_data.scroll_bar_background_color,
 				ignore_scroll = true,
 				padding = {},
 				child_alignment = {0, scroll_normalized_offset.y},
 			) {
-				if layout(scroll_thumb_id).config(
-					width = fixed(ele_data.scroll_thumb_width),
-					height = fixed(ele_data.scroll_thumb_height),
+				if ui_layout(scroll_thumb_id).config(
+					width = ui_fixed(ele_data.scroll_thumb_width),
+					height = ui_fixed(ele_data.scroll_thumb_height),
 					background_color = ele_data.scroll_thumb_color,
 				) {}
 			}
@@ -206,8 +237,11 @@ end_draw_vert_scroll :: proc() {
 }
 
 // button
-button :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_button)) {
-	declare_id(id, loc)
+button :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> UI_Element_Config(type_of(draw_button)) {
+	ui_declare_id(id, loc)
 	return {draw_button}
 }
 
@@ -219,31 +253,38 @@ draw_button :: proc(
 ) -> bool {
 	wrap_id()
 
-	clicked := is_this_clicked()
+	clicked := ui_is_this_clicked()
 	background_color := color
 
-	if is_this_held() {
+	if ui_is_this_held() {
 		background_color = rl.ColorBrightness(color, -0.2)
-	} else if is_this_hovered() {
+	} else if ui_is_this_hovered() {
 		background_color = rl.ColorBrightness(color, 0.1)
 	}
 
-	if layout(reuse_id = true).config(
+	if ui_layout(reuse_id = true).config(
 		width = width,
 		height = height,
 		background_color = background_color,
-		padding = pad_all(8),
+		padding = ui_pad_all(8),
 		child_alignment = {.Center, .Center},
 	) {
-		text().config(label, alignment = {.Center, .Center}, color = rl.WHITE)
+		ui_text().config(
+			label,
+			alignment = {.Center, .Center},
+			color = rl.WHITE,
+		)
 	}
 
 	return clicked
 }
 
 // tool tip
-tooltip :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_tooltip)) {
-	declare_id(id, loc)
+tooltip :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> UI_Element_Config(type_of(draw_tooltip)) {
+	ui_declare_id(id, loc)
 	return {draw_tooltip}
 }
 
@@ -252,18 +293,21 @@ draw_tooltip :: proc(
 	content: string,
 	background_color: rl.Color = {25, 25, 25, 240},
 	text_color: rl.Color = rl.WHITE,
-	attach_points: UI_Float_Attach_Points = {element = .LeftCenter, parent = .RightCenter},
+	attach_points: UI_Float_Attach_Points = {
+		element = .LeftCenter,
+		parent = .RightCenter,
+	},
 	offset: rl.Vector2 = {4, 0},
 ) {
 	wrap_id()
 
-	if is_id_hovered(target_id) {
-		if layout(reuse_id = true).config(
-			width = fit(),
-			height = fit(),
+	if ui_is_id_hovered(target_id) {
+		if ui_layout(reuse_id = true).config(
+			width = ui_fit(),
+			height = ui_fit(),
 			background_color = background_color,
-			padding = pad_all(6),
-			corner_radius = corner_radius_all(4),
+			padding = ui_pad_all(6),
+			corner_radius = ui_corner_radius_all(4),
 			mouse_mode = .Ignore,
 			float_mode = UI_Float_At_Id {
 				attach_id = target_id,
@@ -272,14 +316,17 @@ draw_tooltip :: proc(
 				z_index = 1000,
 			},
 		) {
-			text().config(content, color = rl.WHITE)
+			ui_text().config(content, color = rl.WHITE)
 		}
 	}
 }
 
 // image
-image :: proc(id: Maybe(u32) = nil, loc := #caller_location) -> UI_Element_Config(type_of(draw_image)) {
-	declare_id(id, loc)
+image :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> UI_Element_Config(type_of(draw_image)) {
+	ui_declare_id(id, loc)
 	return {draw_image}
 }
 
@@ -294,9 +341,15 @@ draw_image :: proc(
 ) {
 	// don't need this since only one element
 	// wrap_id()
-	if draw_layout(
+	if ui_draw_layout(
 		width = width,
 		height = height,
-		background_image = UI_Image{texture = texture, source = source, tint = tint, fit = fit, npatch = npatch},
+		background_image = UI_Image {
+			texture = texture,
+			source = source,
+			tint = tint,
+			fit = fit,
+			npatch = npatch,
+		},
 	) {}
 }

@@ -10,20 +10,28 @@ Viewport :: struct {
 	vmouse_position:  rl.Vector2,
 }
 
-viewport_init :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
+viewport_make :: proc(base_size: rl.Vector2, camera: ^rl.Camera) -> Viewport {
 	rt := rl.LoadRenderTexture(i32(base_size.x), i32(base_size.y))
 	rl.SetTextureFilter(rt.texture, .BILINEAR)
 
 	// use virtual position to have confined cursor
 	rl.DisableCursor()
 
-	return {base_size = base_size, render_texture = rt, camera = camera, vmouse_position = base_size * 0.5}
+	return {
+		base_size = base_size,
+		render_texture = rt,
+		camera = camera,
+		vmouse_position = base_size * 0.5,
+	}
 }
 
 viewport_update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
 	rt_src: rl.Rectangle = {0, 0, vp.base_size.x, -vp.base_size.y}
 	// keep aspect
-	vp.scale = min(window_size.x / vp.base_size.x, window_size.y / vp.base_size.y)
+	vp.scale = min(
+		window_size.x / vp.base_size.x,
+		window_size.y / vp.base_size.y,
+	)
 
 	dest_size := vp.base_size * vp.scale
 
@@ -72,15 +80,15 @@ viewport_close :: proc(ctx: ^Viewport) {
 }
 
 
-get_viewport_mouse_position :: proc(vp: Viewport) -> rl.Vector2 {
+viewport_get_mouse_position :: proc(vp: Viewport) -> rl.Vector2 {
 	return vp.vmouse_position
 }
 
-get_viewport_mouse_delta :: proc(vp: Viewport) -> rl.Vector2 {
+viewport_get_mouse_delta :: proc(vp: Viewport) -> rl.Vector2 {
 	return rl.GetMouseDelta() / vp.scale
 }
 
-get_mouse_world_position_z_plane :: proc(
+viewport_get_mouse_world_position_on_zplane :: proc(
 	vp: Viewport,
 	z_plane: f32 = 0,
 ) -> (
@@ -88,8 +96,13 @@ get_mouse_world_position_z_plane :: proc(
 	hit: bool,
 ) #optional_ok {
 	get_mouse_to_world_ray :: proc(vp: Viewport) -> rl.Ray {
-		vp_mouse_position := get_viewport_mouse_position(vp)
-		return rl.GetScreenToWorldRayEx(vp_mouse_position, vp.camera^, i32(vp.base_size.x), i32(vp.base_size.y))
+		vp_mouse_position := viewport_get_mouse_position(vp)
+		return rl.GetScreenToWorldRayEx(
+			vp_mouse_position,
+			vp.camera^,
+			i32(vp.base_size.x),
+			i32(vp.base_size.y),
+		)
 	}
 
 	ray := get_mouse_to_world_ray(vp)

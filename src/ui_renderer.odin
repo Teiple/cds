@@ -4,10 +4,12 @@ import "core:c"
 import "core:math"
 import rl "vendor:raylib"
 
+@(private = "file")
 AA_OFFSET :: f32(1)
+@(private = "file")
 ARC_SEGMENTS :: 12
 
-render_commands :: proc(ctx: ^UI_Context) {
+ui_render_commands :: proc(ctx: ^UI_Context) {
 	clear(&ctx.clip.open_clip_stack)
 
 	for variant in ctx.render_commands {
@@ -30,33 +32,33 @@ render_commands :: proc(ctx: ^UI_Context) {
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
 				mask_rect = back(ctx.clip.open_clip_stack)
-				if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+				if _, ok := ui_intersect_rect(command.rect, mask_rect); !ok {
 					continue
 				}
 			}
-			draw_rect_command(ctx^, command)
+			ui_draw_rect_command(ctx^, command)
 
 		case UI_Image_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
 				mask_rect = back(ctx.clip.open_clip_stack)
-				if _, ok := intersect_rect(command.dest, mask_rect); !ok {
+				if _, ok := ui_intersect_rect(command.dest, mask_rect); !ok {
 					continue
 				}
 			}
-			draw_image_command(ctx^, command)
+			ui_draw_image_command(ctx^, command)
 
 		case UI_Text_Command:
 			mask_rect: rl.Rectangle
 			has_clip := len(ctx.clip.open_clip_stack) > 0
 			if has_clip {
 				mask_rect = back(ctx.clip.open_clip_stack)
-				if _, ok := intersect_rect(command.rect, mask_rect); !ok {
+				if _, ok := ui_intersect_rect(command.rect, mask_rect); !ok {
 					continue
 				}
 			}
-			draw_text_command(ctx^, command)
+			ui_draw_text_command(ctx^, command)
 		}
 	}
 
@@ -64,7 +66,12 @@ render_commands :: proc(ctx: ^UI_Context) {
 	mouse_position := ctx.input.mouse_position
 	rl.DrawTexturePro(
 		ctx.pointer.texture,
-		{0, 0, f32(ctx.pointer.texture.width), f32(ctx.pointer.texture.height)},
+		{
+			0,
+			0,
+			f32(ctx.pointer.texture.width),
+			f32(ctx.pointer.texture.height),
+		},
 		{
 			mouse_position.x + ctx.pointer.config.offset.x,
 			mouse_position.y + ctx.pointer.config.offset.y,
@@ -77,15 +84,21 @@ render_commands :: proc(ctx: ^UI_Context) {
 	)
 }
 
-@(private)
-draw_image_command :: proc(ctx: UI_Context, command: UI_Image_Command) {
-	if command.texture.id == 0 || command.dest.width <= 0 || command.dest.height <= 0 {
+ui_draw_image_command :: proc(ctx: UI_Context, command: UI_Image_Command) {
+	if command.texture.id == 0 ||
+	   command.dest.width <= 0 ||
+	   command.dest.height <= 0 {
 		return
 	}
 
 	source := command.source
 	if source.width == 0 || source.height == 0 {
-		source = {0, 0, f32(command.texture.width), f32(command.texture.height)}
+		source = {
+			0,
+			0,
+			f32(command.texture.width),
+			f32(command.texture.height),
+		}
 	}
 
 	tint := command.tint
@@ -114,10 +127,18 @@ draw_image_command :: proc(ctx: UI_Context, command: UI_Image_Command) {
 		switch command.fit {
 		case .Stretch:
 		case .Contain:
-			scale := min(dest.width / source.width, dest.height / source.height)
+			scale := min(
+				dest.width / source.width,
+				dest.height / source.height,
+			)
 			fit_w := source.width * scale
 			fit_h := source.height * scale
-			dest = {dest.x + (dest.width - fit_w) * 0.5, dest.y + (dest.height - fit_h) * 0.5, fit_w, fit_h}
+			dest = {
+				dest.x + (dest.width - fit_w) * 0.5,
+				dest.y + (dest.height - fit_h) * 0.5,
+				fit_w,
+				fit_h,
+			}
 		case .Cover:
 			dest_ratio := dest.width / dest.height
 			src_ratio := source.width / source.height
@@ -143,12 +164,24 @@ draw_image_command :: proc(ctx: UI_Context, command: UI_Image_Command) {
 	}
 }
 
-@(private)
-draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
-	draw_line :: proc(pen: ^rl.Vector2, text: string, font: rl.Font, font_scale: f32, color: rl.Color, spacing: f32) {
+ui_draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
+	draw_line :: proc(
+		pen: ^rl.Vector2,
+		text: string,
+		font: rl.Font,
+		font_scale: f32,
+		color: rl.Color,
+		spacing: f32,
+	) {
 		for character in text {
 			glyph_index := rl.GetGlyphIndex(font, character)
-			advance_x := draw_glyph(font, glyph_index, pen^, font_scale, color)
+			advance_x := ui_draw_glyph(
+				font,
+				glyph_index,
+				pen^,
+				font_scale,
+				color,
+			)
 			pen.x += advance_x + spacing
 		}
 	}
@@ -157,7 +190,14 @@ draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
 	font_scale := command.font_size / f32(command.font.baseSize)
 
 	if len(command.wrapped_lines) == 0 {
-		draw_line(&pen, command.content, command.font, font_scale, command.color, command.spacing)
+		draw_line(
+			&pen,
+			command.content,
+			command.font,
+			font_scale,
+			command.color,
+			command.spacing,
+		)
 	} else {
 		line_height := command.font_size + command.line_spacing
 
@@ -166,15 +206,27 @@ draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
 
 		if len(ctx.clip.open_clip_stack) > 0 {
 			mask_rect := back(ctx.clip.open_clip_stack)
-			line_start = cast(i32)math.floor(max(mask_rect.y - command.rect.y, 0) / line_height)
-			line_end = cast(i32)math.ceil(max((mask_rect.y + mask_rect.height) - command.rect.y, 0) / line_height)
+			line_start = cast(i32)math.floor(
+				max(mask_rect.y - command.rect.y, 0) / line_height,
+			)
+			line_end = cast(i32)math.ceil(
+				max((mask_rect.y + mask_rect.height) - command.rect.y, 0) /
+				line_height,
+			)
 			line_end = min(line_end, cast(i32)len(command.wrapped_lines))
 		}
 
 		if line_end > line_start {
 			pen.y += f32(line_start) * line_height
 			for line in command.wrapped_lines[line_start:line_end] {
-				draw_line(&pen, line, command.font, font_scale, command.color, command.spacing)
+				draw_line(
+					&pen,
+					line,
+					command.font,
+					font_scale,
+					command.color,
+					command.spacing,
+				)
 				pen.x = command.rect.x
 				pen.y += command.font_size + command.line_spacing
 			}
@@ -182,8 +234,7 @@ draw_text_command :: proc(ctx: UI_Context, command: UI_Text_Command) {
 	}
 }
 
-@(private)
-draw_rect_command :: proc(ctx: UI_Context, command: UI_Rect_Command) {
+ui_draw_rect_command :: proc(ctx: UI_Context, command: UI_Rect_Command) {
 	rect := command.rect
 	radius := command.corner_radius
 	color := command.color
@@ -192,23 +243,38 @@ draw_rect_command :: proc(ctx: UI_Context, command: UI_Rect_Command) {
 		return
 	}
 
-	if radius.top_left == 0 && radius.top_right == 0 && radius.bottom_left == 0 && radius.bottom_right == 0 {
+	if radius.top_left == 0 &&
+	   radius.top_right == 0 &&
+	   radius.bottom_left == 0 &&
+	   radius.bottom_right == 0 {
 		rl.DrawRectangleRec(rect, color)
 		if command.border.thickness > 0 {
-			rl.DrawRectangleLinesEx(rect, command.border.thickness, command.border.color)
+			rl.DrawRectangleLinesEx(
+				rect,
+				command.border.thickness,
+				command.border.color,
+			)
 		}
 		return
 	}
 
-	draw_rounded_rect_filled(rect, color, radius)
+	ui_draw_rounded_rect_filled(rect, color, radius)
 
 	if command.border.thickness > 0 {
-		draw_rounded_rect_border(rect, command.border.color, radius, command.border.thickness)
+		ui_draw_rounded_rect_border(
+			rect,
+			command.border.color,
+			radius,
+			command.border.thickness,
+		)
 	}
 }
 
-@(private)
-draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI_Corner_Radius) {
+ui_draw_rounded_rect_filled :: proc(
+	rect: rl.Rectangle,
+	color: rl.Color,
+	radius: UI_Corner_Radius,
+) {
 	x := rect.x
 	y := rect.y
 	w := rect.width
@@ -245,21 +311,53 @@ draw_rounded_rect_filled :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI
 	}
 
 	if r_tl > 0 {
-		rl.DrawCircleSector({x + r_tl, y + r_tl}, r_tl, 180, 270, ARC_SEGMENTS, color)
+		rl.DrawCircleSector(
+			{x + r_tl, y + r_tl},
+			r_tl,
+			180,
+			270,
+			ARC_SEGMENTS,
+			color,
+		)
 	}
 	if r_tr > 0 {
-		rl.DrawCircleSector({x + w - r_tr, y + r_tr}, r_tr, 270, 360, ARC_SEGMENTS, color)
+		rl.DrawCircleSector(
+			{x + w - r_tr, y + r_tr},
+			r_tr,
+			270,
+			360,
+			ARC_SEGMENTS,
+			color,
+		)
 	}
 	if r_br > 0 {
-		rl.DrawCircleSector({x + w - r_br, y + h - r_br}, r_br, 0, 90, ARC_SEGMENTS, color)
+		rl.DrawCircleSector(
+			{x + w - r_br, y + h - r_br},
+			r_br,
+			0,
+			90,
+			ARC_SEGMENTS,
+			color,
+		)
 	}
 	if r_bl > 0 {
-		rl.DrawCircleSector({x + r_bl, y + h - r_bl}, r_bl, 90, 180, ARC_SEGMENTS, color)
+		rl.DrawCircleSector(
+			{x + r_bl, y + h - r_bl},
+			r_bl,
+			90,
+			180,
+			ARC_SEGMENTS,
+			color,
+		)
 	}
 }
 
-@(private)
-draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI_Corner_Radius, thickness: f32) {
+ui_draw_rounded_rect_border :: proc(
+	rect: rl.Rectangle,
+	color: rl.Color,
+	radius: UI_Corner_Radius,
+	thickness: f32,
+) {
 	x := rect.x
 	y := rect.y
 	w := rect.width
@@ -286,16 +384,48 @@ draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI
 
 	if thickness > 0 {
 		if r_tl > 0 {
-			rl.DrawRing({x + r_tl, y + r_tl}, inner_r_tl, r_tl, 180, 270, ARC_SEGMENTS, color)
+			rl.DrawRing(
+				{x + r_tl, y + r_tl},
+				inner_r_tl,
+				r_tl,
+				180,
+				270,
+				ARC_SEGMENTS,
+				color,
+			)
 		}
 		if r_tr > 0 {
-			rl.DrawRing({x + w - r_tr, y + r_tr}, inner_r_tr, r_tr, 270, 360, ARC_SEGMENTS, color)
+			rl.DrawRing(
+				{x + w - r_tr, y + r_tr},
+				inner_r_tr,
+				r_tr,
+				270,
+				360,
+				ARC_SEGMENTS,
+				color,
+			)
 		}
 		if r_br > 0 {
-			rl.DrawRing({x + w - r_br, y + h - r_br}, inner_r_br, r_br, 0, 90, ARC_SEGMENTS, color)
+			rl.DrawRing(
+				{x + w - r_br, y + h - r_br},
+				inner_r_br,
+				r_br,
+				0,
+				90,
+				ARC_SEGMENTS,
+				color,
+			)
 		}
 		if r_bl > 0 {
-			rl.DrawRing({x + r_bl, y + h - r_bl}, inner_r_bl, r_bl, 90, 180, ARC_SEGMENTS, color)
+			rl.DrawRing(
+				{x + r_bl, y + h - r_bl},
+				inner_r_bl,
+				r_bl,
+				90,
+				180,
+				ARC_SEGMENTS,
+				color,
+			)
 		}
 	}
 
@@ -310,9 +440,15 @@ draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI
 	}
 
 	if r_bl > 0 && r_br > 0 {
-		rl.DrawRectangleRec({x + r_bl, y + h - thickness, w - r_bl - r_br, thickness}, color)
+		rl.DrawRectangleRec(
+			{x + r_bl, y + h - thickness, w - r_bl - r_br, thickness},
+			color,
+		)
 	} else if r_bl > 0 {
-		rl.DrawRectangleRec({x + r_bl, y + h - thickness, w - r_bl, thickness}, color)
+		rl.DrawRectangleRec(
+			{x + r_bl, y + h - thickness, w - r_bl, thickness},
+			color,
+		)
 	} else if r_br > 0 {
 		rl.DrawRectangleRec({x, y + h - thickness, w - r_br, thickness}, color)
 	} else {
@@ -330,9 +466,15 @@ draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI
 	}
 
 	if r_tr > 0 && r_br > 0 {
-		rl.DrawRectangleRec({x + w - thickness, y + r_tr, thickness, h - r_tr - r_br}, color)
+		rl.DrawRectangleRec(
+			{x + w - thickness, y + r_tr, thickness, h - r_tr - r_br},
+			color,
+		)
 	} else if r_tr > 0 {
-		rl.DrawRectangleRec({x + w - thickness, y + r_tr, thickness, h - r_tr}, color)
+		rl.DrawRectangleRec(
+			{x + w - thickness, y + r_tr, thickness, h - r_tr},
+			color,
+		)
 	} else if r_br > 0 {
 		rl.DrawRectangleRec({x + w - thickness, y, thickness, h - r_br}, color)
 	} else {
@@ -340,8 +482,8 @@ draw_rounded_rect_border :: proc(rect: rl.Rectangle, color: rl.Color, radius: UI
 	}
 }
 
-@(private, require_results)
-draw_glyph :: proc(
+@(require_results)
+ui_draw_glyph :: proc(
 	font: rl.Font,
 	glyph_index: i32,
 	position: rl.Vector2,
@@ -367,7 +509,12 @@ draw_glyph :: proc(
 	return glyph.advanceX == 0 ? dest.width : f32(glyph.advanceX) * font_scale
 }
 
-measure_text :: proc(input: UI_Text_Config, font_info: UI_Font) -> (width: f32) {
+ui_measure_text :: proc(
+	input: UI_Text_Config,
+	font_info: UI_Font,
+) -> (
+	width: f32,
+) {
 	font_scale := input.font_size / f32(font_info.font.baseSize)
 
 	width = 0
