@@ -52,7 +52,7 @@ viewport_update :: proc(vp: ^Viewport, window_size: rl.Vector2) {
 
 viewport_begin :: proc(vp: ^Viewport) {
 	rl.BeginTextureMode(vp.render_texture)
-	rl.ClearBackground(rl.RAYWHITE)
+	rl.ClearBackground(rl.GRAY)
 }
 
 viewport_end :: proc(vp: ^Viewport) {
@@ -116,4 +116,27 @@ viewport_get_mouse_world_position_on_zplane :: proc(
 	hit_pos.z = z_plane
 
 	return hit_pos, true
+}
+
+viewport_world_to_viewport_position :: proc(
+	vp: Viewport,
+	world_pos: rl.Vector3,
+) -> rl.Vector2 {
+	return rl.GetWorldToScreenEx(
+		world_pos,
+		vp.camera^,
+		i32(vp.base_size.x),
+		i32(vp.base_size.y),
+	)
+}
+
+viewport_world_to_window_position :: proc(
+	vp: Viewport,
+	world_pos: rl.Vector3,
+) -> rl.Vector2 {
+	vp_pos := viewport_world_to_viewport_position(vp, world_pos)
+	return {
+		vp.destination_rect.x + vp_pos.x * vp.scale.x,
+		vp.destination_rect.y + vp_pos.y * vp.scale.y,
+	}
 }

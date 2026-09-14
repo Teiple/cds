@@ -53,14 +53,9 @@ main :: proc() {
 	defer rl.CloseWindow()
 
 	// viewport
-	camera: rl.Camera3D = {
-		position   = {0, 3, 14},
-		up         = {0, 1, 0},
-		fovy       = 25,
-		projection = .PERSPECTIVE,
-	}
+	camera := camera_make({0, 0.5, 0})
 
-	main_viewport := viewport_make(BASE_WINDOW_SIZE, &camera)
+	main_viewport := viewport_make(BASE_WINDOW_SIZE, &camera.base)
 	defer viewport_close(&main_viewport)
 
 	// ui
@@ -99,7 +94,11 @@ main :: proc() {
 	// physics
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -10, 0}
+	world_def.createDebugShape = debug_draw_b3_create_shape
+	world_def.destroyDebugShape = debug_draw_b3_destroy_shape
 	world := b3.CreateWorld(world_def)
+	debug_draw := debug_draw_3d_make()
+
 
 	ground: b3.BodyId
 	{
@@ -167,41 +166,13 @@ main :: proc() {
 		viewport_begin(&main_viewport)
 		defer viewport_end(&main_viewport)
 
-		rl.BeginMode3D(camera)
+		rl.BeginMode3D(camera.base)
 		{
 			defer rl.EndMode3D()
 
 			rl.DrawGrid(20, 5)
 
-			draw_box :: proc(
-				box_body: b3.BodyId,
-				size: rl.Vector3,
-				color: rl.Color,
-			) {
-				pos := b3.Body_GetPosition(box_body)
-				rot := b3.Body_GetRotation(box_body)
-
-				angle, axis := b3.GetAxisAngle(rot)
-
-				angle_deg := angle * rl.RAD2DEG
-
-				gl.PushMatrix()
-				{
-					defer gl.PopMatrix()
-
-					gl.Translatef(pos.x, pos.y, pos.z)
-					gl.Rotatef(angle_deg, axis.x, axis.y, axis.z)
-
-					rl.DrawCubeV({}, size, color)
-					rl.DrawCubeWiresV(
-						{},
-						size,
-						rl.ColorBrightness(color, -0.2),
-					)
-				}
-			}
-
-			draw_box(ground, {20, 2, 20}, rl.GRAY)
+			b3.World_Draw(world, &debug_draw, ~u64(0))
 
 			player_update_input(&player)
 			target_pos := viewport_get_mouse_world_position_on_zplane(
@@ -212,8 +183,8 @@ main :: proc() {
 			player_update_aim(&player, target_pos)
 			player_update_animation(&player)
 
-			camera.target = player_get_cam_focus_point(&player)
-			rl.UpdateCamera(&camera, .THIRD_PERSON)
+			cam_target := player_get_cam_focus_point(&player)
+			camera_update(&camera, cam_target, rl.GetFrameTime())
 
 			player_draw(player)
 		}

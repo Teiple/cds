@@ -12,11 +12,6 @@ Player_Animation :: enum {
 	Fire,
 }
 
-Enemy_Animation :: enum {
-	Idle,
-	Fire,
-}
-
 PLAYER_ANIMATION_NAMES :: [Player_Animation]string {
 	.Idle = "idle",
 	.Fire = "fire",
