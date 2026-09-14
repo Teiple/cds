@@ -53,9 +53,9 @@ main :: proc() {
 	defer rl.CloseWindow()
 
 	// viewport
-	camera := camera_make({0, 0.5, 0})
+	main_camera := camera_make({0, 0.5, 0})
 
-	main_viewport := viewport_make(BASE_WINDOW_SIZE, &camera.base)
+	main_viewport := viewport_make(BASE_WINDOW_SIZE)
 	defer viewport_close(&main_viewport)
 
 	// ui
@@ -166,7 +166,7 @@ main :: proc() {
 		viewport_begin(&main_viewport)
 		defer viewport_end(&main_viewport)
 
-		rl.BeginMode3D(camera.base)
+		rl.BeginMode3D(main_camera.base)
 		{
 			defer rl.EndMode3D()
 
@@ -177,6 +177,7 @@ main :: proc() {
 			player_update_input(&player)
 			target_pos := viewport_get_mouse_world_position_on_zplane(
 				main_viewport,
+				main_camera.base,
 				0,
 			)
 			rl.DrawSphere(target_pos, 0.01, rl.RED)
@@ -184,7 +185,7 @@ main :: proc() {
 			player_update_animation(&player)
 
 			cam_target := player_get_cam_focus_point(&player)
-			camera_update(&camera, cam_target, rl.GetFrameTime())
+			camera_update(&main_camera, cam_target, rl.GetFrameTime())
 
 			player_draw(player)
 		}

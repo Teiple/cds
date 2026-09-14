@@ -185,6 +185,12 @@ debug_draw_b3_string :: proc "c" (
 	color: b3.HexColor,
 	ctx: rawptr,
 ) {
+	vp_pos := viewport_world_to_viewport_position(
+		get_viewport()^,
+		get_scene().(Scene_Gameplay).camera.base,
+		p,
+	)
+	rl.DrawText(s, i32(vp_pos.x), i32(vp_pos.y), 10, b3_hex_to_rl_color(color))
 }
 
 debug_draw_3d_make :: proc() -> b3.DebugDraw {
