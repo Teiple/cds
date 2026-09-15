@@ -1,7 +1,5 @@
 package game
-import "base:intrinsics"
 import b3 "vendor:box3d"
-import rl "vendor:raylib"
 
 Scene_Kind :: enum {
 	Title,

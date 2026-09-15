@@ -5,7 +5,7 @@ import lg "core:math/linalg"
 import rl "vendor:raylib"
 
 Follow_Camera :: struct {
-	base:       rl.Camera3D,
+	using base: rl.Camera3D,
 	offset:     rl.Vector3,
 	smoothing:  f32,
 	zoom:       f32,

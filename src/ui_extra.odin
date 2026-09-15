@@ -1,6 +1,7 @@
 package game
 
 import "base:runtime"
+import "core:fmt"
 import "core:math/rand"
 import rl "vendor:raylib"
 
@@ -12,41 +13,50 @@ UI_Extra_Builder :: struct {
 	open_vert_scroll_stack: [dynamic]Vert_Scroll_Data,
 }
 
-Debug_Palette :: struct {
-	colors:           [dynamic; 120]rl.Color,
+@(rodata, private = "file")
+g_debug_colors := [?]rl.Color {
+	{255, 128, 128, 255},
+	{255, 175, 128, 255},
+	{255, 192, 128, 255},
+	{255, 226, 128, 255},
+	{253, 255, 128, 255},
+	{181, 255, 128, 255},
+	{128, 255, 204, 255},
+	{128, 255, 255, 255},
+	{128, 230, 255, 255},
+	{128, 179, 255, 255},
+	{128, 128, 255, 255},
+	{179, 128, 255, 255},
+	{230, 128, 255, 255},
+	{255, 128, 230, 255},
+	{255, 128, 179, 255},
+	{172, 172, 172, 255},
+	{255, 179, 179, 255},
+	{255, 207, 179, 255},
+	{255, 217, 179, 255},
+	{255, 237, 179, 255},
+	{254, 255, 179, 255},
+	{211, 255, 179, 255},
+	{179, 255, 225, 255},
+	{179, 255, 255, 255},
+	{179, 240, 255, 255},
+	{179, 209, 255, 255},
+	{179, 179, 255, 255},
+	{209, 179, 255, 255},
+	{240, 179, 255, 255},
+	{255, 179, 240, 255},
+	{255, 179, 209, 255},
+	{86, 86, 86, 255},
+}
+
+UI_Debug_Palette :: struct {
 	previous_index:   int,
 	random_state:     runtime.Default_Random_State,
 	random_generator: rand.Generator,
 }
 
 @(private = "file")
-g_debug_palette: Debug_Palette
-
-@(private = "file")
-fetch_palette_colors :: proc "contextless" (
-	palette: ^[dynamic; $N]rl.Color,
-	image_path: cstring,
-	rows: i32,
-	columns: i32,
-) {
-	image := rl.LoadImage(image_path)
-	defer rl.UnloadImage(image)
-
-	unit_size := f32(image.width) / f32(columns)
-
-	for r in 0 ..< rows {
-		for c in 0 ..< columns {
-			append(
-				palette,
-				rl.GetImageColor(
-					image,
-					i32(f32(c) * unit_size + unit_size * 0.5),
-					i32(f32(r) * unit_size + unit_size * 0.5),
-				),
-			)
-		}
-	}
-}
+g_debug_palette: UI_Debug_Palette
 
 
 ui_get_random_color :: proc(
@@ -57,11 +67,11 @@ ui_get_random_color :: proc(
 	if !use_prev {
 		g_debug_palette.previous_index = rand.int_range(
 			0,
-			len(g_debug_palette.colors),
+			len(g_debug_colors),
 			gen = g_debug_palette.random_generator,
 		)
 	}
-	color := g_debug_palette.colors[g_debug_palette.previous_index]
+	color := g_debug_colors[g_debug_palette.previous_index]
 	return rl.ColorAlpha(rl.ColorBrightness(color, brightness), alpha)
 }
 
@@ -80,12 +90,6 @@ end_wrap_id :: proc(id: u32) {
 extra_init :: proc "contextless" () {
 	g_debug_palette.random_generator = runtime.default_random_generator(
 		&g_debug_palette.random_state,
-	)
-	fetch_palette_colors(
-		&g_debug_palette.colors,
-		"assets/images/colors.png",
-		2,
-		16,
 	)
 
 	append(&ui_get_builder().context_events.on_make, proc() {

@@ -187,7 +187,7 @@ debug_draw_b3_string :: proc "c" (
 ) {
 	vp_pos := viewport_world_to_viewport_position(
 		get_viewport()^,
-		get_scene().(Scene_Gameplay).camera.base,
+		get_scene().(Scene_Gameplay).camera,
 		p,
 	)
 	rl.DrawText(s, i32(vp_pos.x), i32(vp_pos.y), 10, b3_hex_to_rl_color(color))
