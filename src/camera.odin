@@ -14,14 +14,14 @@ Follow_Camera :: struct {
 	zoom_speed: f32,
 }
 
-camera_make :: proc(
+follow_camera_make :: proc(
 	target_pos: rl.Vector3,
 	offset: rl.Vector3 = {0, 3, 14},
 	fovy: f32 = 25,
 	smoothing: f32 = 20,
 	zoom: f32 = 1.0,
-	min_zoom: f32 = 0.5,
-	max_zoom: f32 = 2.5,
+	min_zoom: f32 = 0.1,
+	max_zoom: f32 = 5.0,
 	zoom_speed: f32 = 0.1,
 ) -> Follow_Camera {
 	return {
@@ -41,7 +41,11 @@ camera_make :: proc(
 	}
 }
 
-camera_update :: proc(cam: ^Follow_Camera, target_pos: rl.Vector3, dt: f32) {
+follow_camera_update :: proc(
+	cam: ^Follow_Camera,
+	target_pos: rl.Vector3,
+	dt: f32,
+) {
 	wheel := rl.GetMouseWheelMove()
 	if wheel != 0 {
 		cam.zoom = math.clamp(

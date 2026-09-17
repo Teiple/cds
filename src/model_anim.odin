@@ -3,7 +3,7 @@ package game
 import "base:intrinsics"
 import rl "vendor:raylib"
 
-M_Model_Anim :: struct($T: typeid) where intrinsics.type_is_enum(T) {
+Model_Anim :: struct($T: typeid) where intrinsics.type_is_enum(T) {
 	model:                   rl.Model,
 	animations:              []rl.ModelAnimation,
 	current_animation:       T,
@@ -11,11 +11,11 @@ M_Model_Anim :: struct($T: typeid) where intrinsics.type_is_enum(T) {
 	animation_indices:       map[T]i32,
 }
 
-m_model_anim_make :: proc(
+model_anim_make :: proc(
 	model: rl.Model,
 	anim_path: cstring,
 	anim_names: [$T]string,
-) -> M_Model_Anim(T) where intrinsics.type_is_enum(T) {
+) -> Model_Anim(T) where intrinsics.type_is_enum(T) {
 	anim_count: i32
 	raw_anims := rl.LoadModelAnimations(anim_path, &anim_count)
 	assert(anim_count > 0, "Model has no animations")
@@ -47,7 +47,7 @@ m_model_anim_make :: proc(
 	}
 }
 
-m_model_anim_delete :: proc(mod: ^M_Model_Anim($T)) {
+m_model_anim_delete :: proc(mod: ^Model_Anim($T)) {
 	delete(mod.animation_indices)
 	rl.UnloadModelAnimations(
 		raw_data(mod.animations),
@@ -55,12 +55,12 @@ m_model_anim_delete :: proc(mod: ^M_Model_Anim($T)) {
 	)
 }
 
-m_model_anim_play :: proc(mod: ^M_Model_Anim($T), anim: T) {
+m_model_anim_play :: proc(mod: ^Model_Anim($T), anim: T) {
 	mod.current_animation = anim
 	mod.current_animation_frame = 0
 }
 
-m_model_anim_update :: proc(mod: ^M_Model_Anim($T)) {
+m_model_anim_update :: proc(mod: ^Model_Anim($T)) {
 	cur_anim := mod.animations[mod.animation_indices[mod.current_animation]]
 
 	if mod.current_animation_frame < cur_anim.keyframeCount {

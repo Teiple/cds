@@ -185,11 +185,13 @@ debug_draw_b3_string :: proc "c" (
 	color: b3.HexColor,
 	ctx: rawptr,
 ) {
-	vp_pos := viewport_world_to_viewport_position(
-		get_viewport()^,
-		get_scene().(Scene_Gameplay).camera,
-		p,
-	)
+	viewport := get_viewport()
+	camera, has_camera := get_camera()
+
+	context = runtime.default_context()
+	assert(has_camera, "Camera does not exist in current scene")
+
+	vp_pos := viewport_world_to_viewport_position(viewport^, camera^, p)
 	rl.DrawText(s, i32(vp_pos.x), i32(vp_pos.y), 10, b3_hex_to_rl_color(color))
 }
 

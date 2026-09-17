@@ -53,7 +53,7 @@ main :: proc() {
 	defer rl.CloseWindow()
 
 	// viewport
-	main_camera := camera_make({0, 0.5, 0})
+	main_camera := follow_camera_make({0, 0.5, 0})
 
 	main_viewport := viewport_make(BASE_WINDOW_SIZE)
 	defer viewport_close(&main_viewport)
@@ -185,7 +185,7 @@ main :: proc() {
 			player_update_animation(&player)
 
 			cam_target := player_get_cam_focus_point(&player)
-			camera_update(&main_camera, cam_target, rl.GetFrameTime())
+			follow_camera_update(&main_camera, cam_target, rl.GetFrameTime())
 
 			player_draw(player)
 		}

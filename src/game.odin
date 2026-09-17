@@ -1,21 +1,12 @@
 package game
-import b3 "vendor:box3d"
+import rl "vendor:raylib"
 
-Scene_Kind :: enum {
-	Title,
-	Main_Menu,
-	Gameplay,
-}
+BASE_WINDOW_SIZE :: rl.Vector2{960, 540}
+TARGET_WINDOW_SIZE :: rl.Vector2{1024, 576}
 
 
 Scene_Main_Menu :: struct {}
 
-Scene_Gameplay :: struct {
-	world:      b3.WorldId,
-	camera:     Follow_Camera,
-	player:     Entity_Player,
-	debug_draw: b3.DebugDraw,
-}
 
 Scene :: union {
 	Scene_Main_Menu,
@@ -23,17 +14,38 @@ Scene :: union {
 }
 
 Game_State :: struct {
-	viewport:      ^Viewport,
+	viewport:      Viewport,
 	current_scene: ^Scene,
+	running:       bool,
 }
 
 @(private)
 g_game_state: Game_State
 
 get_viewport :: proc "contextless" () -> ^Viewport {
-	return g_game_state.viewport
+	return &g_game_state.viewport
 }
 
-get_scene :: proc "contextless" () -> ^Scene {
-	return g_game_state.current_scene
+get_camera :: proc "contextless" () -> (camera: ^rl.Camera, has_camera: bool) {
+	switch &scene in g_game_state.current_scene {
+	case Scene_Gameplay:
+		return &scene.follow_camera, true
+	case Scene_Main_Menu:
+		return nil, false
+	}
+	return nil, false
+}
+
+game_make :: proc() {
+	g_game_state = {}
+
+	rl.SetConfigFlags({.WINDOW_RESIZABLE})
+	rl.InitWindow(i32(TARGET_WINDOW_SIZE.x), i32(TARGET_WINDOW_SIZE.y), "Game")
+	rl.SetTargetFPS(60)
+
+	g_game_state.viewport = viewport_make(BASE_WINDOW_SIZE)
+}
+
+game_delete :: proc() {
+	rl.CloseWindow()
 }

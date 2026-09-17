@@ -12,5 +12,5 @@ Entity_Visual :: struct {
 Entity :: struct {
 	body:   b3.BodyId,
 	visual: Entity_Visual,
-	health: M_Health,
+	health: Health,
 }

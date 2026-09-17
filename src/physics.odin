@@ -11,11 +11,11 @@ Physics_Layer :: enum u64 {
 
 Physics_Mask :: bit_set[Physics_Layer;u64]
 
-ALL_PHYSICS_LAYER :: ~Physics_Mask{}
+ALL_PHYSICS_LAYERS :: ~Physics_Mask{}
 
 physics_query_filter_make :: proc(
-	collision_layer: Physics_Mask = ALL_PHYSICS_LAYER,
-	collision_mask: Physics_Mask = ALL_PHYSICS_LAYER,
+	collision_layer: Physics_Mask = ALL_PHYSICS_LAYERS,
+	collision_mask: Physics_Mask = ALL_PHYSICS_LAYERS,
 ) -> b3.QueryFilter {
 	return {
 		categoryBits = transmute(u64)collision_layer,
@@ -24,8 +24,8 @@ physics_query_filter_make :: proc(
 }
 
 physics_filter_make :: proc(
-	collision_layer: Physics_Mask = ALL_PHYSICS_LAYER,
-	collision_mask: Physics_Mask = ALL_PHYSICS_LAYER,
+	collision_layer: Physics_Mask = ALL_PHYSICS_LAYERS,
+	collision_mask: Physics_Mask = ALL_PHYSICS_LAYERS,
 	group_index: i32 = 0,
 ) -> b3.Filter {
 	return {

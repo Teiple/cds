@@ -17,10 +17,9 @@ PLAYER_ANIMATION_NAMES :: [Player_Animation]string {
 	.Fire = "fire",
 }
 
-
 Entity_Player :: struct {
 	using base:    Entity,
-	animation:     M_Model_Anim(Player_Animation),
+	animation:     Model_Anim(Player_Animation),
 	recoil_offset: [3]f32,
 	sounds:        struct {
 		primary_fire:   rl.Sound,
@@ -37,7 +36,7 @@ player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Entity_Player {
 		"assets/sounds/fire_secondary.mp3",
 	)
 
-	player.animation = m_model_anim_make(
+	player.animation = model_anim_make(
 		model = player.visual.model,
 		anim_path = "assets/models/pistol.glb",
 		anim_names = PLAYER_ANIMATION_NAMES,
@@ -74,11 +73,15 @@ player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Entity_Player {
 	}
 
 	for box, i in box_colliders {
-		hbox := box.size * 0.5
-		box_hull := b3.MakeBoxHull(hbox.x, hbox.y, hbox.z)
+		half_size := box.size * 0.5
+		box_hull := b3.MakeBoxHull(half_size.x, half_size.y, half_size.z)
 		shape_def := b3.DefaultShapeDef()
 		shape_def.baseMaterial.friction = .5
 		shape_def.density = 1100
+		shape_def.filter = physics_filter_make(
+			{.Player_Physics},
+			{.Static_World, .Enemy_Physics},
+		)
 
 		shape := b3.CreateTransformedHullShape(
 			player.body,
@@ -88,6 +91,41 @@ player_make :: proc(world: b3.WorldId, position: rl.Vector3) -> Entity_Player {
 			{1, 1, 1},
 		)
 	}
+
+	hitboxes := [?]struct {
+		size:     [3]f32,
+		position: [3]f32,
+		rotation: quaternion128,
+	} {
+		{
+			size = {0.191, 0.060, 0.034} * 0.98,
+			position = {0.033, 0.001, 0} * 0.98,
+			rotation = euler_degrees_to_quat({0, 0, 0}),
+		},
+		{
+			size = {0.065, 0.106, 0.032} * 0.98,
+			position = {-0.024, -0.070, 0} * 0.98,
+			rotation = euler_degrees_to_quat({0, 0, -12.086}),
+		},
+	}
+
+	for box in hitboxes {
+		half_size := box.size * 0.5
+		box_hull := b3.MakeBoxHull(half_size.x, half_size.y, half_size.z)
+		shape_def := b3.DefaultShapeDef()
+		shape_def.isSensor = true
+		shape_def.density = 0
+		shape_def.filter = physics_filter_make({.Player_Hitbox})
+
+		shape := b3.CreateTransformedHullShape(
+			player.body,
+			shape_def,
+			&box_hull.base,
+			{p = box.position, q = box.rotation},
+			{1, 1, 1},
+		)
+	}
+
 
 	return player
 }
@@ -185,7 +223,6 @@ player_update_animation :: proc(player: ^Entity_Player) {
 
 player_delete :: proc(player: ^Entity_Player) {
 	m_model_anim_delete(&player.animation)
-
 	rl.UnloadModel(player.visual.model)
 	rl.UnloadSound(player.sounds.primary_fire)
 	rl.UnloadSound(player.sounds.secondary_fire)
