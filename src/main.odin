@@ -2,10 +2,7 @@ package game
 
 import fmt "core:fmt"
 import mem "core:mem"
-import b3 "vendor:box3d"
 import rl "vendor:raylib"
-import gl "vendor:raylib/rlgl"
-
 
 main :: proc() {
 	when ODIN_DEBUG {
@@ -49,16 +46,11 @@ main :: proc() {
 		i32(TARGET_WINDOW_SIZE.y),
 		"Unnamed",
 	)
-	rl.SetTargetFPS(60)
 	defer rl.CloseWindow()
-
-	// viewport
-	main_camera := follow_camera_make({0, 0.5, 0})
 
 	main_viewport := viewport_make(BASE_WINDOW_SIZE)
 	defer viewport_close(&main_viewport)
 
-	// ui
 	ui_ctx: UI_Context = ui_context_make(
 		font_configs = {
 			{
@@ -75,14 +67,6 @@ main :: proc() {
 	)
 	defer ui_context_delete(ui_ctx)
 
-	// audio
-	rl.InitAudioDevice()
-	defer rl.CloseAudioDevice()
-
-	test_sound := rl.LoadSound("assets/sounds/test.wav")
-	defer rl.UnloadSound(test_sound)
-
-	// debug
 	when ODIN_DEBUG {
 		interval: f32 = 1.0
 		interval_sum_fps: f32 = 0
@@ -91,52 +75,7 @@ main :: proc() {
 		interval_avg_fps: f32 = 0
 	}
 
-	// physics
-	world_def := b3.DefaultWorldDef()
-	world_def.gravity = {0, -10, 0}
-	world_def.createDebugShape = debug_draw_b3_create_shape
-	world_def.destroyDebugShape = debug_draw_b3_destroy_shape
-	world := b3.CreateWorld(world_def)
-	debug_draw := debug_draw_3d_make()
-
-
-	ground: b3.BodyId
-	{
-		body_def := b3.DefaultBodyDef()
-		body_def.type = .staticBody
-		body_def.position = {0, -1, 0}
-		ground = b3.CreateBody(world, body_def)
-
-		hull := b3.MakeBoxHull(10, 1, 10)
-		shape_def := b3.DefaultShapeDef()
-		shape_def.baseMaterial.friction = .5
-		shape_def.density = 1
-		shape_def.enableHitEvents = true
-
-		_ = b3.CreateHullShape(ground, shape_def, &hull.base)
-	}
-
-	player := player_make(world, {0, 0.5, 0})
-	defer player_delete(&player)
-
-	physics_time_step: f32 = 1. / 60.
-	physics_substep: i32 = 4
-
 	for running := true; running && !rl.WindowShouldClose(); {
-		b3.World_Step(world, physics_time_step, physics_substep)
-
-		contact_events := b3.World_GetContactEvents(world)
-
-		for i in 0 ..< contact_events.hitCount {
-			hit := contact_events.hitEvents[i]
-
-			if hit.approachSpeed > 1.0 {
-				volume := clamp(hit.approachSpeed / 20.0, 0.1, 1.0)
-				rl.SetSoundVolume(test_sound, volume)
-				rl.PlaySound(test_sound)
-			}
-		}
-
 		when ODIN_DEBUG {
 			delta := rl.GetFrameTime()
 
@@ -162,33 +101,8 @@ main :: proc() {
 		}
 		viewport_update(&main_viewport, window_size)
 
-		// Draw to viewport
 		viewport_begin(&main_viewport)
 		defer viewport_end(&main_viewport)
-
-		rl.BeginMode3D(main_camera.base)
-		{
-			defer rl.EndMode3D()
-
-			rl.DrawGrid(20, 5)
-
-			b3.World_Draw(world, &debug_draw, ~u64(0))
-
-			player_update_input(&player)
-			target_pos := viewport_get_mouse_world_position_on_zplane(
-				main_viewport,
-				main_camera.base,
-				0,
-			)
-			rl.DrawSphere(target_pos, 0.01, rl.RED)
-			player_update_aim(&player, target_pos)
-			player_update_animation(&player)
-
-			cam_target := player_get_cam_focus_point(&player)
-			follow_camera_update(&main_camera, cam_target, rl.GetFrameTime())
-
-			player_draw(player)
-		}
 
 		if ui_begin(&ui_ctx, main_viewport) {
 			when ODIN_DEBUG {
