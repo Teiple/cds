@@ -1,6 +1,5 @@
 package ui_sokol
 import sg "../sokol/gfx"
-import m "core:math/linalg"
 /*
     #version:1# (machine generated, don't edit!)
 
@@ -40,7 +39,7 @@ VIEW_tex :: 0
 SMP_smp :: 0
 Vs_Params :: struct #align(16) {
     using _: struct #packed {
-        ortho_proj: m.Matrix4f32,
+        ortho_proj: matrix[4,4]f32,
     },
 }
 /*

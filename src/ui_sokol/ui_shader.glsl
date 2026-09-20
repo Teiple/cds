@@ -1,7 +1,6 @@
 @header package ui_sokol
 @header import sg "../sokol/gfx"
-@header import m "core:math/linalg"
-@ctype mat4 m.Matrix4f32
+@ctype mat4 matrix[4,4]f32
 
 @vs vs
 layout(binding=0) uniform vs_params {
