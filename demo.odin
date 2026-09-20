@@ -1,9 +1,9 @@
 package main
 
 import "core:fmt"
-some_data := [?]i32{1, 2, 3, 4}
+some_string_array: [8]string
 
 main :: proc() {
-	fmt.println(rawptr(&some_data))
-	free(&some_data)
+	some_string_array = "hello world"
+	fmt.println(some_string_array)
 }
