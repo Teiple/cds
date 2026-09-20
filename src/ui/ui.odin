@@ -135,7 +135,7 @@ UI_Rect_Command :: struct #all_or_none {
 }
 
 UI_Text_Command :: struct #all_or_none {
-	font:          UI_Font_Id,
+	font:          UI_Font_Index,
 	rect:          Rect,
 	wrapped_lines: []string,
 	content:       string,
@@ -167,14 +167,12 @@ UI_Glyph :: struct {
 }
 
 UI_Font :: struct {
-	id:        UI_Font_Id,
 	base_size: f32,
 	spacing:   f32,
 	glyphs:    [96]UI_Glyph,
 }
 
 UI_Font_Config :: struct {
-	font_path: cstring,
 	base_size: f32,
 	spacing:   f32,
 }
@@ -1444,7 +1442,7 @@ ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 			&ctx.render_commands,
 			UI_Text_Command{
 				content = attr.config.content,
-				font = ctx.fonts[attr.config.font_index].id,
+				font = attr.config.font_index,
 				font_size = attr.config.font_size,
 				spacing = ctx.fonts[attr.config.font_index].spacing,
 				line_spacing = attr.config.line_spacing,

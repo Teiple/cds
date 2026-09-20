@@ -57,17 +57,17 @@ viewport_init :: proc(
 	}
 	vp.bg_pipeline = sg.make_pipeline(bg_pip_desc)
 
-	r := u8(clamp(bg_color.r * 255.0, 0, 255))
-	g := u8(clamp(bg_color.g * 255.0, 0, 255))
-	b := u8(clamp(bg_color.b * 255.0, 0, 255))
-	a := u8(clamp(bg_color.a * 255.0, 0, 255))
-	color_u32 := u32(r) | (u32(g) << 8) | (u32(b) << 16) | (u32(a) << 24)
+	color := cast([4]u8)linalg.clamp(
+		bg_color * 255,
+		cast([4]f32)0,
+		cast([4]f32)255,
+	)
 
 	bg_vertices := [4]Vertex {
-		{-1.0, -1.0, 0.0, color_u32, 0, 0},
-		{1.0, -1.0, 0.0, color_u32, 0, 0},
-		{1.0, 1.0, 0.0, color_u32, 0, 0},
-		{-1.0, 1.0, 0.0, color_u32, 0, 0},
+		{{-1.0, -1.0, 0.0}, color, {0, 0}},
+		{{1.0, -1.0, 0.0}, color, {32767, 0}},
+		{{1.0, 1.0, 0.0}, color, {32767, 32767}},
+		{{-1.0, 1.0, 0.0}, color, {0, 32767}},
 	}
 	bg_indices := [6]u16{0, 1, 2, 0, 2, 3}
 

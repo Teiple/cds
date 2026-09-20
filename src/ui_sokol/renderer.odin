@@ -21,28 +21,30 @@ Draw_Batch :: struct {
 	num_elements: i32,
 }
 
+UI_Sokol_Font :: struct {
+	image:     sg.Image,
+	view:      sg.View,
+	chardata:  [96]stbtt.bakedchar,
+	base_size: f32,
+	spacing:   f32,
+}
+
 UI_Renderer :: struct {
-	pipeline:       sg.Pipeline,
-	vertex_buffer:  sg.Buffer,
-	index_buffer:   sg.Buffer,
-	sampler:        sg.Sampler,
-	white_image:    sg.Image,
-	white_view:     sg.View,
-	font_image:     sg.Image,
-	font_view:      sg.View,
-	font_chardata:  [96]stbtt.bakedchar,
-	font_base_size: f32,
-	font_spacing:   f32,
-	vertices:       [dynamic]UI_Vertex,
-	indices:        [dynamic]u16,
-	batches:        [dynamic]Draw_Batch,
-	scissor_stack:  [dynamic]ui.Rect,
+	pipeline:      sg.Pipeline,
+	vertex_buffer: sg.Buffer,
+	index_buffer:  sg.Buffer,
+	sampler:       sg.Sampler,
+	white_image:   sg.Image,
+	white_view:    sg.View,
+	fonts:         [dynamic]UI_Sokol_Font,
+	vertices:      [dynamic]UI_Vertex,
+	indices:       [dynamic]u16,
+	batches:       [dynamic]Draw_Batch,
+	scissor_stack: [dynamic]ui.Rect,
 }
 
 ui_renderer_init :: proc(
 	r: ^UI_Renderer,
-	font_ttf: []byte,
-	font_size: f32 = 16.0,
 	max_vertices := 16384,
 	max_indices := 32768,
 ) {
@@ -50,6 +52,7 @@ ui_renderer_init :: proc(
 	r.indices = make([dynamic]u16, 0, max_indices)
 	r.batches = make([dynamic]Draw_Batch, 0, 64)
 	r.scissor_stack = make([dynamic]ui.Rect, 0, 16)
+	r.fonts = make([dynamic]UI_Sokol_Font, 0, 4)
 
 	r.vertex_buffer = sg.make_buffer({
 		usage = {vertex_buffer = true, dynamic_update = true},
@@ -109,63 +112,82 @@ ui_renderer_init :: proc(
 		},
 	})
 	r.white_view = sg.make_view({texture = {image = r.white_image}})
-
-	atlas_w, atlas_h := 512, 512
-	alpha_bitmap := make([]u8, atlas_w * atlas_h)
-	defer delete(alpha_bitmap)
-
-	stbtt.BakeFontBitmap(
-		raw_data(font_ttf),
-		0,
-		font_size,
-		raw_data(alpha_bitmap),
-		i32(atlas_w),
-		i32(atlas_h),
-		32,
-		96,
-		raw_data(r.font_chardata[:]),
-	)
-
-	rgba_pixels := make([]u8, atlas_w * atlas_h * 4)
-	defer delete(rgba_pixels)
-
-	for i in 0 ..< (atlas_w * atlas_h) {
-		a := alpha_bitmap[i]
-		rgba_pixels[i * 4 + 0] = 255
-		rgba_pixels[i * 4 + 1] = 255
-		rgba_pixels[i * 4 + 2] = 255
-		rgba_pixels[i * 4 + 3] = a
-	}
-
-	r.font_image = sg.make_image({
-		width = i32(atlas_w),
-		height = i32(atlas_h),
-		pixel_format = .RGBA8,
-		data = {
-			mip_levels = {
-				0 = {ptr = raw_data(rgba_pixels), size = len(rgba_pixels)},
-			},
-		},
-	})
-	r.font_view = sg.make_view({texture = {image = r.font_image}})
-
-	r.font_base_size = font_size
-	r.font_spacing = 0.0
 }
 
-ui_renderer_font :: proc(
+UI_Font_Desc :: struct {
+	font_ttf:  []byte,
+	font_size: f32,
+	spacing:   f32,
+}
+
+ui_renderer_make_fonts :: proc(
 	r: ^UI_Renderer,
-	id: ui.UI_Font_Id = 0,
-) -> ui.UI_Font {
-	f := ui.UI_Font {
-		id        = id,
-		base_size = r.font_base_size,
-		spacing   = r.font_spacing,
+	font_descs: []UI_Font_Desc,
+	allocator := context.temp_allocator,
+) -> []ui.UI_Font {
+	out := make([]ui.UI_Font, len(font_descs))
+	defer delete(out)
+	for desc, i in font_descs {
+		atlas_w, atlas_h := 512, 512
+		alpha_bitmap := make([]u8, atlas_w * atlas_h)
+		defer delete(alpha_bitmap)
+
+		chardata: [96]stbtt.bakedchar
+		stbtt.BakeFontBitmap(
+			raw_data(desc.font_ttf),
+			0,
+			desc.font_size,
+			raw_data(alpha_bitmap),
+			i32(atlas_w),
+			i32(atlas_h),
+			32,
+			96,
+			raw_data(chardata[:]),
+		)
+
+		rgba_pixels := make([]u8, atlas_w * atlas_h * 4)
+		defer delete(rgba_pixels)
+
+		for px, idx in alpha_bitmap {
+			rgba_pixels[idx * 4 + 0] = 255
+			rgba_pixels[idx * 4 + 1] = 255
+			rgba_pixels[idx * 4 + 2] = 255
+			rgba_pixels[idx * 4 + 3] = px
+		}
+
+		font_image := sg.make_image({
+			width = i32(atlas_w),
+			height = i32(atlas_h),
+			pixel_format = .RGBA8,
+			data = {
+				mip_levels = {
+					0 = {ptr = raw_data(rgba_pixels), size = len(rgba_pixels)},
+				},
+			},
+		})
+		font_view := sg.make_view({texture = {image = font_image}})
+
+		append(
+			&r.fonts,
+			UI_Sokol_Font{
+				image = font_image,
+				view = font_view,
+				chardata = chardata,
+				base_size = desc.font_size,
+				spacing = desc.spacing,
+			},
+		)
+
+		out[i] = ui.UI_Font {
+			base_size = desc.font_size,
+			spacing   = desc.spacing,
+		}
+		for g in 0 ..< 96 {
+			out[i].glyphs[g].xadvance = chardata[g].xadvance
+		}
 	}
-	for i in 0 ..< 96 {
-		f.glyphs[i].xadvance = r.font_chardata[i].xadvance
-	}
-	return f
+
+	return out
 }
 
 ui_renderer_destroy :: proc(r: ^UI_Renderer) {
@@ -174,6 +196,12 @@ ui_renderer_destroy :: proc(r: ^UI_Renderer) {
 	delete(r.batches)
 	delete(r.scissor_stack)
 
+	for f in r.fonts {
+		sg.destroy_view(f.view)
+		sg.destroy_image(f.image)
+	}
+	delete(r.fonts)
+
 	sg.destroy_pipeline(r.pipeline)
 	sg.destroy_buffer(r.vertex_buffer)
 	sg.destroy_buffer(r.index_buffer)
@@ -181,9 +209,6 @@ ui_renderer_destroy :: proc(r: ^UI_Renderer) {
 
 	sg.destroy_view(r.white_view)
 	sg.destroy_image(r.white_image)
-
-	sg.destroy_view(r.font_view)
-	sg.destroy_image(r.font_image)
 }
 
 @(private = "file")
@@ -221,6 +246,7 @@ push_quad :: proc(
 @(private = "file")
 draw_text_line :: proc(
 	r: ^UI_Renderer,
+	font: ^UI_Sokol_Font,
 	text: string,
 	start_x, start_y: f32,
 	scale_font: f32,
@@ -230,7 +256,7 @@ draw_text_line :: proc(
 	pen_x := start_x
 	for ch in text {
 		if ch < 32 || ch >= 128 do continue
-		bc := r.font_chardata[ch - 32]
+		bc := font.chardata[ch - 32]
 		qw := f32(bc.x1 - bc.x0) * scale_font
 		qh := f32(bc.y1 - bc.y0) * scale_font
 		qx := pen_x + bc.xoff * scale_font
@@ -564,35 +590,42 @@ ui_renderer_render :: proc(
 
 		case ui.UI_Text_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			set_active_batch(r, r.font_view, cur)
-			scale_font := c.font_size / r.font_base_size
-			pen_x := c.rect.x
-			pen_y := c.rect.y + c.font_size * 0.78
+			font_idx := int(c.font)
+			if font_idx < len(r.fonts) {
+				font_obj := &r.fonts[font_idx]
+				set_active_batch(r, font_obj.view, cur)
+				scale_font :=
+					font_obj.base_size > 0 ? (c.font_size / font_obj.base_size) : 1.0
+				pen_x := c.rect.x
+				pen_y := c.rect.y + c.font_size * 0.78
 
-			lines := c.wrapped_lines
-			if len(lines) == 0 {
-				draw_text_line(
-					r,
-					c.content,
-					pen_x,
-					pen_y,
-					scale_font,
-					c.spacing,
-					c.color,
-				)
-			} else {
-				line_y := pen_y
-				for line in lines {
+				lines := c.wrapped_lines
+				if len(lines) == 0 {
 					draw_text_line(
 						r,
-						line,
+						font_obj,
+						c.content,
 						pen_x,
-						line_y,
+						pen_y,
 						scale_font,
 						c.spacing,
 						c.color,
 					)
-					line_y += c.font_size + c.line_spacing
+				} else {
+					line_y := pen_y
+					for line in lines {
+						draw_text_line(
+							r,
+							font_obj,
+							line,
+							pen_x,
+							line_y,
+							scale_font,
+							c.spacing,
+							c.color,
+						)
+						line_y += c.font_size + c.line_spacing
+					}
 				}
 			}
 		}
@@ -647,7 +680,8 @@ ui_renderer_render :: proc(
 
 init :: ui_renderer_init
 destroy :: ui_renderer_destroy
-font :: ui_renderer_font
+make_fonts :: ui_renderer_make_fonts
 render :: ui_renderer_render
 Renderer :: UI_Renderer
 Vertex :: UI_Vertex
+Font_Desc :: UI_Font_Desc
