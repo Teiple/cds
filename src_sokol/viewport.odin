@@ -38,7 +38,7 @@ viewport_update :: proc(vp: ^Viewport, window_size: [2]f32) {
 	}
 }
 
-viewport_apply_hardware :: proc(vp: Viewport) {
+viewport_apply :: proc(vp: Viewport) {
 	sg.apply_viewportf(
 		vp.dest_rect.x,
 		vp.dest_rect.y,
@@ -54,6 +54,8 @@ viewport_apply_hardware :: proc(vp: Viewport) {
 		true,
 	)
 }
+
+viewport_apply_hardware :: viewport_apply
 
 viewport_handle_mouse_delta :: proc(vp: ^Viewport, delta: [2]f32) {
 	if vp.scale <= 0 {

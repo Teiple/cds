@@ -29,9 +29,9 @@ App_State :: struct {
 	white_image:             sg.Image,
 	white_view:              sg.View,
 	viewport:                Viewport,
-	ui_ctx:                  ui.UI_Context,
-	ui_renderer:             ui_sokol.UI_Renderer,
-	ui_input:                ui.UI_Input,
+	ui_ctx:                  ui.Context,
+	ui_renderer:             ui_sokol.Renderer,
+	ui_input:                ui.Input,
 	time:                    f32,
 	interval_fps_sum:        f32,
 	interval_frame_count:    f32,
@@ -101,14 +101,12 @@ main :: proc() {
 			font_ttf := #load(
 				"../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf",
 			)
-			ui_sokol.ui_renderer_init(&app_state.ui_renderer, font_ttf, 20.0)
+			ui_sokol.init(&app_state.ui_renderer, font_ttf, 20.0)
 
-			ui_fonts := [1]ui.UI_Font {
-				{id = 0, base_size = 20.0, spacing = 0.0},
-			}
-			app_state.ui_ctx = ui.ui_context_make(
+			ui_fonts := [1]ui.Font{{id = 0, base_size = 20.0, spacing = 0.0}}
+			app_state.ui_ctx = ui.make_context(
 				ui_fonts[:],
-				ui_sokol.ui_renderer_measure_text,
+				ui_sokol.measure_text,
 			)
 
 			app_state.pipeline = sg.make_pipeline({
@@ -404,14 +402,14 @@ main :: proc() {
 				{sapp.widthf(), sapp.heightf()},
 			)
 
-			if ui.ui_begin(
+			if ui.begin(
 				&app_state.ui_ctx,
 				app_state.viewport.base_size,
 				app_state.ui_input,
 			) {
-				if ui.ui_layout().config(
-					width = ui.ui_fixed(320),
-					height = ui.ui_fit(),
+				if ui.layout().config(
+					width = ui.fixed(320),
+					height = ui.fit(),
 					child_gap = 12,
 					layout_direction = .Top_To_Bottom,
 					background_color = {30, 30, 40, 220},
@@ -419,7 +417,7 @@ main :: proc() {
 					border = {thickness = 2, color = {100, 120, 255, 255}},
 					offset = {20, 20},
 				) {
-					ui.ui_text().config(
+					ui.text().config(
 						"Sokol + Odin UI System",
 						font_size = 20,
 						color = {255, 255, 255, 255},
@@ -432,16 +430,16 @@ main :: proc() {
 					}
 				}
 
-				if ui.ui_layout().config(
-					width = ui.ui_fit(),
-					height = ui.ui_fit(),
+				if ui.layout().config(
+					width = ui.fit(),
+					height = ui.fit(),
 					child_gap = 4,
 					layout_direction = .Top_To_Bottom,
 					background_color = {20, 20, 25, 200},
 					corner_radius = {6, 6, 6, 6},
 					border = {thickness = 1, color = {60, 60, 80, 255}},
 					mouse_mode = .Ignore,
-					float_mode = ui.UI_Float_At_Root {
+					float_mode = ui.Float_At_Root {
 						attach_points = {
 							element = .RightTop,
 							parent = .RightTop,
@@ -450,7 +448,7 @@ main :: proc() {
 						z_index = 100,
 					},
 				) {
-					ui.ui_text().config(
+					ui.text().config(
 						fmt.tprintf(
 							"Exec: %.4f ms\nFPS: %.0f",
 							app_state.average_frame_exec_time,
@@ -483,7 +481,7 @@ main :: proc() {
 				swapchain = sglue.swapchain(),
 			})
 
-			viewport_apply_hardware(app_state.viewport)
+			viewport_apply(app_state.viewport)
 
 			bg_vs_params: Vs_Params = {
 				mvp = linalg.MATRIX4F32_IDENTITY,
@@ -508,7 +506,7 @@ main :: proc() {
 			)
 			sg.draw(0, 36, 1)
 
-			ui_sokol.ui_renderer_render(
+			ui_sokol.render(
 				&app_state.ui_renderer,
 				&app_state.ui_ctx,
 				app_state.viewport.base_size,
@@ -521,8 +519,8 @@ main :: proc() {
 		},
 		cleanup_cb = proc "c" () {
 			context = odin_ctx
-			ui_sokol.ui_renderer_destroy(&app_state.ui_renderer)
-			ui.ui_context_delete(app_state.ui_ctx)
+			ui_sokol.destroy(&app_state.ui_renderer)
+			ui.delete_context(app_state.ui_ctx)
 			sg.destroy_view(app_state.white_view)
 			sg.destroy_image(app_state.white_image)
 			sg.destroy_buffer(app_state.bg_bindings.vertex_buffers[0])

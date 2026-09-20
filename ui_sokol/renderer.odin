@@ -650,3 +650,10 @@ ui_renderer_render :: proc(
 		sg.draw(b.element_base, b.num_elements, 1)
 	}
 }
+
+init :: ui_renderer_init
+destroy :: ui_renderer_destroy
+measure_text :: ui_renderer_measure_text
+render :: ui_renderer_render
+Renderer :: UI_Renderer
+Vertex :: UI_Vertex

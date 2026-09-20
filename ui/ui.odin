@@ -2344,7 +2344,91 @@ ui_last_id :: proc() -> u32 {
 	return g_ui_builder.last_id
 }
 
-
 ui_get_builder :: proc "contextless" () -> ^UI_Builder {
 	return &g_ui_builder
 }
+
+begin :: ui_begin
+end :: ui_end
+make_context :: ui_context_make
+delete_context :: ui_context_delete
+context_make :: ui_context_make
+context_delete :: ui_context_delete
+layout :: ui_layout
+begin_layout :: ui_begin_layout
+end_layout :: ui_end_layout
+defer_end_layout :: ui_defer_end_layout
+draw_layout :: ui_draw_layout
+text :: ui_text
+draw_text :: ui_draw_text
+fixed :: ui_fixed
+fit :: ui_fit
+grow :: ui_grow
+percent :: ui_percent
+pad_all :: ui_pad_all
+corner_radius_all :: ui_corner_radius_all
+is_hovered :: ui_is_this_hovered
+is_held :: ui_is_this_held
+is_clicked :: ui_is_this_clicked
+is_selected :: ui_is_this_selected
+is_this_hovered :: ui_is_this_hovered
+is_this_held :: ui_is_this_held
+is_this_clicked :: ui_is_this_clicked
+is_this_selected :: ui_is_this_selected
+is_id_hovered :: ui_is_id_hovered
+is_id_held :: ui_is_id_held
+is_id_clicked :: ui_is_id_clicked
+is_id_selected :: ui_is_id_selected
+mouse_state :: ui_mouse_state
+mouse_delta :: ui_mouse_delta
+mouse_position :: ui_mouse_position
+current_scroll_data :: ui_current_scroll_data
+set_scroll_offset :: ui_set_scroll_offset
+intersect_rect :: ui_intersect_rect
+rect_contains :: ui_rect_contains
+global_id :: ui_global_id
+local_id :: ui_local_id
+family_id :: ui_family_id
+last_id :: ui_last_id
+get_builder :: ui_get_builder
+
+Context :: UI_Context
+Input :: UI_Input
+Font :: UI_Font
+Float_At_Root :: UI_Float_At_Root
+Float_At_Parent :: UI_Float_At_Parent
+Float_At_Id :: UI_Float_At_Id
+Float_None :: UI_Float_None
+Float_Mode :: UI_Float_Mode
+Float_Config :: UI_Float_Config
+Float_Attach_Points :: UI_Float_Attach_Points
+Layout_Config :: UI_Layout_Config
+Layout_Padding :: UI_Layout_Padding
+Corner_Radius :: UI_Corner_Radius
+Border_Config :: UI_Border_Config
+Image :: UI_Image
+Nine_Patch_Config :: UI_Nine_Patch_Config
+NPatch_Layout :: UI_NPatch_Layout
+Image_Fit :: UI_Image_Fit
+Layout_Mouse_Mode :: UI_Layout_Mouse_Mode
+Layout_Mouse_State :: UI_Layout_Mouse_State
+Mouse_State :: UI_Mouse_State
+Anchor_Point :: UI_Anchor_Point
+Alignment :: UI_Alignment
+Alignment_X :: UI_Alignment_X
+Alignment_Y :: UI_Alignment_Y
+Sizing_Axis :: UI_Sizing_Axis
+Fixed_Size :: UI_Fixed_Size
+Fit_Size :: UI_Fit_Size
+Grow_Size :: UI_Grow_Size
+Percent_Size :: UI_Percent_Size
+Size_Mode :: UI_Size_Mode
+Text_Config :: UI_Text_Config
+Scroll_Data :: UI_Scroll_Data
+Measure_Text :: UI_Measure_Text
+Render_Command :: UI_Render_Command
+Rect_Command :: UI_Rect_Command
+Image_Command :: UI_Image_Command
+Text_Command :: UI_Text_Command
+Push_Clip_Command :: UI_Push_Clip_Command
+Pop_Clip_Command :: UI_Pop_Clip_Command
