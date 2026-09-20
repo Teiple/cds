@@ -47,9 +47,14 @@ main :: proc() {
 			)
 
 			g_state.ui.ctx = ui.make_context(fonts = fonts)
+			g_state.camera = {
+				fovy_degrees = 60,
+				position     = {0, 1.5, 6.0},
+				target       = {0, 0, 0},
+				up           = {0, 1, 0},
+			}
 
-			g_state.pipeline, g_state.bindings =
-				make_default_pipeline_and_bindings()
+			renderer_init(&g_state.renderer)
 			g_state.meshes = make([dynamic]Mesh, 0, 10)
 
 			append(&g_state.meshes, mesh_make_box({0.5, 0.5, 0.5}))
@@ -112,21 +117,6 @@ main :: proc() {
 
 				// 3D
 				{
-					sg.apply_pipeline(g_state.pipeline)
-
-					proj := linalg.matrix4_perspective_f32(
-						fovy = math.to_radians_f32(60.0),
-						aspect = 960.0 / 540.0,
-						near = 0.01,
-						far = 100.0,
-					)
-					view := linalg.matrix4_look_at_f32(
-						eye = {0.0, 1.5, 6.0},
-						centre = {0.0, 0.0, 0.0},
-						up = {0.0, 1.0, 0.0},
-					)
-					view_proj := proj * view
-
 					positions := [5][3]f32 {
 						{-3.0, 0.0, 0.0},
 						{-1.5, 0.0, 0.0},
@@ -135,30 +125,19 @@ main :: proc() {
 						{3.0, 0.0, 0.0},
 					}
 
-					rxm := linalg.matrix4_rotate_f32(
-						g_state.frame_time.time * 1.5,
-						{1.0, 0.0, 0.0},
-					)
-					rym := linalg.matrix4_rotate_f32(
-						g_state.frame_time.time * 1.0,
-						{0.0, 1.0, 0.0},
-					)
-					rot := rxm * rym
+					rotation :=
+						linalg.quaternion_angle_axis_f32(
+							g_state.frame_time.time * 1.5,
+							{1.0, 0.0, 0.0},
+						) *
+						linalg.quaternion_angle_axis_f32(
+							g_state.frame_time.time * 1.0,
+							{0.0, 1.0, 0.0},
+						)
 
 					for mesh, i in g_state.meshes {
-						pos :=
-							i < len(positions) ? positions[i] : [3]f32{0, 0, 0}
-						t := linalg.matrix4_translate_f32(pos)
-						model := t * rot
-
-						vs_params: shaders.Vs_Params = {
-							mvp = view_proj * model,
-						}
-						sg.apply_uniforms(
-							shaders.UB_vs_params,
-							{ptr = &vs_params, size = size_of(vs_params)},
-						)
-						draw_mesh(&g_state.bindings, mesh)
+						draw_mesh(mesh, positions[i], rotation)
+						draw_wire_mesh(mesh, positions[i], rotation)
 					}
 				}
 			}

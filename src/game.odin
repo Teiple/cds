@@ -13,9 +13,9 @@ g_odin_ctx := runtime.default_context()
 Game_State :: struct {
 	// Drawing
 	meshes:        [dynamic]Mesh,
-	pipeline:      sg.Pipeline,
-	bindings:      sg.Bindings,
+	renderer:      Renderer,
 	frame_time:    Game_Frame_Time,
+	camera:        Camera,
 	viewport:      Viewport,
 	ui:            struct {
 		ctx:      ui.Context,

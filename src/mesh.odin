@@ -6,9 +6,11 @@ import sg "sokol/gfx"
 MESH_DEFAULT_VERTEX_COLOR :: [4]u8{0, 255, 0, 255} // green
 
 Mesh :: struct {
-	vertex_buffer: sg.Buffer,
-	index_buffer:  sg.Buffer,
-	index_count:   i32,
+	vertex_buffer:     sg.Buffer,
+	index_buffer:      sg.Buffer,
+	wire_index_buffer: sg.Buffer,
+	index_count:       i32,
+	wire_index_count:  i32,
 }
 
 mesh_make_from_data :: proc(vertices: []Vertex, indices: []u16) -> Mesh {
@@ -22,19 +24,38 @@ mesh_make_from_data :: proc(vertices: []Vertex, indices: []u16) -> Mesh {
 		usage = {index_buffer = true},
 		data = {ptr = raw_data(indices), size = len(indices) * size_of(u16)},
 	})
+
+	wireframe_indices := mesh_make_line_indices(indices)
+	defer delete(wireframe_indices)
+
+	wibuf := sg.make_buffer({
+		usage = {index_buffer = true},
+		data = {
+			ptr = raw_data(wireframe_indices),
+			size = len(wireframe_indices) * size_of(u16),
+		},
+	})
+
 	return Mesh {
 		vertex_buffer = vbuf,
 		index_buffer = ibuf,
 		index_count = i32(len(indices)),
+		wire_index_buffer = wibuf,
+		wire_index_count = i32(len(wireframe_indices)),
 	}
 }
 
 mesh_destroy :: proc(m: ^Mesh) {
 	sg.destroy_buffer(m.vertex_buffer)
 	sg.destroy_buffer(m.index_buffer)
+	sg.destroy_buffer(m.wire_index_buffer)
+
 	m.vertex_buffer = {}
 	m.index_buffer = {}
+	m.wire_index_buffer = {}
+
 	m.index_count = 0
+	m.wire_index_count = 0
 }
 
 mesh_make_box :: proc(
@@ -44,7 +65,7 @@ mesh_make_box :: proc(
 	//odinfmt: disable
 	// cube vertex buffer
     vertices := [?]Vertex {
-        // pos               color       uvs
+        // pos                 color                 uvs
         { {-1.0, -1.0, -1.0},  {255, 255, 255, 255}, {    0,     0} },
         { { 1.0, -1.0, -1.0},  {255, 255, 255, 255}, {32767,     0} },
         { { 1.0,  1.0, -1.0},  {255, 255, 255, 255}, {32767, 32767} },
@@ -85,7 +106,6 @@ mesh_make_box :: proc(
 		v.position *= half_size
 		v.color = color
 	}
-
 
 	return mesh_make_from_data(vertices[:], indices[:])
 }
@@ -374,4 +394,24 @@ mesh_make_capsule :: proc(
 	}
 
 	return mesh_make_from_data(vertices[:], indices[:])
+}
+
+mesh_make_line_indices :: proc(tri_indices: []u16) -> []u16 {
+	tri_count := len(tri_indices) / 3
+	line_indices := make([]u16, tri_count * 6)
+
+	for i in 0 ..< tri_count {
+		i0 := tri_indices[i * 3 + 0]
+		i1 := tri_indices[i * 3 + 1]
+		i2 := tri_indices[i * 3 + 2]
+
+		line_indices[i * 6 + 0] = i0
+		line_indices[i * 6 + 1] = i1
+		line_indices[i * 6 + 2] = i1
+		line_indices[i * 6 + 3] = i2
+		line_indices[i * 6 + 4] = i2
+		line_indices[i * 6 + 5] = i0
+	}
+
+	return line_indices
 }

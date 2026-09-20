@@ -206,3 +206,7 @@ viewport_screen_to_virtual :: proc(
 viewport_get_mouse_position :: proc(vp: Viewport) -> [2]f32 {
 	return vp.vmouse_position
 }
+
+viewport_get_aspect :: proc(vp: Viewport) -> f32 {
+	return vp.base_size.x / vp.base_size.y
+}
