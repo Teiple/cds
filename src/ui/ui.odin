@@ -3,7 +3,6 @@ package ui
 import "base:runtime"
 import "core:hash"
 import "core:math"
-import "core:os"
 import "core:unicode/utf8"
 
 Rect :: struct {
@@ -86,12 +85,6 @@ UI_ClipData :: struct {
 	open_clip_stack: [dynamic]Rect,
 }
 
-UI_Measure_Text :: proc(
-	ui_draw_text: UI_Text_Config,
-	font_info: UI_Font,
-) -> (
-	width: f32,
-)
 
 UI_Nine_Patch_Config :: struct {
 	source: Rect,
@@ -169,10 +162,15 @@ UI_Pointer_Attributes :: struct {
 }
 
 
+UI_Glyph :: struct {
+	xadvance: f32,
+}
+
 UI_Font :: struct {
 	id:        UI_Font_Id,
 	base_size: f32,
 	spacing:   f32,
+	glyphs:    [96]UI_Glyph,
 }
 
 UI_Font_Config :: struct {
@@ -203,7 +201,6 @@ UI_Context :: struct {
 	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]UI_Render_Command,
 	pointer:            UI_Pointer_Attributes,
-	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
 	input:              UI_Input,
 	input_event:        UI_Input_Event,
@@ -536,6 +533,22 @@ ui_close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	ele := &ctx.elements[index]
 }
 
+ui_measure_text_width :: proc(
+	input: UI_Text_Config,
+	font_info: UI_Font,
+) -> f32 {
+	scale :=
+		font_info.base_size > 0 ? (input.font_size / font_info.base_size) : 1.0
+	width: f32 = 0
+	for ch in input.content {
+		if ch < 32 || ch >= 128 do continue
+		width +=
+			font_info.glyphs[ch - 32].xadvance * scale +
+			font_info.spacing * scale
+	}
+	return width
+}
+
 ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	text_attr, ok := &current.attributes.(UI_Text_Attributes)
@@ -555,7 +568,10 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 				line_end -= 1
 			}
 			config.content = content[line_start:line_end]
-			line_w := ctx.measure_text(config, ctx.fonts[config.font_index])
+			line_w := ui_measure_text_width(
+				config,
+				ctx.fonts[config.font_index],
+			)
 			if line_w > max_line_width {
 				max_line_width = line_w
 			}
@@ -599,7 +615,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			config.content = content[word_start:word_end]
 
-			word_width := ctx.measure_text(
+			word_width := ui_measure_text_width(
 				config,
 				ctx.fonts[config.font_index],
 			)
@@ -955,7 +971,10 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 			raw_line_start = raw_index + 1
 
 			config.content = raw_line
-			line_w := ctx.measure_text(config, ctx.fonts[config.font_index])
+			line_w := ui_measure_text_width(
+				config,
+				ctx.fonts[config.font_index],
+			)
 
 			if line_w <= ele.size.x && !has_newlines {
 				continue
@@ -999,13 +1018,13 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 				}
 
 				config.content = raw_line[whitespace_start:word_start]
-				whitespace_width := ctx.measure_text(
+				whitespace_width := ui_measure_text_width(
 					config,
 					ctx.fonts[config.font_index],
 				)
 
 				config.content = raw_line[word_start:word_end]
-				word_width := ctx.measure_text(
+				word_width := ui_measure_text_width(
 					config,
 					ctx.fonts[config.font_index],
 				)
@@ -1147,7 +1166,6 @@ ui_calculate_position :: proc(
 
 ui_context_make :: proc(
 	fonts: []UI_Font,
-	measure_text: UI_Measure_Text,
 	pointer: UI_Pointer_Config = {},
 ) -> UI_Context {
 	for event in g_ui_builder.context_events.on_make {
@@ -1164,7 +1182,6 @@ ui_context_make :: proc(
 		growable_buffer = make([dynamic]UI_Index, 0, 5),
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		pointer = {config = pointer},
-		measure_text = measure_text,
 		fonts = fonts_copy,
 		input_event = {
 			mouse_captured = false,
@@ -2392,9 +2409,12 @@ family_id :: ui_family_id
 last_id :: ui_last_id
 get_builder :: ui_get_builder
 
+measure_text_width :: ui_measure_text_width
+
 Context :: UI_Context
 Input :: UI_Input
 Font :: UI_Font
+Glyph :: UI_Glyph
 Float_At_Root :: UI_Float_At_Root
 Float_At_Parent :: UI_Float_At_Parent
 Float_At_Id :: UI_Float_At_Id
@@ -2425,7 +2445,6 @@ Percent_Size :: UI_Percent_Size
 Size_Mode :: UI_Size_Mode
 Text_Config :: UI_Text_Config
 Scroll_Data :: UI_Scroll_Data
-Measure_Text :: UI_Measure_Text
 Render_Command :: UI_Render_Command
 Rect_Command :: UI_Rect_Command
 Image_Command :: UI_Image_Command

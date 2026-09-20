@@ -149,15 +149,24 @@ ui_renderer_init :: proc(
 
 	r.font_base_size = font_size
 	r.font_spacing = 0.0
-	g_ui_renderer = r
 }
 
-@(private = "file")
-g_ui_renderer: ^UI_Renderer
+ui_renderer_font :: proc(
+	r: ^UI_Renderer,
+	id: ui.UI_Font_Id = 0,
+) -> ui.UI_Font {
+	f := ui.UI_Font {
+		id        = id,
+		base_size = r.font_base_size,
+		spacing   = r.font_spacing,
+	}
+	for i in 0 ..< 96 {
+		f.glyphs[i].xadvance = r.font_chardata[i].xadvance
+	}
+	return f
+}
 
 ui_renderer_destroy :: proc(r: ^UI_Renderer) {
-	if g_ui_renderer == r do g_ui_renderer = nil
-
 	delete(r.vertices)
 	delete(r.indices)
 	delete(r.batches)
@@ -173,23 +182,6 @@ ui_renderer_destroy :: proc(r: ^UI_Renderer) {
 
 	sg.destroy_view(r.font_view)
 	sg.destroy_image(r.font_image)
-}
-
-ui_renderer_measure_text :: proc(
-	input: ui.UI_Text_Config,
-	font_info: ui.UI_Font,
-) -> f32 {
-	if g_ui_renderer == nil do return f32(len(input.content)) * (input.font_size * 0.5)
-	scale := input.font_size / font_info.base_size
-	width: f32 = 0
-	for ch in input.content {
-		if ch < 32 || ch >= 128 {
-			continue
-		}
-		bc := g_ui_renderer.font_chardata[ch - 32]
-		width += bc.xadvance * scale + font_info.spacing * scale
-	}
-	return width
 }
 
 @(private = "file")
@@ -653,7 +645,7 @@ ui_renderer_render :: proc(
 
 init :: ui_renderer_init
 destroy :: ui_renderer_destroy
-measure_text :: ui_renderer_measure_text
+font :: ui_renderer_font
 render :: ui_renderer_render
 Renderer :: UI_Renderer
 Vertex :: UI_Vertex

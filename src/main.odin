@@ -100,11 +100,8 @@ main :: proc() {
 			)
 			ui_sokol.init(&app_state.ui_renderer, font_ttf, 20.0)
 
-			ui_fonts := [1]ui.Font{{id = 0, base_size = 20.0, spacing = 0.0}}
-			app_state.ui_ctx = ui.make_context(
-				ui_fonts[:],
-				ui_sokol.measure_text,
-			)
+			ui_font := ui_sokol.font(&app_state.ui_renderer)
+			app_state.ui_ctx = ui.make_context({ui_font})
 
 			app_state.pipeline = sg.make_pipeline({
 				shader = sg.make_shader(
