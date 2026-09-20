@@ -6,56 +6,59 @@ import sg "sokol/gfx"
 MESH_DEFAULT_VERTEX_COLOR :: [4]u8{0, 255, 0, 255} // green
 
 Mesh :: struct {
-	vertex_buffer:     sg.Buffer,
-	index_buffer:      sg.Buffer,
-	wire_index_buffer: sg.Buffer,
-	index_count:       i32,
-	wire_index_count:  i32,
+	vertex_buffer:           sg.Buffer,
+	index_buffer:            sg.Buffer,
+	index_count:             i32,
+	// Debug meshes will only loaded in ODIN_DEBUG
+	debug_wire_index_buffer: sg.Buffer,
+	debug_wire_index_count:  i32,
 }
 
 mesh_make_from_data :: proc(vertices: []Vertex, indices: []u16) -> Mesh {
-	vbuf := sg.make_buffer({
+	mesh: Mesh
+
+	mesh.vertex_buffer = sg.make_buffer({
 		data = {
 			ptr = raw_data(vertices),
 			size = len(vertices) * size_of(Vertex),
 		},
 	})
-	ibuf := sg.make_buffer({
+	mesh.index_buffer = sg.make_buffer({
 		usage = {index_buffer = true},
 		data = {ptr = raw_data(indices), size = len(indices) * size_of(u16)},
 	})
 
-	wireframe_indices := mesh_make_line_indices(indices)
-	defer delete(wireframe_indices)
+	when ODIN_DEBUG {
+		wireframe_indices := mesh_make_line_indices(indices)
+		defer delete(wireframe_indices)
 
-	wibuf := sg.make_buffer({
-		usage = {index_buffer = true},
-		data = {
-			ptr = raw_data(wireframe_indices),
-			size = len(wireframe_indices) * size_of(u16),
-		},
-	})
+		mesh.debug_wire_index_buffer = sg.make_buffer({
+			usage = {index_buffer = true},
+			data = {
+				ptr = raw_data(wireframe_indices),
+				size = len(wireframe_indices) * size_of(u16),
+			},
+		})
 
-	return Mesh {
-		vertex_buffer = vbuf,
-		index_buffer = ibuf,
-		index_count = i32(len(indices)),
-		wire_index_buffer = wibuf,
-		wire_index_count = i32(len(wireframe_indices)),
+		mesh.debug_wire_index_count = cast(i32)len(wireframe_indices)
 	}
+
+	return mesh
 }
 
 mesh_destroy :: proc(m: ^Mesh) {
 	sg.destroy_buffer(m.vertex_buffer)
 	sg.destroy_buffer(m.index_buffer)
-	sg.destroy_buffer(m.wire_index_buffer)
+	// incase of !ODIN_DEBUG mode, debug_wire_index_buffer.id is zero
+	// and sg.destroy_buffer() is a no-op
+	sg.destroy_buffer(m.debug_wire_index_buffer)
 
 	m.vertex_buffer = {}
 	m.index_buffer = {}
-	m.wire_index_buffer = {}
+	m.debug_wire_index_buffer = {}
 
 	m.index_count = 0
-	m.wire_index_count = 0
+	m.debug_wire_index_count = 0
 }
 
 mesh_make_box :: proc(

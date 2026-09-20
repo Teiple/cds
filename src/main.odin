@@ -137,7 +137,7 @@ main :: proc() {
 
 					for mesh, i in g_state.meshes {
 						draw_mesh(mesh, positions[i], rotation)
-						draw_wire_mesh(mesh, positions[i], rotation)
+						draw_debug_wire_mesh(mesh, positions[i], rotation)
 					}
 				}
 			}

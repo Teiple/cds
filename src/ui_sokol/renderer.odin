@@ -244,6 +244,204 @@ push_quad :: proc(
 }
 
 @(private = "file")
+push_sub_quad :: proc(
+	r: ^UI_Renderer,
+	px0, py0, px1, py1: f32,
+	uv_x0, uv_y0, uv_x1, uv_y1: f32,
+	color: [4]u8,
+) {
+	if px1 <= px0 || py1 <= py0 do return
+	p0 := [2]f32{px0, py0}
+	p1 := [2]f32{px1, py0}
+	p2 := [2]f32{px1, py1}
+	p3 := [2]f32{px0, py1}
+	u0 := [2]f32{uv_x0, uv_y0}
+	u1 := [2]f32{uv_x1, uv_y0}
+	u2 := [2]f32{uv_x1, uv_y1}
+	u3 := [2]f32{uv_x0, uv_y1}
+	push_quad(r, p0, p1, p2, p3, u0, u1, u2, u3, color)
+}
+
+@(private = "file")
+render_image :: proc(r: ^UI_Renderer, c: ui.UI_Image_Command, view: sg.View) {
+	img := sg.query_view_image(view)
+	desc := sg.query_image_desc(img)
+	tex_w := f32(desc.width > 0 ? desc.width : 1)
+	tex_h := f32(desc.height > 0 ? desc.height : 1)
+
+	if npatch, ok := c.npatch.?; ok {
+		src := npatch.source
+		if src.width <= 0 || src.height <= 0 {
+			src =
+				c.source.width > 0 && c.source.height > 0 ? c.source : ui.Rect{0, 0, tex_w, tex_h}
+		}
+
+		left := f32(npatch.left)
+		top := f32(npatch.top)
+		right := f32(npatch.right)
+		bottom := f32(npatch.bottom)
+
+		dx0 := c.dest.x
+		dx1 := dx0 + left
+		dx2 := dx0 + c.dest.width - right
+		dx3 := dx0 + c.dest.width
+
+		dy0 := c.dest.y
+		dy1 := dy0 + top
+		dy2 := dy0 + c.dest.height - bottom
+		dy3 := dy0 + c.dest.height
+
+		u0 := src.x / tex_w
+		u1 := (src.x + left) / tex_w
+		u2 := (src.x + src.width - right) / tex_w
+		u3 := (src.x + src.width) / tex_w
+
+		v0 := src.y / tex_h
+		v1 := (src.y + top) / tex_h
+		v2 := (src.y + src.height - bottom) / tex_h
+		v3 := (src.y + src.height) / tex_h
+
+		switch npatch.layout {
+		case .NINE_PATCH:
+			push_sub_quad(r, dx0, dy0, dx1, dy1, u0, v0, u1, v1, c.tint)
+			push_sub_quad(r, dx1, dy0, dx2, dy1, u1, v0, u2, v1, c.tint)
+			push_sub_quad(r, dx2, dy0, dx3, dy1, u2, v0, u3, v1, c.tint)
+
+			push_sub_quad(r, dx0, dy1, dx1, dy2, u0, v1, u1, v2, c.tint)
+			push_sub_quad(r, dx1, dy1, dx2, dy2, u1, v1, u2, v2, c.tint)
+			push_sub_quad(r, dx2, dy1, dx3, dy2, u2, v1, u3, v2, c.tint)
+
+			push_sub_quad(r, dx0, dy2, dx1, dy3, u0, v2, u1, v3, c.tint)
+			push_sub_quad(r, dx1, dy2, dx2, dy3, u1, v2, u2, v3, c.tint)
+			push_sub_quad(r, dx2, dy2, dx3, dy3, u2, v2, u3, v3, c.tint)
+
+		case .THREE_PATCH_HORIZONTAL:
+			push_sub_quad(r, dx0, dy0, dx1, dy3, u0, v0, u1, v3, c.tint)
+			push_sub_quad(r, dx1, dy0, dx2, dy3, u1, v0, u2, v3, c.tint)
+			push_sub_quad(r, dx2, dy0, dx3, dy3, u2, v0, u3, v3, c.tint)
+
+		case .THREE_PATCH_VERTICAL:
+			push_sub_quad(r, dx0, dy0, dx3, dy1, u0, v0, u3, v1, c.tint)
+			push_sub_quad(r, dx0, dy1, dx3, dy2, u0, v1, u3, v2, c.tint)
+			push_sub_quad(r, dx0, dy2, dx3, dy3, u0, v2, u3, v3, c.tint)
+		}
+		return
+	}
+
+	src := c.source
+	if src.width <= 0 || src.height <= 0 {
+		src = ui.Rect{0, 0, tex_w, tex_h}
+	}
+
+	dest := c.dest
+	u0 := src.x / tex_w
+	v0 := src.y / tex_h
+	u1 := (src.x + src.width) / tex_w
+	v1 := (src.y + src.height) / tex_h
+
+	switch c.fit {
+	case .Stretch:
+		push_sub_quad(
+			r,
+			dest.x,
+			dest.y,
+			dest.x + dest.width,
+			dest.y + dest.height,
+			u0,
+			v0,
+			u1,
+			v1,
+			c.tint,
+		)
+
+	case .Contain:
+		src_aspect := src.height > 0 ? (src.width / src.height) : 1.0
+		dest_aspect := dest.height > 0 ? (dest.width / dest.height) : 1.0
+		render_w, render_h, render_x, render_y: f32
+		if dest_aspect > src_aspect {
+			render_h = dest.height
+			render_w = dest.height * src_aspect
+			render_x = dest.x + (dest.width - render_w) * 0.5
+			render_y = dest.y
+		} else {
+			render_w = dest.width
+			render_h = src_aspect > 0 ? (dest.width / src_aspect) : dest.height
+			render_x = dest.x
+			render_y = dest.y + (dest.height - render_h) * 0.5
+		}
+		push_sub_quad(
+			r,
+			render_x,
+			render_y,
+			render_x + render_w,
+			render_y + render_h,
+			u0,
+			v0,
+			u1,
+			v1,
+			c.tint,
+		)
+
+	case .Cover:
+		src_aspect := src.height > 0 ? (src.width / src.height) : 1.0
+		dest_aspect := dest.height > 0 ? (dest.width / dest.height) : 1.0
+		nu0, nv0, nu1, nv1: f32
+		if dest_aspect > src_aspect {
+			visible_h :=
+				dest_aspect > 0 ? (src.width / dest_aspect) : src.height
+			crop_y := (src.height - visible_h) * 0.5
+			nu0 = u0
+			nu1 = u1
+			nv0 = (src.y + crop_y) / tex_h
+			nv1 = (src.y + crop_y + visible_h) / tex_h
+		} else {
+			visible_w := src.height * dest_aspect
+			crop_x := (src.width - visible_w) * 0.5
+			nu0 = (src.x + crop_x) / tex_w
+			nu1 = (src.x + crop_x + visible_w) / tex_w
+			nv0 = v0
+			nv1 = v1
+		}
+		push_sub_quad(
+			r,
+			dest.x,
+			dest.y,
+			dest.x + dest.width,
+			dest.y + dest.height,
+			nu0,
+			nv0,
+			nu1,
+			nv1,
+			c.tint,
+		)
+
+	case .Center:
+		render_w := min(src.width, dest.width)
+		render_h := min(src.height, dest.height)
+		render_x := dest.x + (dest.width - render_w) * 0.5
+		render_y := dest.y + (dest.height - render_h) * 0.5
+		crop_x := (src.width - render_w) * 0.5
+		crop_y := (src.height - render_h) * 0.5
+		nu0 := (src.x + crop_x) / tex_w
+		nv0 := (src.y + crop_y) / tex_h
+		nu1 := (src.x + crop_x + render_w) / tex_w
+		nv1 := (src.y + crop_y + render_h) / tex_h
+		push_sub_quad(
+			r,
+			render_x,
+			render_y,
+			render_x + render_w,
+			render_y + render_h,
+			nu0,
+			nv0,
+			nu1,
+			nv1,
+			c.tint,
+		)
+	}
+}
+
+@(private = "file")
 draw_text_line :: proc(
 	r: ^UI_Renderer,
 	font: ^UI_Sokol_Font,
@@ -571,22 +769,7 @@ ui_renderer_render :: proc(
 				}
 			}
 			set_active_batch(r, view, cur)
-			uv0 := [2]f32{0, 0}
-			uv1 := [2]f32{1, 0}
-			uv2 := [2]f32{1, 1}
-			uv3 := [2]f32{0, 1}
-			push_quad(
-				r,
-				{c.dest.x, c.dest.y},
-				{c.dest.x + c.dest.width, c.dest.y},
-				{c.dest.x + c.dest.width, c.dest.y + c.dest.height},
-				{c.dest.x, c.dest.y + c.dest.height},
-				uv0,
-				uv1,
-				uv2,
-				uv3,
-				c.tint,
-			)
+			render_image(r, c, view)
 
 		case ui.UI_Text_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]

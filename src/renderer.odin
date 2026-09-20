@@ -44,7 +44,7 @@ renderer_init :: proc(r: ^Renderer) {
 					compare       = .LESS_EQUAL,
 					write_enabled = true,
 				}
-				pip_desc.cull_mode = .BACK
+				pip_desc.cull_mode = .NONE
 			}
 		case .Unlit_Triangles:
 			{
@@ -53,7 +53,7 @@ renderer_init :: proc(r: ^Renderer) {
 					compare       = .LESS_EQUAL,
 					write_enabled = true,
 				}
-				pip_desc.cull_mode = .NONE
+				pip_desc.cull_mode = .BACK
 			}
 		}
 
@@ -92,15 +92,15 @@ Vertex :: struct {
 	uv:       [2]u16,
 }
 
-draw_wire_mesh :: proc(
+draw_debug_wire_mesh :: proc(
 	mesh: Mesh,
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
 	draw_mesh_by_buffers(
 		mesh.vertex_buffer,
-		mesh.wire_index_buffer,
-		mesh.wire_index_count,
+		mesh.debug_wire_index_buffer,
+		mesh.debug_wire_index_count,
 		.Unlit_Lines,
 		position,
 		rotation,

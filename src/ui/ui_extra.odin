@@ -367,3 +367,17 @@ draw_image :: proc(
 		},
 	) {}
 }
+
+// switcher
+// switcher :: proc(
+// 	id: Maybe(u32) = nil,
+// 	loc := #caller_location,
+// ) -> UI_Element_Config(type_of(draw_image)) {
+// 	ui_declare_id(id, loc)
+// 	return {draw_switcher}
+// }
+
+
+// draw_image :: proc() {
+
+// }
