@@ -14,6 +14,7 @@ import slog "sokol/log"
 import "base:runtime"
 import "core:fmt"
 
+import "../shaders"
 import "../ui"
 import "../ui_sokol"
 
@@ -23,11 +24,7 @@ odin_ctx := runtime.default_context()
 
 App_State :: struct {
 	pipeline:                sg.Pipeline,
-	bg_pipeline:             sg.Pipeline,
 	bindings:                sg.Bindings,
-	bg_bindings:             sg.Bindings,
-	white_image:             sg.Image,
-	white_view:              sg.View,
 	viewport:                Viewport,
 	ui_ctx:                  ui.Context,
 	ui_renderer:             ui_sokol.Renderer,
@@ -96,7 +93,7 @@ main :: proc() {
 				fonts = {0 = sdtx.font_c64()},
 			})
 
-			app_state.viewport = viewport_make({960, 540})
+			viewport_init(&app_state.viewport, {960, 540})
 
 			font_ttf := #load(
 				"../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf",
@@ -111,20 +108,20 @@ main :: proc() {
 
 			app_state.pipeline = sg.make_pipeline({
 				shader = sg.make_shader(
-					texcube_shader_desc(sg.query_backend()),
+					shaders.unlit_shader_desc(sg.query_backend()),
 				),
 				index_type = .UINT16,
 				layout = {
 					attrs = {
-						ATTR_texcube_pos = {
+						shaders.ATTR_unlit_pos = {
 							buffer_index = 0,
 							format = .FLOAT3,
 						},
-						ATTR_texcube_color0 = {
+						shaders.ATTR_unlit_color0 = {
 							buffer_index = 0,
 							format = .UBYTE4N,
 						},
-						ATTR_texcube_texcoord0 = {
+						shaders.ATTR_unlit_texcoord0 = {
 							buffer_index = 0,
 							format = .SHORT2N,
 						},
@@ -200,7 +197,7 @@ main :: proc() {
 				20,
 			}
 
-			app_state.bindings.samplers[SMP_smp] = sg.make_sampler({})
+			app_state.bindings.samplers[shaders.SMP_smp] = sg.make_sampler({})
 
 			app_state.bindings.vertex_buffers[0] = sg.make_buffer({
 				data = {ptr = rawptr(&vertices), size = size_of(vertices)},
@@ -218,7 +215,7 @@ main :: proc() {
 			assert(image_ok == nil, "Error when loading image")
 			defer png.destroy(image)
 
-			app_state.bindings.views[VIEW_tex] = sg.make_view({
+			app_state.bindings.views[shaders.VIEW_tex] = sg.make_view({
 				texture = {
 					image = sg.make_image({
 						width = i32(image.width),
@@ -235,72 +232,6 @@ main :: proc() {
 					}),
 				},
 			})
-
-			bg_pip_desc := sg.Pipeline_Desc {
-				shader = sg.make_shader(
-					texcube_shader_desc(sg.query_backend()),
-				),
-				index_type = .UINT16,
-				layout = {
-					attrs = {
-						ATTR_texcube_pos = {
-							buffer_index = 0,
-							format = .FLOAT3,
-						},
-						ATTR_texcube_color0 = {
-							buffer_index = 0,
-							format = .UBYTE4N,
-						},
-						ATTR_texcube_texcoord0 = {
-							buffer_index = 0,
-							format = .SHORT2N,
-						},
-					},
-				},
-				cull_mode = .NONE,
-				depth = {write_enabled = false, compare = .ALWAYS},
-			}
-			app_state.bg_pipeline = sg.make_pipeline(bg_pip_desc)
-
-			bg_vertices := [4]Vertex {
-				{-1.0, -1.0, 0.0, 0xFF241814, 0, 0},
-				{1.0, -1.0, 0.0, 0xFF241814, 0, 0},
-				{1.0, 1.0, 0.0, 0xFF241814, 0, 0},
-				{-1.0, 1.0, 0.0, 0xFF241814, 0, 0},
-			}
-			bg_indices := [6]u16{0, 1, 2, 0, 2, 3}
-
-			app_state.bg_bindings.vertex_buffers[0] = sg.make_buffer({
-				data = {
-					ptr = rawptr(&bg_vertices),
-					size = size_of(bg_vertices),
-				},
-			})
-			app_state.bg_bindings.index_buffer = sg.make_buffer({
-				usage = {index_buffer = true},
-				data = {ptr = rawptr(&bg_indices), size = size_of(bg_indices)},
-			})
-
-			white_pixel: [4]u8 = {255, 255, 255, 255}
-			app_state.white_image = sg.make_image({
-				width = 1,
-				height = 1,
-				pixel_format = .RGBA8,
-				data = {
-					mip_levels = {
-						0 = {
-							ptr = raw_data(white_pixel[:]),
-							size = len(white_pixel),
-						},
-					},
-				},
-			})
-			app_state.white_view = sg.make_view({
-				texture = {image = app_state.white_image},
-			})
-			app_state.bg_bindings.samplers[SMP_smp] =
-				app_state.bindings.samplers[SMP_smp]
-			app_state.bg_bindings.views[VIEW_tex] = app_state.white_view
 		},
 		event_cb = proc "c" (event: ^sapp.Event) {
 			context = odin_ctx
@@ -469,39 +400,16 @@ main :: proc() {
 			app_state.ui_input.mouse_delta = {0, 0}
 			app_state.ui_input.mouse_scroll = {0, 0}
 
-			sg.begin_pass({
-				action = {
-					colors = {
-						0 = {
-							load_action = .CLEAR,
-							clear_value = {0.04, 0.04, 0.05, 1},
-						},
-					},
-				},
-				swapchain = sglue.swapchain(),
-			})
+			viewport_begin(app_state.viewport)
 
-			viewport_apply(app_state.viewport)
-
-			bg_vs_params: Vs_Params = {
-				mvp = linalg.MATRIX4F32_IDENTITY,
-			}
-			sg.apply_pipeline(app_state.bg_pipeline)
-			sg.apply_bindings(app_state.bg_bindings)
-			sg.apply_uniforms(
-				UB_vs_params,
-				{ptr = &bg_vs_params, size = size_of(bg_vs_params)},
-			)
-			sg.draw(0, 6, 1)
-
-			vs_params: Vs_Params = {
+			vs_params: shaders.Vs_Params = {
 				mvp = compute_mvp(app_state.time * 2, app_state.time * 1),
 			}
 
 			sg.apply_pipeline(app_state.pipeline)
 			sg.apply_bindings(app_state.bindings)
 			sg.apply_uniforms(
-				UB_vs_params,
+				shaders.UB_vs_params,
 				{ptr = &vs_params, size = size_of(vs_params)},
 			)
 			sg.draw(0, 36, 1)
@@ -514,22 +422,17 @@ main :: proc() {
 				app_state.viewport.scale,
 			)
 
-			sg.end_pass()
-			sg.commit()
+			viewport_end(app_state.viewport)
 		},
 		cleanup_cb = proc "c" () {
 			context = odin_ctx
+			viewport_destroy(&app_state.viewport)
 			ui_sokol.destroy(&app_state.ui_renderer)
 			ui.delete_context(app_state.ui_ctx)
-			sg.destroy_view(app_state.white_view)
-			sg.destroy_image(app_state.white_image)
-			sg.destroy_buffer(app_state.bg_bindings.vertex_buffers[0])
-			sg.destroy_buffer(app_state.bg_bindings.index_buffer)
-			sg.destroy_pipeline(app_state.bg_pipeline)
-			sg.destroy_view(app_state.bindings.views[VIEW_tex])
+			sg.destroy_view(app_state.bindings.views[shaders.VIEW_tex])
 			sg.destroy_buffer(app_state.bindings.vertex_buffers[0])
 			sg.destroy_buffer(app_state.bindings.index_buffer)
-			sg.destroy_sampler(app_state.bindings.samplers[SMP_smp])
+			sg.destroy_sampler(app_state.bindings.samplers[shaders.SMP_smp])
 			sg.destroy_pipeline(app_state.pipeline)
 			sdtx.shutdown()
 			sg.shutdown()

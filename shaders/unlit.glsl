@@ -1,10 +1,4 @@
-//------------------------------------------------------------------------------
-//  Shader code for texcube-sapp sample.
-//
-//  NOTE: This source file also uses the '#pragma sokol' form of the
-//  custom tags.
-//------------------------------------------------------------------------------
-@header package game
+@header package shaders
 @header import sg "sokol/gfx"
 @ctype mat4 matrix[4,4]f32
 
@@ -40,4 +34,5 @@ void main() {
 }
 @end
 
-@program texcube vs fs
+@program unlit vs fs
+
