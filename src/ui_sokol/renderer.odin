@@ -42,7 +42,7 @@ UI_Renderer :: struct {
 ui_renderer_init :: proc(
 	r: ^UI_Renderer,
 	font_ttf: []byte,
-	font_size: f32 = 20.0,
+	font_size: f32 = 16.0,
 	max_vertices := 16384,
 	max_indices := 32768,
 ) {
@@ -95,6 +95,8 @@ ui_renderer_init :: proc(
 		wrap_v = .CLAMP_TO_EDGE,
 	})
 
+	// ui shader always sample images, incase we don't need images,
+	// we sample this white 1-pixel image
 	white_pixel: [4]u8 = {255, 255, 255, 255}
 	r.white_image = sg.make_image({
 		width = 1,

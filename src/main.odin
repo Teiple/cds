@@ -3,8 +3,6 @@ package game
 import "core:image/png"
 import "core:math"
 import linalg "core:math/linalg"
-import "core:mem"
-import time "core:time"
 import sapp "sokol/app"
 import sdtx "sokol/debugtext"
 import sg "sokol/gfx"
@@ -12,68 +10,15 @@ import sglue "sokol/glue"
 import slog "sokol/log"
 
 import "base:runtime"
-import "core:fmt"
 
 import "shaders"
 import "ui"
 import "ui_sokol"
 
-FPS_COUNT_INTERVAL :: 1
-
-odin_ctx := runtime.default_context()
-
-App_State :: struct {
-	pipeline:                sg.Pipeline,
-	bindings:                sg.Bindings,
-	viewport:                Viewport,
-	ui_ctx:                  ui.Context,
-	ui_renderer:             ui_sokol.Renderer,
-	ui_input:                ui.Input,
-	time:                    f32,
-	interval_fps_sum:        f32,
-	interval_frame_count:    f32,
-	average_fps:             f32,
-	interval_time:           f32,
-	average_frame_exec_time: f32,
-	frame_exec_time_sum:     f32,
-	button_clicks:           int,
-}
-
-app_state: App_State
-
-Vertex :: struct {
-	x, y, z: f32,
-	color:   u32,
-	u, v:    u16,
-}
 
 main :: proc() {
-	track: mem.Tracking_Allocator
-	mem.tracking_allocator_init(&track, context.allocator)
-	context.allocator = mem.tracking_allocator(&track)
-	odin_ctx = context
-
-	defer {
-		if len(track.allocation_map) > 0 {
-			fmt.eprintf(
-				"=== %v allocations not freed: ===\n",
-				len(track.allocation_map),
-			)
-			for _, entry in track.allocation_map {
-				fmt.eprintf("- %v bytes @ %v\n", entry.size, entry.location)
-			}
-		}
-		if len(track.bad_free_array) > 0 {
-			fmt.eprintf(
-				"=== %v incorrect frees: ===\n",
-				len(track.bad_free_array),
-			)
-			for entry in track.bad_free_array {
-				fmt.eprintf("- %p @ %v\n", entry.memory, entry.location)
-			}
-		}
-		mem.tracking_allocator_destroy(&track)
-	}
+	debug_track_allocator_init()
+	defer debug_track_allocator_stop()
 
 	sapp.run({
 		window_title = "Sokol Odin UI",
@@ -81,7 +26,7 @@ main :: proc() {
 		height = 540,
 		disable_vsync = true,
 		init_cb = proc "c" () {
-			context = odin_ctx
+			context = g_odin_ctx
 
 			sg.setup({
 				environment = sglue.environment(),
@@ -93,17 +38,18 @@ main :: proc() {
 				fonts = {0 = sdtx.font_c64()},
 			})
 
-			viewport_init(&app_state.viewport, {960, 540})
+			viewport_init(&g_state.viewport, {960, 540}, {.9, .9, .9, 1})
 
-			font_ttf := #load(
-				"../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf",
+			ui_sokol.init(
+				&g_state.ui.renderer,
+				#load("../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf"),
+				20.0,
 			)
-			ui_sokol.init(&app_state.ui_renderer, font_ttf, 20.0)
 
-			ui_font := ui_sokol.font(&app_state.ui_renderer)
-			app_state.ui_ctx = ui.make_context({ui_font})
+			ui_font := ui_sokol.font(&g_state.ui.renderer)
+			g_state.ui.ctx = ui.make_context({ui_font})
 
-			app_state.pipeline = sg.make_pipeline({
+			g_state.pipeline = sg.make_pipeline({
 				shader = sg.make_shader(
 					shaders.unlit_shader_desc(sg.query_backend()),
 				),
@@ -194,13 +140,13 @@ main :: proc() {
 				20,
 			}
 
-			app_state.bindings.samplers[shaders.SMP_smp] = sg.make_sampler({})
+			g_state.bindings.samplers[shaders.SMP_smp] = sg.make_sampler({})
 
-			app_state.bindings.vertex_buffers[0] = sg.make_buffer({
+			g_state.bindings.vertex_buffers[0] = sg.make_buffer({
 				data = {ptr = rawptr(&vertices), size = size_of(vertices)},
 			})
 
-			app_state.bindings.index_buffer = sg.make_buffer({
+			g_state.bindings.index_buffer = sg.make_buffer({
 				usage = {index_buffer = true},
 				data = {ptr = rawptr(&indices), size = size_of(indices)},
 			})
@@ -212,7 +158,7 @@ main :: proc() {
 			assert(image_ok == nil, "Error when loading image")
 			defer png.destroy(image)
 
-			app_state.bindings.views[shaders.VIEW_tex] = sg.make_view({
+			g_state.bindings.views[shaders.VIEW_tex] = sg.make_view({
 				texture = {
 					image = sg.make_image({
 						width = i32(image.width),
@@ -231,7 +177,7 @@ main :: proc() {
 			})
 		},
 		event_cb = proc "c" (event: ^sapp.Event) {
-			context = odin_ctx
+			context = g_odin_ctx
 
 			#partial switch event.type {
 			case .KEY_DOWN:
@@ -240,33 +186,33 @@ main :: proc() {
 				}
 			case .MOUSE_MOVE:
 				screen_pos := [2]f32{event.mouse_x, event.mouse_y}
-				app_state.ui_input.mouse_position = viewport_screen_to_virtual(
-					app_state.viewport,
+				g_state.ui.input.mouse_position = viewport_screen_to_virtual(
+					g_state.viewport,
 					screen_pos,
 				)
-				if app_state.viewport.scale > 0 {
-					app_state.ui_input.mouse_delta = {
-						event.mouse_dx / app_state.viewport.scale,
-						event.mouse_dy / app_state.viewport.scale,
+				if g_state.viewport.scale > 0 {
+					g_state.ui.input.mouse_delta = {
+						event.mouse_dx / g_state.viewport.scale,
+						event.mouse_dy / g_state.viewport.scale,
 					}
 				}
 			case .MOUSE_DOWN:
 				if event.mouse_button == .LEFT {
-					app_state.ui_input.mouse_state = .Pressed
+					g_state.ui.input.mouse_state = .Pressed
 				}
 			case .MOUSE_UP:
 				if event.mouse_button == .LEFT {
-					app_state.ui_input.mouse_state = .Released
+					g_state.ui.input.mouse_state = .Released
 				}
 			case .MOUSE_SCROLL:
-				app_state.ui_input.mouse_scroll = {
+				g_state.ui.input.mouse_scroll = {
 					event.scroll_x,
 					event.scroll_y,
 				}
 			}
 		},
 		frame_cb = proc "c" () {
-			compute_mvp :: proc(rx, ry: f32) -> matrix[4, 4]f32 {
+			compute_mvp :: proc(rotate_x, rotate_y: f32) -> matrix[4, 4]f32 {
 				proj := linalg.matrix4_perspective_f32(
 					fovy = math.to_radians_f32(60.0),
 					aspect = 960.0 / 540.0,
@@ -281,156 +227,86 @@ main :: proc() {
 				)
 
 				view_proj := proj * view
-				rxm := linalg.matrix4_rotate_f32(rx, {1, 0, 0})
-				rym := linalg.matrix4_rotate_f32(ry, {0, 1, 0})
+				rxm := linalg.matrix4_rotate_f32(rotate_x, {1, 0, 0})
+				rym := linalg.matrix4_rotate_f32(rotate_y, {0, 1, 0})
 
 				model := rxm * rym
 				return view_proj * model
 			}
 
-			frame_tick_start := time.tick_now()
-			defer {
-				elapsed := time.tick_since(frame_tick_start)
-				app_state.frame_exec_time_sum += cast(f32)time.duration_milliseconds(
-					elapsed,
-				)
-			}
-
-			context = odin_ctx
-
+			context = g_odin_ctx
 			dt := cast(f32)sapp.frame_duration_unfiltered()
-			app_state.time += dt
+			game_time_update(&g_state.frame_time, dt)
+			viewport_update(&g_state.viewport, {sapp.widthf(), sapp.heightf()})
 
-			fps := 1.0 / dt
-			app_state.interval_time += dt
-			app_state.interval_fps_sum += fps
-			app_state.interval_frame_count += 1
+			viewport_begin(g_state.viewport)
+			{
+				defer viewport_end(g_state.viewport)
 
-			if app_state.interval_time >= FPS_COUNT_INTERVAL {
-				if app_state.interval_frame_count > 0 {
-					app_state.average_fps =
-						app_state.interval_fps_sum /
-						app_state.interval_frame_count
-					app_state.average_frame_exec_time =
-						app_state.frame_exec_time_sum /
-						app_state.interval_frame_count
-				} else {
-					app_state.average_fps = 0
-					app_state.average_frame_exec_time = 0
-				}
+				// User interface
+				{
+					defer {
+						ui_sokol.render(
+							&g_state.ui.renderer,
+							&g_state.ui.ctx,
+							g_state.viewport.base_size,
+							cast(ui.Rect)g_state.viewport.dest_rect,
+							g_state.viewport.scale,
+						)
 
-				app_state.interval_time = 0
-				app_state.interval_fps_sum = 0
-				app_state.interval_frame_count = 0
-				app_state.frame_exec_time_sum = 0
-			}
+						// Reset temporal mouse events since there is no per frame polling
+						{
+							if g_state.ui.input.mouse_state == .Pressed {
+								g_state.ui.input.mouse_state = .Down
+							} else if g_state.ui.input.mouse_state ==
+							   .Released {
+								g_state.ui.input.mouse_state = .None
+							}
+							g_state.ui.input.mouse_delta = {0, 0}
+							g_state.ui.input.mouse_scroll = {0, 0}
+						}
+					}
 
-			viewport_update(
-				&app_state.viewport,
-				{sapp.widthf(), sapp.heightf()},
-			)
-
-			if ui.begin(
-				&app_state.ui_ctx,
-				app_state.viewport.base_size,
-				app_state.ui_input,
-			) {
-				if ui.layout().config(
-					width = ui.fixed(320),
-					height = ui.fit(),
-					child_gap = 12,
-					layout_direction = .Top_To_Bottom,
-					background_color = {30, 30, 40, 220},
-					corner_radius = {8, 8, 8, 8},
-					border = {thickness = 2, color = {100, 120, 255, 255}},
-					offset = {20, 20},
-				) {
-					ui.text().config(
-						"Sokol + Odin UI System",
-						font_size = 20,
-						color = {255, 255, 255, 255},
-					)
-
-					if ui.button().config(
-						fmt.tprintf("Clicks: %d", app_state.button_clicks),
+					if ui.begin(
+						&g_state.ui.ctx,
+						g_state.viewport.base_size,
+						g_state.ui.input,
 					) {
-						app_state.button_clicks += 1
+						ui.text().config("Hello World")
 					}
 				}
 
-				if ui.layout().config(
-					width = ui.fit(),
-					height = ui.fit(),
-					child_gap = 4,
-					layout_direction = .Top_To_Bottom,
-					background_color = {20, 20, 25, 200},
-					corner_radius = {6, 6, 6, 6},
-					border = {thickness = 1, color = {60, 60, 80, 255}},
-					mouse_mode = .Ignore,
-					float_mode = ui.Float_At_Root {
-						attach_points = {
-							element = .RightTop,
-							parent = .RightTop,
-						},
-						offset = {-20, 20},
-						z_index = 100,
-					},
-				) {
-					ui.text().config(
-						fmt.tprintf(
-							"Exec: %.4f ms\nFPS: %.0f",
-							app_state.average_frame_exec_time,
-							app_state.average_fps,
+				// 3D
+				{
+					vs_params: shaders.Vs_Params = {
+						mvp = compute_mvp(
+							g_state.frame_time.time * 2,
+							g_state.frame_time.time * 1,
 						),
-						font_size = 14,
-						line_spacing = 4,
-						color = {200, 220, 255, 255},
+					}
+
+					sg.apply_pipeline(g_state.pipeline)
+					sg.apply_bindings(g_state.bindings)
+					sg.apply_uniforms(
+						shaders.UB_vs_params,
+						{ptr = &vs_params, size = size_of(vs_params)},
 					)
+					sg.draw(0, 36, 1)
 				}
 			}
 
-			if app_state.ui_input.mouse_state == .Pressed {
-				app_state.ui_input.mouse_state = .Down
-			} else if app_state.ui_input.mouse_state == .Released {
-				app_state.ui_input.mouse_state = .None
-			}
-			app_state.ui_input.mouse_delta = {0, 0}
-			app_state.ui_input.mouse_scroll = {0, 0}
 
-			viewport_begin(app_state.viewport)
-
-			vs_params: shaders.Vs_Params = {
-				mvp = compute_mvp(app_state.time * 2, app_state.time * 1),
-			}
-
-			sg.apply_pipeline(app_state.pipeline)
-			sg.apply_bindings(app_state.bindings)
-			sg.apply_uniforms(
-				shaders.UB_vs_params,
-				{ptr = &vs_params, size = size_of(vs_params)},
-			)
-			sg.draw(0, 36, 1)
-
-			ui_sokol.render(
-				&app_state.ui_renderer,
-				&app_state.ui_ctx,
-				app_state.viewport.base_size,
-				cast(ui.Rect)app_state.viewport.dest_rect,
-				app_state.viewport.scale,
-			)
-
-			viewport_end(app_state.viewport)
 		},
 		cleanup_cb = proc "c" () {
-			context = odin_ctx
-			viewport_destroy(&app_state.viewport)
-			ui_sokol.destroy(&app_state.ui_renderer)
-			ui.delete_context(app_state.ui_ctx)
-			sg.destroy_view(app_state.bindings.views[shaders.VIEW_tex])
-			sg.destroy_buffer(app_state.bindings.vertex_buffers[0])
-			sg.destroy_buffer(app_state.bindings.index_buffer)
-			sg.destroy_sampler(app_state.bindings.samplers[shaders.SMP_smp])
-			sg.destroy_pipeline(app_state.pipeline)
+			context = g_odin_ctx
+			viewport_destroy(&g_state.viewport)
+			ui_sokol.destroy(&g_state.ui.renderer)
+			ui.delete_context(g_state.ui.ctx)
+			sg.destroy_view(g_state.bindings.views[shaders.VIEW_tex])
+			sg.destroy_buffer(g_state.bindings.vertex_buffers[0])
+			sg.destroy_buffer(g_state.bindings.index_buffer)
+			sg.destroy_sampler(g_state.bindings.samplers[shaders.SMP_smp])
+			sg.destroy_pipeline(g_state.pipeline)
 			sdtx.shutdown()
 			sg.shutdown()
 		},
