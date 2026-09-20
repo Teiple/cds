@@ -148,10 +148,16 @@ ui_renderer_init :: proc(
 	r.font_view = sg.make_view({texture = {image = r.font_image}})
 
 	r.font_base_size = font_size
-	r.font_spacing = 1.0
+	r.font_spacing = 0.0
+	g_ui_renderer = r
 }
 
+@(private = "file")
+g_ui_renderer: ^UI_Renderer
+
 ui_renderer_destroy :: proc(r: ^UI_Renderer) {
+	if g_ui_renderer == r do g_ui_renderer = nil
+
 	delete(r.vertices)
 	delete(r.indices)
 	delete(r.batches)
@@ -173,14 +179,15 @@ ui_renderer_measure_text :: proc(
 	input: ui.UI_Text_Config,
 	font_info: ui.UI_Font,
 ) -> f32 {
+	if g_ui_renderer == nil do return f32(len(input.content)) * (input.font_size * 0.5)
 	scale := input.font_size / font_info.base_size
 	width: f32 = 0
 	for ch in input.content {
 		if ch < 32 || ch >= 128 {
 			continue
 		}
-		c := ch - 32
-		width += font_info.spacing * scale + f32(input.font_size * 0.5)
+		bc := g_ui_renderer.font_chardata[ch - 32]
+		width += bc.xadvance * scale + font_info.spacing * scale
 	}
 	return width
 }
@@ -214,6 +221,45 @@ push_quad :: proc(
 
 	if len(r.batches) > 0 {
 		r.batches[len(r.batches) - 1].num_elements += 6
+	}
+}
+
+@(private = "file")
+draw_text_line :: proc(
+	r: ^UI_Renderer,
+	text: string,
+	start_x, start_y: f32,
+	scale_font: f32,
+	spacing: f32,
+	color: [4]u8,
+) {
+	pen_x := start_x
+	for ch in text {
+		if ch < 32 || ch >= 128 do continue
+		bc := r.font_chardata[ch - 32]
+		qw := f32(bc.x1 - bc.x0) * scale_font
+		qh := f32(bc.y1 - bc.y0) * scale_font
+		qx := pen_x + bc.xoff * scale_font
+		qy := start_y + bc.yoff * scale_font
+
+		uv0 := [2]f32{f32(bc.x0) / 512.0, f32(bc.y0) / 512.0}
+		uv1 := [2]f32{f32(bc.x1) / 512.0, f32(bc.y0) / 512.0}
+		uv2 := [2]f32{f32(bc.x1) / 512.0, f32(bc.y1) / 512.0}
+		uv3 := [2]f32{f32(bc.x0) / 512.0, f32(bc.y1) / 512.0}
+
+		push_quad(
+			r,
+			{qx, qy},
+			{qx + qw, qy},
+			{qx + qw, qy + qh},
+			{qx, qy + qh},
+			uv0,
+			uv1,
+			uv2,
+			uv3,
+			color,
+		)
+		pen_x += bc.xadvance * scale_font + spacing
 	}
 }
 
@@ -527,36 +573,32 @@ ui_renderer_render :: proc(
 			set_active_batch(r, r.font_view, cur)
 			scale_font := c.font_size / r.font_base_size
 			pen_x := c.rect.x
-			pen_y := c.rect.y + c.font_size
+			pen_y := c.rect.y + c.font_size * 0.78
 
 			lines := c.wrapped_lines
 			if len(lines) == 0 {
-				for ch in c.content {
-					if ch < 32 || ch >= 128 do continue
-					bc := r.font_chardata[ch - 32]
-					qw := f32(bc.x1 - bc.x0) * scale_font
-					qh := f32(bc.y1 - bc.y0) * scale_font
-					qx := pen_x + bc.xoff * scale_font
-					qy := pen_y + bc.yoff * scale_font
-
-					uv0 := [2]f32{f32(bc.x0) / 512.0, f32(bc.y0) / 512.0}
-					uv1 := [2]f32{f32(bc.x1) / 512.0, f32(bc.y0) / 512.0}
-					uv2 := [2]f32{f32(bc.x1) / 512.0, f32(bc.y1) / 512.0}
-					uv3 := [2]f32{f32(bc.x0) / 512.0, f32(bc.y1) / 512.0}
-
-					push_quad(
+				draw_text_line(
+					r,
+					c.content,
+					pen_x,
+					pen_y,
+					scale_font,
+					c.spacing,
+					c.color,
+				)
+			} else {
+				line_y := pen_y
+				for line in lines {
+					draw_text_line(
 						r,
-						{qx, qy},
-						{qx + qw, qy},
-						{qx + qw, qy + qh},
-						{qx, qy + qh},
-						uv0,
-						uv1,
-						uv2,
-						uv3,
+						line,
+						pen_x,
+						line_y,
+						scale_font,
+						c.spacing,
 						c.color,
 					)
-					pen_x += bc.xadvance * scale_font + c.spacing
+					line_y += c.font_size + c.line_spacing
 				}
 			}
 		}

@@ -23,7 +23,11 @@ odin_ctx := runtime.default_context()
 
 App_State :: struct {
 	pipeline:                sg.Pipeline,
+	bg_pipeline:             sg.Pipeline,
 	bindings:                sg.Bindings,
+	bg_bindings:             sg.Bindings,
+	white_image:             sg.Image,
+	white_view:              sg.View,
 	viewport:                Viewport,
 	ui_ctx:                  ui.UI_Context,
 	ui_renderer:             ui_sokol.UI_Renderer,
@@ -100,7 +104,7 @@ main :: proc() {
 			ui_sokol.ui_renderer_init(&app_state.ui_renderer, font_ttf, 20.0)
 
 			ui_fonts := [1]ui.UI_Font {
-				{id = 0, base_size = 20.0, spacing = 1.0},
+				{id = 0, base_size = 20.0, spacing = 0.0},
 			}
 			app_state.ui_ctx = ui.ui_context_make(
 				ui_fonts[:],
@@ -233,6 +237,72 @@ main :: proc() {
 					}),
 				},
 			})
+
+			bg_pip_desc := sg.Pipeline_Desc {
+				shader = sg.make_shader(
+					texcube_shader_desc(sg.query_backend()),
+				),
+				index_type = .UINT16,
+				layout = {
+					attrs = {
+						ATTR_texcube_pos = {
+							buffer_index = 0,
+							format = .FLOAT3,
+						},
+						ATTR_texcube_color0 = {
+							buffer_index = 0,
+							format = .UBYTE4N,
+						},
+						ATTR_texcube_texcoord0 = {
+							buffer_index = 0,
+							format = .SHORT2N,
+						},
+					},
+				},
+				cull_mode = .NONE,
+				depth = {write_enabled = false, compare = .ALWAYS},
+			}
+			app_state.bg_pipeline = sg.make_pipeline(bg_pip_desc)
+
+			bg_vertices := [4]Vertex {
+				{-1.0, -1.0, 0.0, 0xFF241814, 0, 0},
+				{1.0, -1.0, 0.0, 0xFF241814, 0, 0},
+				{1.0, 1.0, 0.0, 0xFF241814, 0, 0},
+				{-1.0, 1.0, 0.0, 0xFF241814, 0, 0},
+			}
+			bg_indices := [6]u16{0, 1, 2, 0, 2, 3}
+
+			app_state.bg_bindings.vertex_buffers[0] = sg.make_buffer({
+				data = {
+					ptr = rawptr(&bg_vertices),
+					size = size_of(bg_vertices),
+				},
+			})
+			app_state.bg_bindings.index_buffer = sg.make_buffer({
+				usage = {index_buffer = true},
+				data = {ptr = rawptr(&bg_indices), size = size_of(bg_indices)},
+			})
+
+			white_pixel: [4]u8 = {255, 255, 255, 255}
+			app_state.white_image = sg.make_image({
+				width = 1,
+				height = 1,
+				pixel_format = .RGBA8,
+				data = {
+					mip_levels = {
+						0 = {
+							ptr = raw_data(white_pixel[:]),
+							size = len(white_pixel),
+						},
+					},
+				},
+			})
+			app_state.white_view = sg.make_view({
+				texture = {image = app_state.white_image},
+			})
+			app_state.bg_bindings.samplers[SMP_smp] =
+				app_state.bindings.samplers[SMP_smp]
+			app_state.bg_bindings.views[VIEW_tex] = app_state.white_view
 		},
 		event_cb = proc "c" (event: ^sapp.Event) {
 			context = odin_ctx
@@ -382,16 +452,13 @@ main :: proc() {
 				) {
 					ui.ui_text().config(
 						fmt.tprintf(
-							"Exec: %.4f ms",
+							"Exec: %.4f ms\nFPS: %.0f",
 							app_state.average_frame_exec_time,
+							app_state.average_fps,
 						),
 						font_size = 14,
+						line_spacing = 4,
 						color = {200, 220, 255, 255},
-					)
-					ui.ui_text().config(
-						fmt.tprintf("FPS: %.0f", app_state.average_fps),
-						font_size = 14,
-						color = {160, 255, 160, 255},
 					)
 				}
 			}
@@ -409,7 +476,7 @@ main :: proc() {
 					colors = {
 						0 = {
 							load_action = .CLEAR,
-							clear_value = {0.05, 0.05, 0.08, 1},
+							clear_value = {0.04, 0.04, 0.05, 1},
 						},
 					},
 				},
@@ -417,6 +484,17 @@ main :: proc() {
 			})
 
 			viewport_apply_hardware(app_state.viewport)
+
+			bg_vs_params: Vs_Params = {
+				mvp = linalg.MATRIX4F32_IDENTITY,
+			}
+			sg.apply_pipeline(app_state.bg_pipeline)
+			sg.apply_bindings(app_state.bg_bindings)
+			sg.apply_uniforms(
+				UB_vs_params,
+				{ptr = &bg_vs_params, size = size_of(bg_vs_params)},
+			)
+			sg.draw(0, 6, 1)
 
 			vs_params: Vs_Params = {
 				mvp = compute_mvp(app_state.time * 2, app_state.time * 1),
@@ -445,6 +523,16 @@ main :: proc() {
 			context = odin_ctx
 			ui_sokol.ui_renderer_destroy(&app_state.ui_renderer)
 			ui.ui_context_delete(app_state.ui_ctx)
+			sg.destroy_view(app_state.white_view)
+			sg.destroy_image(app_state.white_image)
+			sg.destroy_buffer(app_state.bg_bindings.vertex_buffers[0])
+			sg.destroy_buffer(app_state.bg_bindings.index_buffer)
+			sg.destroy_pipeline(app_state.bg_pipeline)
+			sg.destroy_view(app_state.bindings.views[VIEW_tex])
+			sg.destroy_buffer(app_state.bindings.vertex_buffers[0])
+			sg.destroy_buffer(app_state.bindings.index_buffer)
+			sg.destroy_sampler(app_state.bindings.samplers[SMP_smp])
+			sg.destroy_pipeline(app_state.pipeline)
 			sdtx.shutdown()
 			sg.shutdown()
 		},

@@ -541,27 +541,41 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	text_attr, ok := &current.attributes.(UI_Text_Attributes)
 	if !ok do return
 
-	text_attr.preferred_size.x = ctx.measure_text(
-		text_attr.config,
-		ctx.fonts[text_attr.config.font_index],
-	)
-	text_attr.preferred_size.y = text_attr.config.font_size
+	content := text_attr.config.content
+	config := text_attr.config
+	max_line_width := f32(0)
+	largest_word_width := f32(0)
 
+	line_start := 0
+	for byte_index := 0; byte_index <= len(content); byte_index += 1 {
+		is_newline := byte_index == len(content) || content[byte_index] == '\n'
+		if is_newline {
+			line_end := byte_index
+			if line_end > line_start && content[line_end - 1] == '\r' {
+				line_end -= 1
+			}
+			config.content = content[line_start:line_end]
+			line_w := ctx.measure_text(config, ctx.fonts[config.font_index])
+			if line_w > max_line_width {
+				max_line_width = line_w
+			}
+			line_start = byte_index + 1
+		}
+	}
+
+	text_attr.preferred_size.x = max_line_width
+	text_attr.preferred_size.y = text_attr.config.font_size
 	current.size.x = text_attr.preferred_size.x
 
 	{
-		content := text_attr.config.content
-		config := text_attr.config
 		word_start := 0
-		largest_word_width := f32(0)
-
 		byte_index := 0
 		for byte_index < len(content) {
 			whitespace_start := byte_index
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if !ui_is_separator(r) {
+				if !ui_is_separator(r) && r != '\n' && r != '\r' {
 					break
 				}
 				byte_index += size
@@ -571,7 +585,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if ui_is_separator(r) {
+				if ui_is_separator(r) || r == '\n' || r == '\r' {
 					break
 				}
 				byte_index += size
@@ -918,65 +932,102 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 			text_attr.bound_size.y = ele.size.y
 		}
 
-		byte_index := 0
-
-		for byte_index < len(content) {
-			whitespace_start := byte_index
-
-			for byte_index < len(content) {
-				r, size := utf8.decode_rune(content[byte_index:])
-				if !ui_is_separator(r) {
-					break
-				}
-				byte_index += size
-			}
-
-			word_start := byte_index
-
-			for byte_index < len(content) {
-				r, size := utf8.decode_rune(content[byte_index:])
-				if ui_is_separator(r) {
-					break
-				}
-				byte_index += size
-			}
-
-			word_end := byte_index
-
-			if word_start == word_end {
+		has_newlines := false
+		for ch in content {
+			if ch == '\n' {
+				has_newlines = true
 				break
-			}
-
-			config.content = content[whitespace_start:word_start]
-			whitespace_width := ctx.measure_text(
-				config,
-				ctx.fonts[config.font_index],
-			)
-
-			config.content = content[word_start:word_end]
-			word_width := ctx.measure_text(
-				config,
-				ctx.fonts[config.font_index],
-			)
-
-			candidate_width := whitespace_width + word_width
-
-			if line_width > 0 && line_width + candidate_width > ele.size.x {
-				append(
-					&ctx.wrapped_text_lines,
-					content[line_start:whitespace_start],
-				)
-				wrapped_count += 1
-
-				line_start = word_start
-				line_width = word_width
-			} else {
-				line_width += candidate_width
 			}
 		}
 
-		if wrapped_count > 0 {
-			append(&ctx.wrapped_text_lines, content[line_start:])
+		raw_line_start := 0
+		for raw_index := 0; raw_index <= len(content); raw_index += 1 {
+			is_end := raw_index == len(content)
+			if !is_end && content[raw_index] != '\n' do continue
+
+			raw_line_end := raw_index
+			if raw_line_end > raw_line_start &&
+			   content[raw_line_end - 1] == '\r' {
+				raw_line_end -= 1
+			}
+
+			raw_line := content[raw_line_start:raw_line_end]
+			raw_line_start = raw_index + 1
+
+			config.content = raw_line
+			line_w := ctx.measure_text(config, ctx.fonts[config.font_index])
+
+			if line_w <= ele.size.x && !has_newlines {
+				continue
+			}
+
+			if line_w <= ele.size.x {
+				append(&ctx.wrapped_text_lines, raw_line)
+				wrapped_count += 1
+				continue
+			}
+
+			line_start := 0
+			line_width := f32(0)
+			byte_index := 0
+
+			for byte_index < len(raw_line) {
+				whitespace_start := byte_index
+
+				for byte_index < len(raw_line) {
+					r, size := utf8.decode_rune(raw_line[byte_index:])
+					if !ui_is_separator(r) {
+						break
+					}
+					byte_index += size
+				}
+
+				word_start := byte_index
+
+				for byte_index < len(raw_line) {
+					r, size := utf8.decode_rune(raw_line[byte_index:])
+					if ui_is_separator(r) {
+						break
+					}
+					byte_index += size
+				}
+
+				word_end := byte_index
+
+				if word_start == word_end {
+					break
+				}
+
+				config.content = raw_line[whitespace_start:word_start]
+				whitespace_width := ctx.measure_text(
+					config,
+					ctx.fonts[config.font_index],
+				)
+
+				config.content = raw_line[word_start:word_end]
+				word_width := ctx.measure_text(
+					config,
+					ctx.fonts[config.font_index],
+				)
+
+				candidate_width := whitespace_width + word_width
+
+				if line_width > 0 &&
+				   line_width + candidate_width > ele.size.x {
+					append(
+						&ctx.wrapped_text_lines,
+						raw_line[line_start:whitespace_start],
+					)
+					wrapped_count += 1
+
+					line_start = word_start
+					line_width = word_width
+				} else {
+					line_width += candidate_width
+				}
+			}
+
+			append(&ctx.wrapped_text_lines, raw_line[line_start:])
 			wrapped_count += 1
 		}
 	}
@@ -997,7 +1048,7 @@ ui_get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
 	case .LeftCenter:
 		return {0, 0.5}
 	case .LeftBottom:
-		return {0, 0}
+		return {0, 1.0}
 	case .CenterTop:
 		return {0.5, 0}
 	case .CenterCenter:
