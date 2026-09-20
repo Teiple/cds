@@ -1,9 +1,9 @@
 package ui_sokol
 
+import sg "../sokol/gfx"
 import "../ui"
 import "core:math"
 import "core:math/linalg"
-import sg "sokol/gfx"
 import stbtt "vendor:stb/truetype"
 
 ARC_SEGMENTS :: 12

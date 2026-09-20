@@ -14,9 +14,9 @@ import slog "sokol/log"
 import "base:runtime"
 import "core:fmt"
 
-import "../shaders"
-import "../ui"
-import "../ui_sokol"
+import "shaders"
+import "ui"
+import "ui_sokol"
 
 FPS_COUNT_INTERVAL :: 1
 
@@ -418,7 +418,7 @@ main :: proc() {
 				&app_state.ui_renderer,
 				&app_state.ui_ctx,
 				app_state.viewport.base_size,
-				app_state.viewport.dest_rect,
+				cast(ui.Rect)app_state.viewport.dest_rect,
 				app_state.viewport.scale,
 			)
 

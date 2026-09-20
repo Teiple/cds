@@ -1,12 +1,16 @@
 package game
 
-import "../shaders"
-import "../ui"
 import linalg "core:math/linalg"
+import "shaders"
 import sg "sokol/gfx"
 import sglue "sokol/glue"
 
-Rect :: ui.Rect
+Rect :: struct {
+	x:      f32,
+	y:      f32,
+	width:  f32,
+	height: f32,
+}
 
 Viewport :: struct {
 	base_size:       [2]f32,

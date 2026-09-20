@@ -2,13 +2,9 @@
 set -e
 
 SHDC="sokol-shdc"
-if ! command -v "$SHDC" &> /dev/null; then
-    if [ -x "/home/hongphuc/sokol/sokol-shdc" ]; then
-        SHDC="/home/hongphuc/sokol/sokol-shdc"
-    else
-        echo "Error: sokol-shdc not found in PATH or /home/hongphuc/sokol/"
-        exit 1
-    fi
+if ! command -v "$SHDC" &> /dev/null; then  
+    echo "Error: sokol-shdc not found in PATH"
+    exit 1
 fi
 
 for f in shaders/*.glsl ui_sokol/*.glsl; do
