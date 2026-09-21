@@ -426,8 +426,11 @@ ui_push_and_dedupe_id :: proc(
 
 		ctx.ids[id] = id_entry
 
+		loop_tag := "loop"
 		loop_tail := transmute([4]u8)id_entry.loop_count
-		new_id := hash.adler32(loop_tail[:], id)
+
+		new_id := hash.adler32(transmute([]u8)loop_tag, id)
+		new_id = hash.adler32(loop_tail[:], id)
 
 		ctx.ids[new_id] = {
 			base       = id,
@@ -1206,6 +1209,7 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
+	delete(ctx.fonts)
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.selected_elements)
@@ -2257,8 +2261,8 @@ ui_auto_id_hash :: proc(
 	column := transmute([4]u8)loc.column
 	h: u32 = parent_hash
 	h = hash.adler32(transmute([]u8)loc.file_path, h)
-	h = hash.adler32(transmute([]u8)line[:], h)
-	h = hash.adler32(transmute([]u8)column[:], h)
+	h = hash.adler32(line[:], h)
+	h = hash.adler32(column[:], h)
 	return h
 }
 

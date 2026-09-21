@@ -6,7 +6,6 @@ import sglue "sokol/glue"
 import slog "sokol/log"
 
 import "base:runtime"
-import "core:math"
 import linalg "core:math/linalg"
 
 import "ui"
@@ -21,6 +20,8 @@ current_display_mode: Display_Mode
 
 
 main :: proc() {
+	ENTRY_POINT := #location(main)
+
 	debug_track_allocator_init()
 	defer debug_track_allocator_stop()
 
@@ -45,10 +46,10 @@ main :: proc() {
 				&g_state.ui.renderer,
 				{
 					0 = {
-						font_ttf = #load(
+						ttf = #load(
 							"../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf",
 						),
-						font_size = 16,
+						base_size = 16,
 					},
 				},
 			)

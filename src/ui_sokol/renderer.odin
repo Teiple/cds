@@ -115,8 +115,8 @@ ui_renderer_init :: proc(
 }
 
 UI_Font_Desc :: struct {
-	font_ttf:  []byte,
-	font_size: f32,
+	ttf:       []byte,
+	base_size: f32,
 	spacing:   f32,
 }
 
@@ -125,8 +125,8 @@ ui_renderer_make_fonts :: proc(
 	font_descs: []UI_Font_Desc,
 	allocator := context.temp_allocator,
 ) -> []ui.UI_Font {
-	// ui itself will be responsible for delete this
-	out := make([]ui.UI_Font, len(font_descs))
+	fonts_out := make([dynamic]ui.UI_Font, len(font_descs))
+
 	for desc, i in font_descs {
 		atlas_w, atlas_h := 512, 512
 		alpha_bitmap := make([]u8, atlas_w * atlas_h)
@@ -134,9 +134,9 @@ ui_renderer_make_fonts :: proc(
 
 		chardata: [96]stbtt.bakedchar
 		stbtt.BakeFontBitmap(
-			raw_data(desc.font_ttf),
+			raw_data(desc.ttf),
 			0,
-			desc.font_size,
+			desc.base_size,
 			raw_data(alpha_bitmap),
 			i32(atlas_w),
 			i32(atlas_h),
@@ -173,21 +173,21 @@ ui_renderer_make_fonts :: proc(
 				image = font_image,
 				view = font_view,
 				chardata = chardata,
-				base_size = desc.font_size,
+				base_size = desc.base_size,
 				spacing = desc.spacing,
 			},
 		)
 
-		out[i] = ui.UI_Font {
-			base_size = desc.font_size,
+		fonts_out[i] = ui.UI_Font {
+			base_size = desc.base_size,
 			spacing   = desc.spacing,
 		}
 		for g in 0 ..< 96 {
-			out[i].glyphs[g].xadvance = chardata[g].xadvance
+			fonts_out[i].glyphs[g].xadvance = chardata[g].xadvance
 		}
 	}
 
-	return out
+	return fonts_out[:]
 }
 
 ui_renderer_destroy :: proc(r: ^UI_Renderer) {

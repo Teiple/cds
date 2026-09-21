@@ -265,6 +265,8 @@ draw_button :: proc(
 	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
 	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
 	color: [4]u8 = [4]u8{0, 121, 241, 255},
+	held_color: Maybe([4]u8) = nil,
+	hovered_color: Maybe([4]u8) = nil,
 ) -> bool {
 	wrap_id()
 
@@ -272,9 +274,11 @@ draw_button :: proc(
 	background_color := color
 
 	if ui_is_this_held() {
-		background_color = color_brightness(color, -0.2)
+		background_color =
+			held_color == nil ? color_brightness(color, -0.2) : held_color.?
 	} else if ui_is_this_hovered() {
-		background_color = color_brightness(color, 0.1)
+		background_color =
+			hovered_color == nil ? color_brightness(color, 0.2) : hovered_color.?
 	}
 
 	if ui_layout(reuse_id = true).config(
@@ -284,11 +288,7 @@ draw_button :: proc(
 		padding = ui_pad_all(0),
 		child_alignment = {.Center, .Center},
 	) {
-		ui_text().config(
-			label,
-			alignment = {.Center, .Center},
-			color = [4]u8{255, 255, 255, 255},
-		)
+		ui_text().config(label, alignment = {.Center, .Center}, color = 255)
 	}
 
 	return clicked
@@ -307,7 +307,7 @@ draw_tooltip :: proc(
 	target_id: u32,
 	content: string,
 	background_color: [4]u8 = {25, 25, 25, 240},
-	text_color: [4]u8 = [4]u8{255, 255, 255, 255},
+	text_color: [4]u8 = [4]u8{222, 23, 23, 255},
 	attach_points: UI_Float_Attach_Points = {
 		element = .LeftCenter,
 		parent = .RightCenter,
@@ -379,8 +379,8 @@ switcher :: proc(
 		proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{400}},
-			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{100}},
+			width: UI_Sizing_Axis = {mode = Fixed_Size{200}},
+			height: UI_Sizing_Axis = {mode = Fixed_Size{32}},
 		),
 	),
 ) where intrinsics.type_is_enum(E) {
@@ -389,19 +389,29 @@ switcher :: proc(
 		config = proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{400}},
-			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{100}},
+			width: UI_Sizing_Axis = {mode = Fixed_Size{400}},
+			height: UI_Sizing_Axis = {mode = Fixed_Size{64}},
 		) {
 			if ui_draw_layout(
 				width = width,
 				height = height,
 				layout_direction = .Left_To_Right,
-				child_gap = 0,
-				padding = ui_pad_all(2),
 				background_color = ui_get_random_color(),
 			) {
+				new_option: Maybe(E)
 				for option in E {
-					button().config(label = option_names[option])
+					if button(local_id(option_names[option])).config(
+						label = option_names[option],
+						width = ui_grow(),
+						height = ui_grow(),
+						color = option == current_option^ ? ui_get_random_color() : {},
+						hovered_color = option == current_option^ ? ui_get_random_color(0.2, true) : [4]u8{255, 255, 255, 100},
+					) {
+						new_option = option
+					}
+				}
+				if new_option != nil {
+					current_option^ = new_option.?
 				}
 			}
 		},
