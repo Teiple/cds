@@ -2,8 +2,29 @@ package ui
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:fmt"
 import "core:math/rand"
+
+
+UI_Extra_Element_Colors :: struct {
+	normal_color:  [4]u8,
+	hovered_color: [4]u8,
+	held_color:    [4]u8,
+}
+
+UI_Extra_Border_Config :: struct {
+	thickness: f32,
+	colors:    UI_Extra_Element_Colors,
+}
+
+UI_Extra_Button_Kind :: enum {
+	Primary,
+	Secondary,
+	Tertiary,
+	Ghost,
+	Danger,
+	Danger_Tertiary,
+	Danger_Ghost,
+}
 
 color_brightness :: proc(c: [4]u8, factor: f32) -> [4]u8 {
 	r := clamp(f32(c[0]) * (1.0 + factor), 0, 255)
@@ -262,37 +283,195 @@ button :: proc(
 
 draw_button :: proc(
 	label: string,
+	width: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
+	height: UI_Sizing_Axis = {mode = UI_Fixed_Size{32}},
+	kind: UI_Extra_Button_Kind,
+) -> bool {
+	wrap_id()
+
+	border: UI_Extra_Border_Config
+	background_colors, label_colors: UI_Extra_Element_Colors
+	padding: UI_Layout_Padding = {16, 16, 8, 8}
+	corner_radius: UI_Corner_Radius = {0, 0, 0, 0}
+
+	switch kind {
+	case .Primary:
+		{
+			background_colors = {
+				normal_color  = COLORS[.Button_Primary],
+				hovered_color = COLORS[.Button_Primary_Hover],
+				held_color    = COLORS[.Button_Primary_Active],
+			}
+			label_colors = {
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+			}
+		}
+	case .Secondary:
+		{
+			background_colors = {
+				normal_color  = COLORS[.Button_Secondary],
+				hovered_color = COLORS[.Button_Secondary_Hover],
+				held_color    = COLORS[.Button_Secondary_Active],
+			}
+			label_colors = {
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+			}
+		}
+	case .Tertiary:
+		{
+			background_colors = {
+				normal_color  = 0,
+				hovered_color = COLORS[.Button_Primary_Hover],
+				held_color    = COLORS[.Button_Primary_Active],
+			}
+			label_colors = {
+				normal_color  = COLORS[.Interactive],
+				hovered_color = COLORS[.Text_On_Color],
+				held_color    = COLORS[.Text_On_Color],
+			}
+			border = {
+				thickness = 1,
+				colors = {
+					normal_color = COLORS[.Button_Primary],
+					hovered_color = COLORS[.Button_Primary_Hover],
+					held_color = COLORS[.Button_Primary_Active],
+				},
+			}
+		}
+	case .Ghost:
+		{
+			background_colors = {
+				normal_color  = 0,
+				hovered_color = COLORS[.Layer_Hover_03],
+				held_color    = COLORS[.Layer_Active_03],
+			}
+			label_colors = {
+				normal_color  = COLORS[.Interactive],
+				hovered_color = COLORS[.Interactive],
+				held_color    = COLORS[.Interactive],
+			}
+		}
+	case .Danger:
+		{
+			background_colors = {
+				normal_color  = COLORS[.Button_Danger_Primary],
+				hovered_color = COLORS[.Button_Danger_Hover],
+				held_color    = COLORS[.Button_Danger_Active],
+			}
+			label_colors = {
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+				COLORS[.Text_On_Color],
+			}
+		}
+	case .Danger_Tertiary:
+		{
+			background_colors = {
+				normal_color  = 0,
+				hovered_color = COLORS[.Button_Danger_Hover],
+				held_color    = COLORS[.Button_Danger_Active],
+			}
+			label_colors = {
+				normal_color  = COLORS[.Text_Error],
+				hovered_color = COLORS[.Text_On_Color],
+				held_color    = COLORS[.Text_On_Color],
+			}
+			border = {
+				thickness = 1,
+				colors = {
+					normal_color = COLORS[.Button_Danger_Primary],
+					hovered_color = COLORS[.Button_Danger_Hover],
+					held_color = COLORS[.Button_Danger_Active],
+				},
+			}
+		}
+	case .Danger_Ghost:
+		{
+			background_colors = {
+				normal_color  = 0,
+				hovered_color = COLORS[.Button_Danger_Hover],
+				held_color    = COLORS[.Button_Danger_Active],
+			}
+			label_colors = {
+				normal_color  = COLORS[.Text_Error],
+				hovered_color = COLORS[.Text_On_Color],
+				held_color    = COLORS[.Text_On_Color],
+			}
+		}
+	}
+
+	return draw_button_pro(
+		label,
+		width,
+		height,
+		background_colors,
+		label_colors,
+		border,
+		padding,
+		corner_radius,
+	)
+}
+
+
+// button pro
+button_pro :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> UI_Element_Config(type_of(draw_button_pro)) {
+	ui_declare_id(id, loc)
+	return {draw_button_pro}
+}
+
+draw_button_pro :: proc(
+	label: string,
 	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
 	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
-	color: [4]u8 = [4]u8{0, 121, 241, 255},
-	held_color: Maybe([4]u8) = nil,
-	hovered_color: Maybe([4]u8) = nil,
+	background_colors: UI_Extra_Element_Colors,
+	label_colors: UI_Extra_Element_Colors,
+	border: UI_Extra_Border_Config,
+	padding: UI_Layout_Padding,
+	corner_radius: UI_Corner_Radius,
 ) -> bool {
 	wrap_id()
 
 	clicked := ui_is_this_clicked()
-	background_color := color
+	background_color := background_colors.normal_color
+	label_color := label_colors.normal_color
+	border_color := border.colors.normal_color
 
 	if ui_is_this_held() {
-		background_color =
-			held_color == nil ? color_brightness(color, -0.2) : held_color.?
+		background_color = background_colors.held_color
+		label_color = label_colors.held_color
+		border_color = border.colors.held_color
 	} else if ui_is_this_hovered() {
-		background_color =
-			hovered_color == nil ? color_brightness(color, 0.2) : hovered_color.?
+		background_color = background_colors.hovered_color
+		label_color = label_colors.hovered_color
+		border_color = border.colors.hovered_color
 	}
 
 	if ui_layout(reuse_id = true).config(
 		width = width,
 		height = height,
 		background_color = background_color,
-		padding = ui_pad_all(0),
+		padding = padding,
 		child_alignment = {.Center, .Center},
+		border = {thickness = border.thickness, color = border_color},
+		corner_radius = corner_radius,
 	) {
-		ui_text().config(label, alignment = {.Center, .Center}, color = 255)
+		ui_text().config(
+			label,
+			alignment = {.Center, .Center},
+			color = label_color,
+		)
 	}
 
 	return clicked
 }
+
 
 // tool tip
 tooltip :: proc(
@@ -379,8 +558,8 @@ switcher :: proc(
 		proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = Fixed_Size{200}},
-			height: UI_Sizing_Axis = {mode = Fixed_Size{32}},
+			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{320}},
+			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{40}},
 		),
 	),
 ) where intrinsics.type_is_enum(E) {
@@ -389,23 +568,57 @@ switcher :: proc(
 		config = proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = Fixed_Size{400}},
-			height: UI_Sizing_Axis = {mode = Fixed_Size{64}},
+			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{320}},
+			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{40}},
 		) {
 			if ui_draw_layout(
 				width = width,
 				height = height,
 				layout_direction = .Left_To_Right,
-				background_color = ui_get_random_color(),
+				background_color = COLORS[.Layer_01],
+				border = {thickness = 1, color = COLORS[.Border_Inverse]},
+				padding = pad_all(2),
 			) {
 				new_option: Maybe(E)
-				for option in E {
-					if button(local_id(option_names[option])).config(
+				for option, i in E {
+					is_selected := option == current_option^
+
+					bg_colors: UI_Extra_Element_Colors
+					lbl_colors: UI_Extra_Element_Colors
+
+					if is_selected {
+						bg_colors = {
+							normal_color  = COLORS[.Background_Inverse],
+							hovered_color = COLORS[.Background_Inverse],
+							held_color    = COLORS[.Background_Inverse],
+						}
+						lbl_colors = {
+							normal_color  = COLORS[.Text_Inverse],
+							hovered_color = COLORS[.Text_Inverse],
+							held_color    = COLORS[.Text_Inverse],
+						}
+					} else {
+						bg_colors = {
+							normal_color  = 0,
+							hovered_color = COLORS[.Layer_Hover_01],
+							held_color    = COLORS[.Layer_Active_01],
+						}
+						lbl_colors = {
+							normal_color  = COLORS[.Text_Secondary],
+							hovered_color = COLORS[.Text_Primary],
+							held_color    = COLORS[.Text_Primary],
+						}
+					}
+
+					if button_pro(local_id(option_names[option])).config(
 						label = option_names[option],
 						width = ui_grow(),
 						height = ui_grow(),
-						color = option == current_option^ ? ui_get_random_color() : {},
-						hovered_color = option == current_option^ ? ui_get_random_color(0.2, true) : [4]u8{255, 255, 255, 100},
+						background_colors = bg_colors,
+						label_colors = lbl_colors,
+						border = {},
+						padding = {16, 16, 8, 8},
+						corner_radius = {2, 2, 2, 2},
 					) {
 						new_option = option
 					}

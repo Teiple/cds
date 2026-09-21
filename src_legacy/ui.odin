@@ -1,29 +1,12 @@
-package ui
+package game
 
 import "base:runtime"
 import "core:hash"
 import "core:math"
+import "core:os"
 import "core:unicode/utf8"
+import rl "vendor:raylib"
 
-Rect :: struct {
-	x:      f32,
-	y:      f32,
-	width:  f32,
-	height: f32,
-}
-
-UI_Texture_Id :: distinct u64
-UI_Font_Id :: distinct u32
-
-UI_NPatch_Layout :: enum {
-	NINE_PATCH,
-	THREE_PATCH_VERTICAL,
-	THREE_PATCH_HORIZONTAL,
-}
-
-back :: proc(array: $D/[dynamic]$T) -> T {
-	return array[len(array) - 1]
-}
 @(private = "file")
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
@@ -57,10 +40,10 @@ UI_Layout_Mouse_Mode :: enum {
 }
 
 UI_Input :: struct {
-	mouse_position: [2]f32,
-	mouse_delta:    [2]f32,
+	mouse_position: rl.Vector2,
+	mouse_delta:    rl.Vector2,
 	mouse_state:    UI_Mouse_State,
-	mouse_scroll:   [2]f32,
+	mouse_scroll:   rl.Vector2,
 }
 
 UI_Input_Event :: struct {
@@ -75,24 +58,30 @@ UI_Input_Event :: struct {
 }
 
 UI_Scroll_Data :: struct #all_or_none {
-	offset:         [2]f32,
-	content_size:   [2]f32,
-	min_offset:     [2]f32,
-	pending_offset: Maybe([2]f32),
+	offset:         rl.Vector2,
+	content_size:   rl.Vector2,
+	min_offset:     rl.Vector2,
+	pending_offset: Maybe(rl.Vector2),
 }
 
 UI_ClipData :: struct {
-	open_clip_stack: [dynamic]Rect,
+	open_clip_stack: [dynamic]rl.Rectangle,
 }
 
+UI_Measure_Text :: proc(
+	ui_draw_text: UI_Text_Config,
+	font_info: UI_Font,
+) -> (
+	width: f32,
+)
 
 UI_Nine_Patch_Config :: struct {
-	source: Rect,
+	source: rl.Rectangle,
 	left:   i32,
 	top:    i32,
 	right:  i32,
 	bottom: i32,
-	layout: UI_NPatch_Layout,
+	layout: rl.NPatchLayout,
 }
 
 UI_Image_Fit :: enum {
@@ -103,19 +92,19 @@ UI_Image_Fit :: enum {
 }
 
 UI_Image :: struct {
-	texture: UI_Texture_Id,
-	source:  Rect,
-	tint:    [4]u8,
+	texture: rl.Texture2D,
+	source:  rl.Rectangle,
+	tint:    rl.Color,
 	fit:     UI_Image_Fit,
 	npatch:  Maybe(UI_Nine_Patch_Config),
 }
 
 UI_Image_Command :: struct #all_or_none {
-	texture: UI_Texture_Id,
-	source:  Rect,
-	dest:    Rect,
+	texture: rl.Texture2D,
+	source:  rl.Rectangle,
+	dest:    rl.Rectangle,
 	npatch:  Maybe(UI_Nine_Patch_Config),
-	tint:    [4]u8,
+	tint:    rl.Color,
 	fit:     UI_Image_Fit,
 }
 
@@ -128,51 +117,48 @@ UI_Render_Command :: union {
 }
 
 UI_Rect_Command :: struct #all_or_none {
-	rect:          Rect,
+	rect:          rl.Rectangle,
 	corner_radius: UI_Corner_Radius,
 	border:        UI_Border_Config,
-	color:         [4]u8,
+	color:         rl.Color,
 }
 
 UI_Text_Command :: struct #all_or_none {
-	font:          UI_Font_Index,
-	rect:          Rect,
+	font:          rl.Font,
+	rect:          rl.Rectangle,
 	wrapped_lines: []string,
 	content:       string,
 	font_size:     f32,
 	spacing:       f32,
 	line_spacing:  f32,
-	color:         [4]u8,
+	color:         rl.Color,
 }
 
 UI_Push_Clip_Command :: struct {
-	rect: Rect,
+	rect: rl.Rectangle,
 }
 
 UI_Pop_Clip_Command :: struct {}
 
 UI_Pointer_Config :: struct {
-	texture_id: UI_Texture_Id,
-	size:       f32,
-	offset:     [2]f32,
+	texture: cstring,
+	size:    f32,
+	offset:  [2]f32,
 }
 
 UI_Pointer_Attributes :: struct {
-	config: UI_Pointer_Config,
+	config:  UI_Pointer_Config,
+	texture: rl.Texture2D,
 }
 
-
-UI_Glyph :: struct {
-	xadvance: f32,
-}
 
 UI_Font :: struct {
-	base_size: f32,
-	spacing:   f32,
-	glyphs:    [96]UI_Glyph,
+	font:    rl.Font,
+	spacing: f32,
 }
 
 UI_Font_Config :: struct {
+	font_path: cstring,
 	base_size: f32,
 	spacing:   f32,
 }
@@ -192,20 +178,21 @@ UI_Context_Events :: struct {
 }
 
 UI_Context :: struct {
-	canvas_size:        [2]f32,
+	viewport:           Viewport,
 	elements:           [dynamic]UI_Element,
 	open_layout_stack:  [dynamic]UI_Index,
 	growable_buffer:    [dynamic]UI_Index,
 	wrapped_text_lines: [dynamic]string,
 	render_commands:    [dynamic]UI_Render_Command,
 	pointer:            UI_Pointer_Attributes,
+	measure_text:       UI_Measure_Text,
 	fonts:              []UI_Font,
 	input:              UI_Input,
 	input_event:        UI_Input_Event,
 	clip:               UI_ClipData,
 	ids:                map[u32]UI_Id_Info,
 	floats:             [dynamic]UI_Index,
-	bounds:             map[u32]Rect,
+	bounds:             map[u32]rl.Rectangle,
 }
 
 
@@ -243,10 +230,10 @@ UI_Layout_Direction :: enum {
 }
 
 UI_Layout_Padding :: struct {
-	left:   f32,
-	right:  f32,
 	top:    f32,
 	bottom: f32,
+	right:  f32,
+	left:   f32,
 }
 
 UI_Corner_Radius :: struct {
@@ -285,7 +272,7 @@ UI_Font_Index :: i32
 
 UI_Border_Config :: struct #all_or_none {
 	thickness: f32,
-	color:     [4]u8,
+	color:     rl.Color,
 }
 
 UI_Normalized_End :: enum {
@@ -306,8 +293,8 @@ UI_Layout_Config :: struct {
 	padding:          UI_Layout_Padding,
 	child_gap:        f32,
 	layout_direction: UI_Layout_Direction,
-	child_alignment:  [2]f32,
-	background_color: [4]u8,
+	child_alignment:  rl.Vector2,
+	background_color: rl.Color,
 	background_image: Maybe(UI_Image),
 	corner_radius:    UI_Corner_Radius,
 	border:           UI_Border_Config,
@@ -316,7 +303,7 @@ UI_Layout_Config :: struct {
 	scroll:           bool,
 	ignore_scroll:    bool,
 	float_mode:       UI_Float_Mode,
-	offset:           [2]f32,
+	offset:           rl.Vector2,
 }
 
 
@@ -346,7 +333,7 @@ UI_Float_Attach_Points :: struct {
 
 UI_Float_Config :: struct {
 	attach_points: UI_Float_Attach_Points,
-	offset:        [2]f32,
+	offset:        rl.Vector2,
 	z_index:       i32,
 }
 
@@ -366,14 +353,14 @@ UI_Text_Config :: struct {
 	content:      string,
 	font_index:   UI_Font_Index,
 	font_size:    f32,
-	color:        [4]u8,
+	color:        rl.Color,
 	line_spacing: f32,
-	alignment:    [2]f32,
+	alignment:    rl.Vector2,
 }
 
 UI_Element :: struct {
-	position:   [2]f32,
-	size:       [2]f32,
+	position:   rl.Vector2,
+	size:       rl.Vector2,
 	limits:     UI_Limits,
 	link:       UI_Element_Link,
 	id:         u32,
@@ -384,8 +371,8 @@ UI_Element :: struct {
 }
 
 UI_Element_Bound :: struct {
-	position: [2]f32,
-	size:     [2]f32,
+	position: rl.Vector2,
+	size:     rl.Vector2,
 }
 
 UI_Axis_Limits :: struct {
@@ -404,8 +391,8 @@ UI_Layout_Attributes :: struct {
 
 UI_Text_Attributes :: struct {
 	config:                   UI_Text_Config,
-	preferred_size:           [2]f32,
-	bound_size:               [2]f32,
+	preferred_size:           rl.Vector2,
+	bound_size:               rl.Vector2,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
@@ -426,11 +413,8 @@ ui_push_and_dedupe_id :: proc(
 
 		ctx.ids[id] = id_entry
 
-		loop_tag := "loop"
 		loop_tail := transmute([4]u8)id_entry.loop_count
-
-		new_id := hash.adler32(transmute([]u8)loop_tag, id)
-		new_id = hash.adler32(loop_tail[:], id)
+		new_id := hash.adler32(loop_tail[:], id)
 
 		ctx.ids[new_id] = {
 			base       = id,
@@ -534,65 +518,32 @@ ui_close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	ele := &ctx.elements[index]
 }
 
-ui_measure_text_width :: proc(
-	input: UI_Text_Config,
-	font_info: UI_Font,
-) -> f32 {
-	scale :=
-		font_info.base_size > 0 ? (input.font_size / font_info.base_size) : 1.0
-	width: f32 = 0
-	for ch in input.content {
-		if ch < 32 || ch >= 128 do continue
-		width +=
-			font_info.glyphs[ch - 32].xadvance * scale +
-			font_info.spacing * scale
-	}
-	return width
-}
-
 ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	text_attr, ok := &current.attributes.(UI_Text_Attributes)
 	if !ok do return
 
-	content := text_attr.config.content
-	config := text_attr.config
-	max_line_width := f32(0)
-	largest_word_width := f32(0)
-
-	line_start := 0
-	for byte_index := 0; byte_index <= len(content); byte_index += 1 {
-		is_newline := byte_index == len(content) || content[byte_index] == '\n'
-		if is_newline {
-			line_end := byte_index
-			if line_end > line_start && content[line_end - 1] == '\r' {
-				line_end -= 1
-			}
-			config.content = content[line_start:line_end]
-			line_w := ui_measure_text_width(
-				config,
-				ctx.fonts[config.font_index],
-			)
-			if line_w > max_line_width {
-				max_line_width = line_w
-			}
-			line_start = byte_index + 1
-		}
-	}
-
-	text_attr.preferred_size.x = max_line_width
+	text_attr.preferred_size.x = ctx.measure_text(
+		text_attr.config,
+		ctx.fonts[text_attr.config.font_index],
+	)
 	text_attr.preferred_size.y = text_attr.config.font_size
+
 	current.size.x = text_attr.preferred_size.x
 
 	{
+		content := text_attr.config.content
+		config := text_attr.config
 		word_start := 0
+		largest_word_width := f32(0)
+
 		byte_index := 0
 		for byte_index < len(content) {
 			whitespace_start := byte_index
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if !ui_is_separator(r) && r != '\n' && r != '\r' {
+				if !ui_is_separator(r) {
 					break
 				}
 				byte_index += size
@@ -602,7 +553,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if ui_is_separator(r) || r == '\n' || r == '\r' {
+				if ui_is_separator(r) {
 					break
 				}
 				byte_index += size
@@ -616,7 +567,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			config.content = content[word_start:word_end]
 
-			word_width := ui_measure_text_width(
+			word_width := ctx.measure_text(
 				config,
 				ctx.fonts[config.font_index],
 			)
@@ -949,105 +900,65 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 			text_attr.bound_size.y = ele.size.y
 		}
 
-		has_newlines := false
-		for ch in content {
-			if ch == '\n' {
-				has_newlines = true
+		byte_index := 0
+
+		for byte_index < len(content) {
+			whitespace_start := byte_index
+
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
+				if !ui_is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
+
+			word_start := byte_index
+
+			for byte_index < len(content) {
+				r, size := utf8.decode_rune(content[byte_index:])
+				if ui_is_separator(r) {
+					break
+				}
+				byte_index += size
+			}
+
+			word_end := byte_index
+
+			if word_start == word_end {
 				break
 			}
-		}
 
-		raw_line_start := 0
-		for raw_index := 0; raw_index <= len(content); raw_index += 1 {
-			is_end := raw_index == len(content)
-			if !is_end && content[raw_index] != '\n' do continue
-
-			raw_line_end := raw_index
-			if raw_line_end > raw_line_start &&
-			   content[raw_line_end - 1] == '\r' {
-				raw_line_end -= 1
-			}
-
-			raw_line := content[raw_line_start:raw_line_end]
-			raw_line_start = raw_index + 1
-
-			config.content = raw_line
-			line_w := ui_measure_text_width(
+			config.content = content[whitespace_start:word_start]
+			whitespace_width := ctx.measure_text(
 				config,
 				ctx.fonts[config.font_index],
 			)
 
-			if line_w <= ele.size.x && !has_newlines {
-				continue
-			}
+			config.content = content[word_start:word_end]
+			word_width := ctx.measure_text(
+				config,
+				ctx.fonts[config.font_index],
+			)
 
-			if line_w <= ele.size.x {
-				append(&ctx.wrapped_text_lines, raw_line)
+			candidate_width := whitespace_width + word_width
+
+			if line_width > 0 && line_width + candidate_width > ele.size.x {
+				append(
+					&ctx.wrapped_text_lines,
+					content[line_start:whitespace_start],
+				)
 				wrapped_count += 1
-				continue
+
+				line_start = word_start
+				line_width = word_width
+			} else {
+				line_width += candidate_width
 			}
+		}
 
-			line_start := 0
-			line_width := f32(0)
-			byte_index := 0
-
-			for byte_index < len(raw_line) {
-				whitespace_start := byte_index
-
-				for byte_index < len(raw_line) {
-					r, size := utf8.decode_rune(raw_line[byte_index:])
-					if !ui_is_separator(r) {
-						break
-					}
-					byte_index += size
-				}
-
-				word_start := byte_index
-
-				for byte_index < len(raw_line) {
-					r, size := utf8.decode_rune(raw_line[byte_index:])
-					if ui_is_separator(r) {
-						break
-					}
-					byte_index += size
-				}
-
-				word_end := byte_index
-
-				if word_start == word_end {
-					break
-				}
-
-				config.content = raw_line[whitespace_start:word_start]
-				whitespace_width := ui_measure_text_width(
-					config,
-					ctx.fonts[config.font_index],
-				)
-
-				config.content = raw_line[word_start:word_end]
-				word_width := ui_measure_text_width(
-					config,
-					ctx.fonts[config.font_index],
-				)
-
-				candidate_width := whitespace_width + word_width
-
-				if line_width > 0 &&
-				   line_width + candidate_width > ele.size.x {
-					append(
-						&ctx.wrapped_text_lines,
-						raw_line[line_start:whitespace_start],
-					)
-					wrapped_count += 1
-
-					line_start = word_start
-					line_width = word_width
-				} else {
-					line_width += candidate_width
-				}
-			}
-
-			append(&ctx.wrapped_text_lines, raw_line[line_start:])
+		if wrapped_count > 0 {
+			append(&ctx.wrapped_text_lines, content[line_start:])
 			wrapped_count += 1
 		}
 	}
@@ -1057,18 +968,18 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 ui_get_anchor_point :: proc(
 	ele: UI_Element,
 	anchor: UI_Anchor_Point,
-) -> [2]f32 {
+) -> rl.Vector2 {
 	return ele.position + ele.size * ui_get_anchor_offset(anchor)
 }
 
-ui_get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
+ui_get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> rl.Vector2 {
 	switch anchor {
 	case .LeftTop:
 		return {0, 0}
 	case .LeftCenter:
 		return {0, 0.5}
 	case .LeftBottom:
-		return {0, 1.0}
+		return {0, 0}
 	case .CenterTop:
 		return {0.5, 0}
 	case .CenterCenter:
@@ -1165,16 +1076,65 @@ ui_calculate_position :: proc(
 	}
 }
 
+ui_load_font :: proc(
+	base_size: f32,
+	spacing: f32,
+	font_path: cstring,
+) -> UI_Font {
+	assert(os.exists(string(font_path)))
+
+	font_file_size: i32 = 0
+	font_file_data := rl.LoadFileData(font_path, &font_file_size)
+
+	font: rl.Font = {
+		baseSize   = i32(base_size),
+		glyphCount = 95,
+	}
+
+	font.glyphs = rl.LoadFontData(
+		font_file_data,
+		font_file_size,
+		i32(base_size),
+		nil,
+		0,
+		.DEFAULT,
+		&font.glyphCount,
+	)
+
+	atlas := rl.GenImageFontAtlas(
+		font.glyphs,
+		&font.recs,
+		font.glyphCount,
+		font.baseSize,
+		0,
+		1,
+	)
+	font.texture = rl.LoadTextureFromImage(atlas)
+	rl.SetTextureFilter(font.texture, rl.TextureFilter.BILINEAR)
+
+	rl.UnloadImage(atlas)
+	rl.UnloadFileData(font_file_data)
+
+	assert(rl.IsFontValid(font))
+
+	return {font = font, spacing = spacing}
+}
+
 ui_context_make :: proc(
-	fonts: []UI_Font,
-	pointer: UI_Pointer_Config = {},
+	font_configs: []UI_Font_Config,
+	pointer: UI_Pointer_Config,
 ) -> UI_Context {
 	for event in g_ui_builder.context_events.on_make {
 		event()
 	}
 
-	fonts_copy := make([]UI_Font, len(fonts))
-	copy(fonts_copy, fonts)
+	fonts := make([dynamic]UI_Font, 0, 4)
+	for config in font_configs {
+		append(
+			&fonts,
+			ui_load_font(config.base_size, config.spacing, config.font_path),
+		)
+	}
 
 	return UI_Context {
 		elements = make([dynamic]UI_Element, 0, 5),
@@ -1182,8 +1142,12 @@ ui_context_make :: proc(
 		render_commands = make([dynamic]UI_Render_Command, 0, 5),
 		growable_buffer = make([dynamic]UI_Index, 0, 5),
 		wrapped_text_lines = make([dynamic]string, 0, 5),
-		pointer = {config = pointer},
-		fonts = fonts_copy,
+		pointer = {
+			texture = rl.LoadTexture(pointer.texture),
+			config = pointer,
+		},
+		measure_text = ui_measure_text,
+		fonts = fonts[:],
 		input_event = {
 			mouse_captured = false,
 			hovered_elements = make([dynamic]u32, 0, 4),
@@ -1192,10 +1156,10 @@ ui_context_make :: proc(
 			clicked_elements = make([dynamic]u32, 0, 4),
 			scrolls = make(map[u32]UI_Scroll_Data, 4),
 		},
-		clip = {open_clip_stack = make([dynamic]Rect, 0, 2)},
+		clip = {open_clip_stack = make([dynamic]rl.Rectangle, 0, 2)},
 		ids = make(map[u32]UI_Id_Info, 50),
 		floats = make([dynamic]UI_Index, 0, 4),
-		bounds = make(map[u32]Rect, 50),
+		bounds = make(map[u32]rl.Rectangle, 50),
 	}
 }
 
@@ -1209,6 +1173,12 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
+
+	rl.UnloadTexture(ctx.pointer.texture)
+
+	for f in ctx.fonts {
+		rl.UnloadFont(f.font)
+	}
 	delete(ctx.fonts)
 
 	delete(ctx.input_event.hovered_elements)
@@ -1223,23 +1193,18 @@ ui_context_delete :: proc(ctx: UI_Context) {
 }
 
 @(require_results, deferred_in_out = ui_end)
-ui_begin :: proc(
-	ctx: ^UI_Context,
-	canvas_size: [2]f32,
-	input: UI_Input,
-) -> bool {
+ui_begin :: proc(ctx: ^UI_Context, viewport: Viewport) -> bool {
 	g_ui_builder.current_context = ctx
 	for p in g_ui_builder.context_events.on_begin do p()
 
-	ctx.canvas_size = canvas_size
-	ctx.input = input
+	ctx.viewport = viewport
 
 	clear(&ctx.ids)
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
 
-	append(&ctx.elements, ui_root_layout(canvas_size))
+	append(&ctx.elements, ui_root_layout(viewport.base_size))
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -1249,7 +1214,7 @@ ui_begin :: proc(
 	return true
 }
 
-ui_end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
+ui_end :: proc(ctx: ^UI_Context, _: Viewport, ok: bool) {
 	if !ok do return
 
 	// close root
@@ -1281,6 +1246,21 @@ ui_end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 
 	// mouse input
 	{
+		ctx.input.mouse_position = viewport_get_mouse_position(ctx.viewport)
+		ctx.input.mouse_delta = viewport_get_mouse_delta(ctx.viewport)
+		ctx.input.mouse_scroll = rl.GetMouseWheelMoveV()
+
+		MOUSE_BTN :: rl.MouseButton.LEFT
+		if rl.IsMouseButtonPressed(MOUSE_BTN) {
+			ctx.input.mouse_state = .Pressed
+		} else if rl.IsMouseButtonDown(MOUSE_BTN) {
+			ctx.input.mouse_state = .Down
+		} else if rl.IsMouseButtonReleased(MOUSE_BTN) {
+			ctx.input.mouse_state = .Released
+		} else {
+			ctx.input.mouse_state = .None
+		}
+
 		ctx.input_event.mouse_captured = false
 		ctx.input_event.scroll_captured = false
 		ctx.input_event.selected_once = false
@@ -1421,7 +1401,7 @@ ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 						ele.size.x,
 						ele.size.y,
 					},
-					tint = bg_img.tint.a == 0 && bg_img.tint.r == 0 && bg_img.tint.g == 0 && bg_img.tint.b == 0 ? [4]u8{255, 255, 255, 255} : bg_img.tint,
+					tint = bg_img.tint.a == 0 && bg_img.tint.r == 0 && bg_img.tint.g == 0 && bg_img.tint.b == 0 ? rl.WHITE : bg_img.tint,
 					fit = bg_img.fit,
 					npatch = bg_img.npatch,
 				},
@@ -1445,7 +1425,7 @@ ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 			&ctx.render_commands,
 			UI_Text_Command{
 				content = attr.config.content,
-				font = attr.config.font_index,
+				font = ctx.fonts[attr.config.font_index].font,
 				font_size = attr.config.font_size,
 				spacing = ctx.fonts[attr.config.font_index].spacing,
 				line_spacing = attr.config.line_spacing,
@@ -1507,7 +1487,7 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			if layout.config.mouse_mode == .Ignore do return
 
-			clipped_rect: Rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
+			clipped_rect: rl.Rectangle = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
 			if !ctx.input_event.mouse_captured {
 				if len(ctx.clip.open_clip_stack) > 0 {
@@ -1551,8 +1531,8 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 				}
 
 				if ui_rect_contains(ctx.input.mouse_position, clipped_rect) {
-					content_size: [2]f32 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
-					min_offset: [2]f32 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
+					content_size: rl.Vector2 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
+					min_offset: rl.Vector2 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
 
 					cur_scroll := ctx.input_event.scrolls[ele.id]
 					pending_offset, is_pending := cur_scroll.pending_offset.?
@@ -1594,7 +1574,7 @@ ui_travel_tree_reverse :: proc(
 	return false
 }
 
-ui_root_layout :: proc(screen_size: [2]f32) -> UI_Element {
+ui_root_layout :: proc(screen_size: rl.Vector2) -> UI_Element {
 	return UI_Element {
 		id = 0,
 		position = {0, 0},
@@ -1890,7 +1870,7 @@ ele_get_pos :: proc(element: ^UI_Element, axis: UI_Axis) -> f32 {
 }
 
 @(private = "file")
-ele_get_rect :: #force_inline proc(element: UI_Element) -> Rect {
+ele_get_rect :: #force_inline proc(element: UI_Element) -> rl.Rectangle {
 	return {
 		x = element.position.x,
 		y = element.position.y,
@@ -1916,7 +1896,7 @@ text_get_bound_size :: proc(
 }
 
 @(private = "file")
-align_get_offset :: proc(alignment: [2]f32, axis: UI_Axis) -> f32 {
+align_get_offset :: proc(alignment: rl.Vector2, axis: UI_Axis) -> f32 {
 	return axis == .X ? alignment.x : alignment.y
 }
 
@@ -1968,7 +1948,7 @@ ui_draw_layout :: proc(
 	child_gap: f32 = 2,
 	layout_direction: UI_Layout_Direction = .Left_To_Right,
 	child_alignment: UI_Alignment = {x = .Left, y = .Top},
-	background_color: [4]u8 = {},
+	background_color: rl.Color = {},
 	background_image: Maybe(UI_Image) = nil,
 	corner_radius: UI_Corner_Radius = {4, 4, 4, 4},
 	border: UI_Border_Config = BORDER_DEFAULT,
@@ -1977,7 +1957,7 @@ ui_draw_layout :: proc(
 	scroll: bool = false,
 	ignore_scroll: bool = false,
 	float_mode: UI_Float_Mode = UI_Float_None{},
-	offset: [2]f32 = {},
+	offset: rl.Vector2 = {},
 ) -> bool {
 	return ui_open_layout(
 		g_ui_builder.current_context,
@@ -2011,7 +1991,7 @@ ui_draw_text :: proc(
 	content: string,
 	font_index: UI_Font_Index = 0,
 	font_size: f32 = 16,
-	color: [4]u8 = {0, 0, 0, 255},
+	color: rl.Color = {0, 0, 0, 255},
 	line_spacing: f32 = 8,
 	alignment: UI_Alignment = {x = .Left, y = .Top},
 	loc := #caller_location,
@@ -2085,15 +2065,15 @@ ui_mouse_state :: proc() -> UI_Mouse_State {
 	return g_ui_builder.current_context.input.mouse_state
 }
 
-ui_mouse_delta :: proc() -> [2]f32 {
+ui_mouse_delta :: proc() -> rl.Vector2 {
 	return g_ui_builder.current_context.input.mouse_delta
 }
 
-ui_mouse_position :: proc() -> [2]f32 {
+ui_mouse_position :: proc() -> rl.Vector2 {
 	return g_ui_builder.current_context.input.mouse_position
 }
 
-ui_rect_by_id :: proc(id: u32) -> Rect {
+ui_rect_by_id :: proc(id: u32) -> rl.Rectangle {
 	rect, ok := g_ui_builder.current_context.bounds[id]
 	assert(ok)
 	return rect
@@ -2147,13 +2127,13 @@ ui_current_scroll_data :: proc() -> UI_Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
 }
 
-ui_set_scroll_offset :: proc(scroll: [2]f32) {
+ui_set_scroll_offset :: proc(scroll: rl.Vector2) {
 	set_layout_scroll_offset(g_ui_builder.current_context, scroll)
 }
 
 // Internal ultilities
 @(private = "file")
-set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: [2]f32) {
+set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: rl.Vector2) {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	scroll := ctx.input_event.scrolls[ctx.elements[open_ele].id]
 	scroll.pending_offset = new_scroll
@@ -2191,8 +2171,8 @@ get_layout_mouse_state_by_id :: proc(
 }
 
 @(private = "file")
-get_alignment_offset :: proc(alignment: UI_Alignment) -> [2]f32 {
-	offset: [2]f32
+get_alignment_offset :: proc(alignment: UI_Alignment) -> rl.Vector2 {
+	offset: rl.Vector2
 	switch variant in alignment.x {
 	case UI_Alignment_X:
 		{
@@ -2229,7 +2209,12 @@ get_alignment_offset :: proc(alignment: UI_Alignment) -> [2]f32 {
 }
 
 @(require_results)
-ui_intersect_rect :: proc(a, b: Rect) -> (Rect, bool) #optional_ok {
+ui_intersect_rect :: proc(
+	a, b: rl.Rectangle,
+) -> (
+	rl.Rectangle,
+	bool,
+) #optional_ok {
 	left := max(a.x, b.x)
 	top := max(a.y, b.y)
 	right := min(a.x + a.width, b.x + b.width)
@@ -2243,7 +2228,7 @@ ui_intersect_rect :: proc(a, b: Rect) -> (Rect, bool) #optional_ok {
 }
 
 @(require_results)
-ui_rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
+ui_rect_contains :: proc(p: rl.Vector2, rec: rl.Rectangle) -> bool {
 	return(
 		p.x >= rec.x &&
 		p.x <= rec.x + rec.width &&
@@ -2261,8 +2246,8 @@ ui_auto_id_hash :: proc(
 	column := transmute([4]u8)loc.column
 	h: u32 = parent_hash
 	h = hash.adler32(transmute([]u8)loc.file_path, h)
-	h = hash.adler32(line[:], h)
-	h = hash.adler32(column[:], h)
+	h = hash.adler32(transmute([]u8)line[:], h)
+	h = hash.adler32(transmute([]u8)column[:], h)
 	return h
 }
 
@@ -2362,93 +2347,7 @@ ui_last_id :: proc() -> u32 {
 	return g_ui_builder.last_id
 }
 
+
 ui_get_builder :: proc "contextless" () -> ^UI_Builder {
 	return &g_ui_builder
 }
-
-begin :: ui_begin
-end :: ui_end
-make_context :: ui_context_make
-delete_context :: ui_context_delete
-context_make :: ui_context_make
-context_delete :: ui_context_delete
-layout :: ui_layout
-begin_layout :: ui_begin_layout
-end_layout :: ui_end_layout
-defer_end_layout :: ui_defer_end_layout
-draw_layout :: ui_draw_layout
-text :: ui_text
-draw_text :: ui_draw_text
-fixed :: ui_fixed
-fit :: ui_fit
-grow :: ui_grow
-percent :: ui_percent
-pad_all :: ui_pad_all
-corner_radius_all :: ui_corner_radius_all
-is_hovered :: ui_is_this_hovered
-is_held :: ui_is_this_held
-is_clicked :: ui_is_this_clicked
-is_selected :: ui_is_this_selected
-is_this_hovered :: ui_is_this_hovered
-is_this_held :: ui_is_this_held
-is_this_clicked :: ui_is_this_clicked
-is_this_selected :: ui_is_this_selected
-is_id_hovered :: ui_is_id_hovered
-is_id_held :: ui_is_id_held
-is_id_clicked :: ui_is_id_clicked
-is_id_selected :: ui_is_id_selected
-mouse_state :: ui_mouse_state
-mouse_delta :: ui_mouse_delta
-mouse_position :: ui_mouse_position
-current_scroll_data :: ui_current_scroll_data
-set_scroll_offset :: ui_set_scroll_offset
-intersect_rect :: ui_intersect_rect
-rect_contains :: ui_rect_contains
-global_id :: ui_global_id
-local_id :: ui_local_id
-family_id :: ui_family_id
-last_id :: ui_last_id
-get_builder :: ui_get_builder
-
-measure_text_width :: ui_measure_text_width
-
-Context :: UI_Context
-Input :: UI_Input
-Font :: UI_Font
-Glyph :: UI_Glyph
-Float_At_Root :: UI_Float_At_Root
-Float_At_Parent :: UI_Float_At_Parent
-Float_At_Id :: UI_Float_At_Id
-Float_None :: UI_Float_None
-Float_Mode :: UI_Float_Mode
-Float_Config :: UI_Float_Config
-Float_Attach_Points :: UI_Float_Attach_Points
-Layout_Config :: UI_Layout_Config
-Layout_Padding :: UI_Layout_Padding
-Corner_Radius :: UI_Corner_Radius
-Border_Config :: UI_Border_Config
-Image :: UI_Image
-Nine_Patch_Config :: UI_Nine_Patch_Config
-NPatch_Layout :: UI_NPatch_Layout
-Image_Fit :: UI_Image_Fit
-Layout_Mouse_Mode :: UI_Layout_Mouse_Mode
-Layout_Mouse_State :: UI_Layout_Mouse_State
-Mouse_State :: UI_Mouse_State
-Anchor_Point :: UI_Anchor_Point
-Alignment :: UI_Alignment
-Alignment_X :: UI_Alignment_X
-Alignment_Y :: UI_Alignment_Y
-Sizing_Axis :: UI_Sizing_Axis
-Fixed_Size :: UI_Fixed_Size
-Fit_Size :: UI_Fit_Size
-Grow_Size :: UI_Grow_Size
-Percent_Size :: UI_Percent_Size
-Size_Mode :: UI_Size_Mode
-Text_Config :: UI_Text_Config
-Scroll_Data :: UI_Scroll_Data
-Render_Command :: UI_Render_Command
-Rect_Command :: UI_Rect_Command
-Image_Command :: UI_Image_Command
-Text_Command :: UI_Text_Command
-Push_Clip_Command :: UI_Push_Clip_Command
-Pop_Clip_Command :: UI_Pop_Clip_Command

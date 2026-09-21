@@ -38,7 +38,7 @@ main :: proc() {
 				logger = {func = slog.func},
 			})
 
-			viewport_init(&g_state.viewport, {960, 540}, {.9, .9, .9, 1})
+			viewport_init(&g_state.viewport, {960, 540})
 
 			ui_sokol.init(&g_state.ui.renderer)
 
@@ -122,6 +122,27 @@ main :: proc() {
 						ui.text().config(
 							"Procedural Meshes: Box, Sphere, Cylinder, Capsule, Plane",
 						)
+
+						if ui.layout().config(
+							layout_direction = .Left_To_Right,
+						) {
+							ui.button().config("Hello World", kind = .Primary)
+							ui.button().config(
+								"Hello World",
+								kind = .Secondary,
+							)
+							ui.button().config("Hello World", kind = .Tertiary)
+							ui.button().config("Hello World", kind = .Ghost)
+							ui.button().config("Hello World", kind = .Danger)
+							ui.button().config(
+								"Hello World",
+								kind = .Danger_Tertiary,
+							)
+							ui.button().config(
+								"Hello World",
+								kind = .Danger_Ghost,
+							)
+						}
 
 						ui.switcher(Display_Mode{}).config(
 							current_option = &current_display_mode,

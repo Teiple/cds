@@ -17,8 +17,8 @@ Viewport :: struct {
 	dest_rect:       Rect,
 	scale:           f32,
 	vmouse_position: [2]f32,
-	bg_color:        [4]f32,
-	bars_color:      [4]f32,
+	bg_color:        [4]u8,
+	bars_color:      [4]u8,
 	bg_pipeline:     sg.Pipeline,
 	bg_bindings:     sg.Bindings,
 	white_image:     sg.Image,
@@ -28,8 +28,8 @@ Viewport :: struct {
 viewport_init :: proc(
 	vp: ^Viewport,
 	base_size: [2]f32,
-	bg_color: [4]f32 = {0.08, 0.10, 0.14, 1.0},
-	bars_color: [4]f32 = {0.04, 0.04, 0.05, 1.0},
+	bg_color: [4]u8 = {245, 245, 245, 255},
+	bars_color: [4]u8 = {0, 0, 0, 255},
 ) {
 	vp.base_size = base_size
 	vp.vmouse_position = base_size * 0.5
@@ -57,17 +57,11 @@ viewport_init :: proc(
 	}
 	vp.bg_pipeline = sg.make_pipeline(bg_pip_desc)
 
-	color := cast([4]u8)linalg.clamp(
-		bg_color * 255,
-		cast([4]f32)0,
-		cast([4]f32)255,
-	)
-
 	bg_vertices := [4]Vertex {
-		{{-1.0, -1.0, 0.0}, color, {0, 0}},
-		{{1.0, -1.0, 0.0}, color, {32767, 0}},
-		{{1.0, 1.0, 0.0}, color, {32767, 32767}},
-		{{-1.0, 1.0, 0.0}, color, {0, 32767}},
+		{{-1.0, -1.0, 0.0}, bg_color, {0, 0}},
+		{{1.0, -1.0, 0.0}, bg_color, {32767, 0}},
+		{{1.0, 1.0, 0.0}, bg_color, {32767, 32767}},
+		{{-1.0, 1.0, 0.0}, bg_color, {0, 32767}},
 	}
 	bg_indices := [6]u16{0, 1, 2, 0, 2, 3}
 
@@ -131,10 +125,10 @@ viewport_begin :: proc(vp: Viewport) {
 				0 = {
 					load_action = .CLEAR,
 					clear_value = {
-						vp.bars_color.r,
-						vp.bars_color.g,
-						vp.bars_color.b,
-						vp.bars_color.a,
+						cast(f32)vp.bars_color.r,
+						cast(f32)vp.bars_color.g,
+						cast(f32)vp.bars_color.b,
+						cast(f32)vp.bars_color.a,
 					},
 				},
 			},
