@@ -125,8 +125,8 @@ ui_renderer_make_fonts :: proc(
 	font_descs: []UI_Font_Desc,
 	allocator := context.temp_allocator,
 ) -> []ui.UI_Font {
+	// ui itself will be responsible for delete this
 	out := make([]ui.UI_Font, len(font_descs))
-	defer delete(out)
 	for desc, i in font_descs {
 		atlas_w, atlas_h := 512, 512
 		alpha_bitmap := make([]u8, atlas_w * atlas_h)

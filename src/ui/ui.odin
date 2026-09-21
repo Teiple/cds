@@ -1206,7 +1206,6 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.render_commands)
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
-	delete(ctx.fonts)
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.selected_elements)

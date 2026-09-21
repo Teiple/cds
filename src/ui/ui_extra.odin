@@ -1,5 +1,6 @@
 package ui
 
+import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:math/rand"
@@ -159,7 +160,7 @@ draw_vert_scroll :: proc(
 		},
 	)
 
-	// use draw_layout to use the last pushed id trhough vert_scroll
+	// use draw_layout to use the last pushed id through vert_scroll
 	if ui_draw_layout(
 		width = width,
 		height = height,
@@ -369,15 +370,40 @@ draw_image :: proc(
 }
 
 // switcher
-// switcher :: proc(
-// 	id: Maybe(u32) = nil,
-// 	loc := #caller_location,
-// ) -> UI_Element_Config(type_of(draw_image)) {
-// 	ui_declare_id(id, loc)
-// 	return {draw_switcher}
-// }
-
-
-// draw_image :: proc() {
-
-// }
+switcher :: proc(
+	option_type_hint: $E,
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> (
+	config_wrapper: UI_Element_Config(
+		proc(
+			current_option: ^E,
+			option_names: [E]string,
+			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{400}},
+			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{100}},
+		),
+	),
+) where intrinsics.type_is_enum(E) {
+	ui_declare_id(id, loc)
+	return {
+		config = proc(
+			current_option: ^E,
+			option_names: [E]string,
+			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{400}},
+			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{100}},
+		) {
+			if ui_draw_layout(
+				width = width,
+				height = height,
+				layout_direction = .Left_To_Right,
+				child_gap = 0,
+				padding = ui_pad_all(2),
+				background_color = ui_get_random_color(),
+			) {
+				for option in E {
+					button().config(label = option_names[option])
+				}
+			}
+		},
+	}
+}

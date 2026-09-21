@@ -9,9 +9,15 @@ import "base:runtime"
 import "core:math"
 import linalg "core:math/linalg"
 
-import "shaders"
 import "ui"
 import "ui_sokol"
+
+Display_Mode :: enum {
+	Unlit,
+	Wireframe,
+}
+
+current_display_mode: Display_Mode
 
 
 main :: proc() {
@@ -34,6 +40,7 @@ main :: proc() {
 			viewport_init(&g_state.viewport, {960, 540}, {.9, .9, .9, 1})
 
 			ui_sokol.init(&g_state.ui.renderer)
+
 			fonts := ui_sokol.make_fonts(
 				&g_state.ui.renderer,
 				{
@@ -45,6 +52,8 @@ main :: proc() {
 					},
 				},
 			)
+			// fonts will be copy over to ui context
+			defer delete(fonts)
 
 			g_state.ui.ctx = ui.make_context(fonts = fonts)
 			g_state.camera = {
@@ -111,6 +120,14 @@ main :: proc() {
 					) {
 						ui.text().config(
 							"Procedural Meshes: Box, Sphere, Cylinder, Capsule, Plane",
+						)
+
+						ui.switcher(Display_Mode{}).config(
+							current_option = &current_display_mode,
+							option_names = {
+								.Unlit = "Unlit",
+								.Wireframe = "Wireframe",
+							},
 						)
 					}
 				}
