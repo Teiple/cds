@@ -9,6 +9,7 @@ import "base:runtime"
 import linalg "core:math/linalg"
 
 import "ui"
+import uie "ui_extra"
 import "ui_sokol"
 
 Display_Mode :: enum {
@@ -115,25 +116,28 @@ main :: proc() {
 						if ui.layout().config(
 							layout_direction = .Left_To_Right,
 						) {
-							ui.button().config("Hello World", kind = .Primary)
-							ui.button().config(
+							uie.button().config("Hello World", kind = .Primary)
+							uie.button().config(
 								"Hello World",
 								kind = .Secondary,
 							)
-							ui.button().config("Hello World", kind = .Tertiary)
-							ui.button().config("Hello World", kind = .Ghost)
-							ui.button().config("Hello World", kind = .Danger)
-							ui.button().config(
+							uie.button().config(
+								"Hello World",
+								kind = .Tertiary,
+							)
+							uie.button().config("Hello World", kind = .Ghost)
+							uie.button().config("Hello World", kind = .Danger)
+							uie.button().config(
 								"Hello World",
 								kind = .Danger_Tertiary,
 							)
-							ui.button().config(
+							uie.button().config(
 								"Hello World",
 								kind = .Danger_Ghost,
 							)
 						}
 
-						ui.switcher(Display_Mode{}).config(
+						uie.switcher(Display_Mode{}).config(
 							current_option = &current_display_mode,
 							option_names = {
 								.Unlit = "Unlit",

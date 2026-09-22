@@ -2414,7 +2414,6 @@ family_id :: proc(id: string, owner: string) -> u32 {
 	return id
 }
 
-@(private)
 declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	index := i32(len(g_ui_builder.current_context.elements))
 
@@ -2462,7 +2461,6 @@ begin_layout :: proc(
 	return {draw_layout}
 }
 
-@(private)
 end_layout :: proc() {
 	close_layout(g_ui_builder.current_context)
 }

@@ -1,4 +1,4 @@
-package ui
+package ui_extra
 
 Color :: enum {
 	Background,

@@ -1,5 +1,6 @@
-package ui
+package ui_extra
 
+import "../ui"
 import "base:intrinsics"
 import "base:runtime"
 import "core:math/rand"
@@ -109,12 +110,12 @@ get_random_color :: proc(
 
 @(private = "file", deferred_out = end_wrap_id)
 wrap_id :: proc() -> u32 {
-	return last_id()
+	return ui.last_id()
 }
 
 @(private = "file")
 end_wrap_id :: proc(id: u32) {
-	get_builder().last_id = id
+	ui.get_builder().last_id = id
 }
 
 
@@ -124,7 +125,7 @@ extra_init :: proc "contextless" () {
 		&g_debug_palette.random_state,
 	)
 
-	append(&get_builder().context_events.on_make, proc() {
+	append(&ui.get_builder().context_events.on_make, proc() {
 		g_ui_extra_builder.open_vert_scroll_stack = make(
 			[dynamic]Vert_Scroll_Data,
 			0,
@@ -132,12 +133,12 @@ extra_init :: proc "contextless" () {
 		)
 	})
 
-	append(&get_builder().context_events.on_begin, proc() {
+	append(&ui.get_builder().context_events.on_begin, proc() {
 		rand.reset(123, gen = g_debug_palette.random_generator)
 		clear(&g_ui_extra_builder.open_vert_scroll_stack)
 	})
 
-	append(&get_builder().context_events.on_delete, proc() {
+	append(&ui.get_builder().context_events.on_delete, proc() {
 		delete(g_ui_extra_builder.open_vert_scroll_stack)
 	})
 }
@@ -155,14 +156,14 @@ Vert_Scroll_Data :: struct #all_or_none {
 vert_scroll :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_vert_scroll)) {
-	declare_id(id, loc)
+) -> ui.Element_Config(type_of(draw_vert_scroll)) {
+	ui.declare_id(id, loc)
 	return {draw_vert_scroll}
 }
 
 draw_vert_scroll :: proc(
-	width: Sizing_Axis = {mode = Grow_Size{}},
-	height: Sizing_Axis = {mode = Grow_Size{}},
+	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
 	background_color: [4]u8 = [4]u8{255, 255, 255, 255},
 	scroll_thumb_width: f32 = 16,
 	scroll_thumb_height: f32 = 64,
@@ -182,7 +183,7 @@ draw_vert_scroll :: proc(
 	)
 
 	// use draw_layout to use the last pushed id through vert_scroll
-	if draw_layout(
+	if ui.draw_layout(
 		width = width,
 		height = height,
 		clip = true,
@@ -191,9 +192,9 @@ draw_vert_scroll :: proc(
 		child_gap = 0,
 		background_color = background_color,
 	) {
-		if begin_layout().config(
-			width = grow(),
-			height = fit(),
+		if ui.begin_layout().config(
+			width = ui.grow(),
+			height = ui.fit(),
 			layout_direction = .Top_To_Bottom,
 		) {
 			// content
@@ -208,38 +209,38 @@ end_draw_vert_scroll :: proc() {
 
 	@(static) scroll_thumb_press_offset: [2]f32
 
-	if defer_end_layout() {
-		if defer_end_layout() {
+	if ui.defer_end_layout() {
+		if ui.defer_end_layout() {
 			// content
 		}
 
 		// important wrapper, so local id can work locally without collide with content's scrolls
-		if begin_layout().config(
-			width = grow(),
-			height = grow(),
+		if ui.begin_layout().config(
+			width = ui.grow(),
+			height = ui.grow(),
 			padding = {},
 		) {
-			scroll_data := current_scroll_data()
+			scroll_data := ui.current_scroll_data()
 			scroll_normalized_offset: [2]f32 = {
 				scroll_data.min_offset.x < 0 ? scroll_data.offset.x / scroll_data.min_offset.x : 0,
 				scroll_data.min_offset.y < 0 ? scroll_data.offset.y / scroll_data.min_offset.y : 0,
 			}
 
-			scroll_bar_id := local_id("scroll_bar")
-			scroll_thumb_id := local_id("scroll_thumb")
+			scroll_bar_id := ui.local_id("scroll_bar")
+			scroll_thumb_id := ui.local_id("scroll_thumb")
 
-			if is_id_held(scroll_thumb_id) {
-				bar_rect := rect_by_id(scroll_bar_id)
-				thumb_rect := rect_by_id(scroll_thumb_id)
+			if ui.is_id_held(scroll_thumb_id) {
+				bar_rect := ui.rect_by_id(scroll_bar_id)
+				thumb_rect := ui.rect_by_id(scroll_thumb_id)
 
-				if pointer_state() == .Pressed {
+				if ui.pointer_state() == .Pressed {
 					scroll_thumb_press_offset =
-						pointer_position() - {thumb_rect.x, thumb_rect.y}
+						ui.pointer_position() - {thumb_rect.x, thumb_rect.y}
 				}
 
-				if pointer_state() == .Down {
+				if ui.pointer_state() == .Down {
 					thumb_desired :=
-						pointer_position() - scroll_thumb_press_offset
+						ui.pointer_position() - scroll_thumb_press_offset
 					thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
 					thumb_range: [2]f32 =
 						{bar_rect.width, bar_rect.height} -
@@ -249,21 +250,21 @@ end_draw_vert_scroll :: proc() {
 						thumb_range.x > 0 ? clamp(thumb_local.x / thumb_range.x, 0, 1) : 0,
 						thumb_range.y > 0 ? clamp(thumb_local.y / thumb_range.y, 0, 1) : 0,
 					}
-					set_scroll_offset(offset * scroll_data.min_offset)
+					ui.set_scroll_offset(offset * scroll_data.min_offset)
 				}
 			}
 
-			if layout(scroll_bar_id).config(
-				width = fit(),
-				height = grow(),
+			if ui.layout(scroll_bar_id).config(
+				width = ui.fit(),
+				height = ui.grow(),
 				background_color = ele_data.scroll_bar_background_color,
 				ignore_scroll = true,
 				padding = {},
 				child_alignment = {0, scroll_normalized_offset.y},
 			) {
-				if layout(scroll_thumb_id).config(
-					width = fixed(ele_data.scroll_thumb_width),
-					height = fixed(ele_data.scroll_thumb_height),
+				if ui.layout(scroll_thumb_id).config(
+					width = ui.fixed(ele_data.scroll_thumb_width),
+					height = ui.fixed(ele_data.scroll_thumb_height),
 					background_color = ele_data.scroll_thumb_color,
 				) {}
 			}
@@ -276,23 +277,23 @@ end_draw_vert_scroll :: proc() {
 button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_button)) {
-	declare_id(id, loc)
+) -> ui.Element_Config(type_of(draw_button)) {
+	ui.declare_id(id, loc)
 	return {draw_button}
 }
 
 draw_button :: proc(
 	label: string,
-	width: Sizing_Axis = {mode = Fit_Size{}},
-	height: Sizing_Axis = {mode = Fixed_Size{32}},
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{32}},
 	kind: Extra_Button_Kind,
 ) -> bool {
 	wrap_id()
 
 	border: Extra_Border_Config
 	background_colors, label_colors: Extra_Element_Colors
-	padding: Layout_Padding = {16, 16, 8, 8}
-	corner_radius: Corner_Radius = {0, 0, 0, 0}
+	padding: ui.Layout_Padding = {16, 16, 8, 8}
+	corner_radius: ui.Corner_Radius = {0, 0, 0, 0}
 
 	switch kind {
 	case .Primary:
@@ -421,44 +422,44 @@ draw_button :: proc(
 button_pro :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_button_pro)) {
-	declare_id(id, loc)
+) -> ui.Element_Config(type_of(draw_button_pro)) {
+	ui.declare_id(id, loc)
 	return {draw_button_pro}
 }
 
 draw_button_pro :: proc(
 	label: string,
-	width: Sizing_Axis = {mode = Grow_Size{}},
-	height: Sizing_Axis = {mode = Fit_Size{}},
+	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	background_colors: Extra_Element_Colors,
 	label_colors: Extra_Element_Colors,
 	border: Extra_Border_Config,
-	padding: Layout_Padding,
-	corner_radius: Corner_Radius,
+	padding: ui.Layout_Padding,
+	corner_radius: ui.Corner_Radius,
 ) -> bool {
 	wrap_id()
-	register_this_focusable()
+	ui.register_this_focusable()
 
-	clicked := is_this_clicked()
+	clicked := ui.is_this_clicked()
 	background_color := background_colors.normal_color
 	label_color := label_colors.normal_color
 	border_color := border.colors.normal_color
 	border_thickness := border.thickness
 
-	if is_this_held() {
+	if ui.is_this_held() {
 		background_color = background_colors.held_color
 		label_color = label_colors.held_color
 		border_color = border.colors.held_color
-	} else if is_this_hovered() {
+	} else if ui.is_this_hovered() {
 		background_color = background_colors.hovered_color
 		label_color = label_colors.hovered_color
 		border_color = border.colors.hovered_color
-	} else if is_this_focused() {
+	} else if ui.is_this_focused() {
 		border_thickness = max(border_thickness, 2)
 		border_color = COLORS[.Focus]
 	}
 
-	if layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).config(
 		width = width,
 		height = height,
 		background_color = background_color,
@@ -467,7 +468,7 @@ draw_button_pro :: proc(
 		border = {thickness = border_thickness, color = border_color},
 		corner_radius = corner_radius,
 	) {
-		text().config(
+		ui.text().config(
 			label,
 			alignment = {.Center, .Center},
 			color = label_color,
@@ -482,8 +483,8 @@ draw_button_pro :: proc(
 tooltip :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_tooltip)) {
-	declare_id(id, loc)
+) -> ui.Element_Config(type_of(draw_tooltip)) {
+	ui.declare_id(id, loc)
 	return {draw_tooltip}
 }
 
@@ -492,7 +493,7 @@ draw_tooltip :: proc(
 	content: string,
 	background_color: [4]u8 = {25, 25, 25, 240},
 	text_color: [4]u8 = [4]u8{222, 23, 23, 255},
-	attach_points: Float_Attach_Points = {
+	attach_points: ui.Float_Attach_Points = {
 		element = .LeftCenter,
 		parent = .RightCenter,
 	},
@@ -500,22 +501,22 @@ draw_tooltip :: proc(
 ) {
 	wrap_id()
 
-	if is_id_hovered(target_id) {
-		if layout(reuse_id = true).config(
-			width = fit(),
-			height = fit(),
+	if ui.is_id_hovered(target_id) {
+		if ui.layout(reuse_id = true).config(
+			width = ui.fit(),
+			height = ui.fit(),
 			background_color = background_color,
-			padding = pad_all(6),
-			corner_radius = corner_radius_all(4),
+			padding = ui.pad_all(6),
+			corner_radius = ui.corner_radius_all(4),
 			pointer_mode = .Ignore,
-			float_mode = Float_At_Id {
+			float_mode = ui.Float_At_Id {
 				attach_id = target_id,
 				offset = offset,
 				attach_points = attach_points,
 				z_index = 1000,
 			},
 		) {
-			text().config(content, color = [4]u8{255, 255, 255, 255})
+			ui.text().config(content, color = [4]u8{255, 255, 255, 255})
 		}
 	}
 }
@@ -524,26 +525,26 @@ draw_tooltip :: proc(
 image :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_image)) {
-	declare_id(id, loc)
+) -> ui.Element_Config(type_of(draw_image)) {
+	ui.declare_id(id, loc)
 	return {draw_image}
 }
 
 draw_image :: proc(
-	texture: Texture_Id,
-	width: Sizing_Axis = {mode = Fixed_Size{200}},
-	height: Sizing_Axis = {mode = Fixed_Size{200}},
-	source: Rect = {},
+	texture: ui.Texture_Id,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
+	source: ui.Rect = {},
 	tint: [4]u8 = [4]u8{255, 255, 255, 255},
-	fit: Image_Fit = .Stretch,
-	npatch: Maybe(Nine_Patch_Config) = nil,
+	fit: ui.Image_Fit = .Stretch,
+	npatch: Maybe(ui.Nine_Patch_Config) = nil,
 ) {
 	// don't need this since only one element
 	// wrap_id()
-	if draw_layout(
+	if ui.draw_layout(
 		width = width,
 		height = height,
-		background_image = Image {
+		background_image = ui.Image {
 			texture = texture,
 			source = source,
 			tint = tint,
@@ -559,33 +560,33 @@ switcher :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 ) -> (
-	config_wrapper: Element_Config(
+	config_wrapper: ui.Element_Config(
 		proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: Sizing_Axis = {mode = Fixed_Size{320}},
-			height: Sizing_Axis = {mode = Fixed_Size{40}},
+			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
+			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{40}},
 		),
 	),
 ) where intrinsics.type_is_enum(E) {
-	declare_id(id, loc)
+	ui.declare_id(id, loc)
 	return {
 		config = proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: Sizing_Axis = {mode = Fixed_Size{320}},
-			height: Sizing_Axis = {mode = Fixed_Size{40}},
+			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
+			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{40}},
 		) {
-			if draw_layout(
+			if ui.draw_layout(
 				width = width,
 				height = height,
 				layout_direction = .Left_To_Right,
 				background_color = COLORS[.Layer_01],
 				border = {thickness = 1, color = COLORS[.Border_Inverse]},
-				padding = pad_all(2),
+				padding = ui.pad_all(2),
 			) {
 				new_option: Maybe(E)
-				for option, i in E {
+				for option in E {
 					is_selected := option == current_option^
 
 					bg_colors: Extra_Element_Colors
@@ -615,10 +616,10 @@ switcher :: proc(
 						}
 					}
 
-					if button_pro(local_id(option_names[option])).config(
+					if button_pro(ui.local_id(option_names[option])).config(
 						label = option_names[option],
-						width = grow(),
-						height = grow(),
+						width = ui.grow(),
+						height = ui.grow(),
 						background_colors = bg_colors,
 						label_colors = lbl_colors,
 						border = {},
