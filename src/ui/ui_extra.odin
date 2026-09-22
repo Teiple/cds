@@ -5,18 +5,18 @@ import "base:runtime"
 import "core:math/rand"
 
 
-UI_Extra_Element_Colors :: struct {
+Extra_Element_Colors :: struct {
 	normal_color:  [4]u8,
 	hovered_color: [4]u8,
 	held_color:    [4]u8,
 }
 
-UI_Extra_Border_Config :: struct {
+Extra_Border_Config :: struct {
 	thickness: f32,
-	colors:    UI_Extra_Element_Colors,
+	colors:    Extra_Element_Colors,
 }
 
-UI_Extra_Button_Kind :: enum {
+Extra_Button_Kind :: enum {
 	Primary,
 	Secondary,
 	Tertiary,
@@ -38,9 +38,9 @@ color_alpha :: proc(c: [4]u8, alpha: f32) -> [4]u8 {
 }
 
 @(private = "file")
-g_ui_extra_builder: UI_Extra_Builder
+g_ui_extra_builder: Extra_Builder
 
-UI_Extra_Builder :: struct {
+Extra_Builder :: struct {
 	last_id:                Maybe(u32),
 	open_vert_scroll_stack: [dynamic]Vert_Scroll_Data,
 }
@@ -81,14 +81,14 @@ g_debug_colors := [?][4]u8 {
 	{86, 86, 86, 255},
 }
 
-UI_Debug_Palette :: struct {
+Debug_Palette :: struct {
 	previous_index:   int,
 	random_state:     runtime.Default_Random_State,
 	random_generator: rand.Generator,
 }
 
 @(private = "file")
-g_debug_palette: UI_Debug_Palette
+g_debug_palette: Debug_Palette
 
 
 get_random_color :: proc(
@@ -155,14 +155,14 @@ Vert_Scroll_Data :: struct #all_or_none {
 vert_scroll :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_vert_scroll)) {
+) -> Element_Config(type_of(draw_vert_scroll)) {
 	declare_id(id, loc)
 	return {draw_vert_scroll}
 }
 
 draw_vert_scroll :: proc(
-	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
-	height: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
+	width: Sizing_Axis = {mode = Grow_Size{}},
+	height: Sizing_Axis = {mode = Grow_Size{}},
 	background_color: [4]u8 = [4]u8{255, 255, 255, 255},
 	scroll_thumb_width: f32 = 16,
 	scroll_thumb_height: f32 = 64,
@@ -232,14 +232,14 @@ end_draw_vert_scroll :: proc() {
 				bar_rect := rect_by_id(scroll_bar_id)
 				thumb_rect := rect_by_id(scroll_thumb_id)
 
-				if mouse_state() == .Pressed {
+				if pointer_state() == .Pressed {
 					scroll_thumb_press_offset =
-						mouse_position() - {thumb_rect.x, thumb_rect.y}
+						pointer_position() - {thumb_rect.x, thumb_rect.y}
 				}
 
-				if mouse_state() == .Down {
+				if pointer_state() == .Down {
 					thumb_desired :=
-						mouse_position() - scroll_thumb_press_offset
+						pointer_position() - scroll_thumb_press_offset
 					thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
 					thumb_range: [2]f32 =
 						{bar_rect.width, bar_rect.height} -
@@ -276,23 +276,23 @@ end_draw_vert_scroll :: proc() {
 button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_button)) {
+) -> Element_Config(type_of(draw_button)) {
 	declare_id(id, loc)
 	return {draw_button}
 }
 
 draw_button :: proc(
 	label: string,
-	width: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
-	height: UI_Sizing_Axis = {mode = UI_Fixed_Size{32}},
-	kind: UI_Extra_Button_Kind,
+	width: Sizing_Axis = {mode = Fit_Size{}},
+	height: Sizing_Axis = {mode = Fixed_Size{32}},
+	kind: Extra_Button_Kind,
 ) -> bool {
 	wrap_id()
 
-	border: UI_Extra_Border_Config
-	background_colors, label_colors: UI_Extra_Element_Colors
-	padding: UI_Layout_Padding = {16, 16, 8, 8}
-	corner_radius: UI_Corner_Radius = {0, 0, 0, 0}
+	border: Extra_Border_Config
+	background_colors, label_colors: Extra_Element_Colors
+	padding: Layout_Padding = {16, 16, 8, 8}
+	corner_radius: Corner_Radius = {0, 0, 0, 0}
 
 	switch kind {
 	case .Primary:
@@ -421,20 +421,20 @@ draw_button :: proc(
 button_pro :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_button_pro)) {
+) -> Element_Config(type_of(draw_button_pro)) {
 	declare_id(id, loc)
 	return {draw_button_pro}
 }
 
 draw_button_pro :: proc(
 	label: string,
-	width: UI_Sizing_Axis = {mode = UI_Grow_Size{}},
-	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
-	background_colors: UI_Extra_Element_Colors,
-	label_colors: UI_Extra_Element_Colors,
-	border: UI_Extra_Border_Config,
-	padding: UI_Layout_Padding,
-	corner_radius: UI_Corner_Radius,
+	width: Sizing_Axis = {mode = Grow_Size{}},
+	height: Sizing_Axis = {mode = Fit_Size{}},
+	background_colors: Extra_Element_Colors,
+	label_colors: Extra_Element_Colors,
+	border: Extra_Border_Config,
+	padding: Layout_Padding,
+	corner_radius: Corner_Radius,
 ) -> bool {
 	wrap_id()
 
@@ -477,7 +477,7 @@ draw_button_pro :: proc(
 tooltip :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_tooltip)) {
+) -> Element_Config(type_of(draw_tooltip)) {
 	declare_id(id, loc)
 	return {draw_tooltip}
 }
@@ -487,7 +487,7 @@ draw_tooltip :: proc(
 	content: string,
 	background_color: [4]u8 = {25, 25, 25, 240},
 	text_color: [4]u8 = [4]u8{222, 23, 23, 255},
-	attach_points: UI_Float_Attach_Points = {
+	attach_points: Float_Attach_Points = {
 		element = .LeftCenter,
 		parent = .RightCenter,
 	},
@@ -502,8 +502,8 @@ draw_tooltip :: proc(
 			background_color = background_color,
 			padding = pad_all(6),
 			corner_radius = corner_radius_all(4),
-			mouse_mode = .Ignore,
-			float_mode = UI_Float_At_Id {
+			pointer_mode = .Ignore,
+			float_mode = Float_At_Id {
 				attach_id = target_id,
 				offset = offset,
 				attach_points = attach_points,
@@ -519,26 +519,26 @@ draw_tooltip :: proc(
 image :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_image)) {
+) -> Element_Config(type_of(draw_image)) {
 	declare_id(id, loc)
 	return {draw_image}
 }
 
 draw_image :: proc(
-	texture: UI_Texture_Id,
-	width: UI_Sizing_Axis = {mode = UI_Fixed_Size{200}},
-	height: UI_Sizing_Axis = {mode = UI_Fixed_Size{200}},
+	texture: Texture_Id,
+	width: Sizing_Axis = {mode = Fixed_Size{200}},
+	height: Sizing_Axis = {mode = Fixed_Size{200}},
 	source: Rect = {},
 	tint: [4]u8 = [4]u8{255, 255, 255, 255},
-	fit: UI_Image_Fit = .Stretch,
-	npatch: Maybe(UI_Nine_Patch_Config) = nil,
+	fit: Image_Fit = .Stretch,
+	npatch: Maybe(Nine_Patch_Config) = nil,
 ) {
 	// don't need this since only one element
 	// wrap_id()
 	if draw_layout(
 		width = width,
 		height = height,
-		background_image = UI_Image {
+		background_image = Image {
 			texture = texture,
 			source = source,
 			tint = tint,
@@ -554,12 +554,12 @@ switcher :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 ) -> (
-	config_wrapper: UI_Element_Config(
+	config_wrapper: Element_Config(
 		proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{320}},
-			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{40}},
+			width: Sizing_Axis = {mode = Fixed_Size{320}},
+			height: Sizing_Axis = {mode = Fixed_Size{40}},
 		),
 	),
 ) where intrinsics.type_is_enum(E) {
@@ -568,8 +568,8 @@ switcher :: proc(
 		config = proc(
 			current_option: ^E,
 			option_names: [E]string,
-			width: UI_Sizing_Axis = {mode = UI_Fixed_Size{320}},
-			height: UI_Sizing_Axis = {mode = UI_Fixed_Size{40}},
+			width: Sizing_Axis = {mode = Fixed_Size{320}},
+			height: Sizing_Axis = {mode = Fixed_Size{40}},
 		) {
 			if draw_layout(
 				width = width,
@@ -583,8 +583,8 @@ switcher :: proc(
 				for option, i in E {
 					is_selected := option == current_option^
 
-					bg_colors: UI_Extra_Element_Colors
-					lbl_colors: UI_Extra_Element_Colors
+					bg_colors: Extra_Element_Colors
+					lbl_colors: Extra_Element_Colors
 
 					if is_selected {
 						bg_colors = {

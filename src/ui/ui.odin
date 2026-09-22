@@ -12,10 +12,10 @@ Rect :: struct {
 	height: f32,
 }
 
-UI_Texture_Id :: distinct u64
-UI_Font_Id :: distinct u32
+Texture_Id :: distinct u64
+Font_Id :: distinct u32
 
-UI_NPatch_Layout :: enum {
+NPatch_Layout :: enum {
 	NINE_PATCH,
 	THREE_PATCH_VERTICAL,
 	THREE_PATCH_HORIZONTAL,
@@ -28,14 +28,14 @@ back :: proc(array: $D/[dynamic]$T) -> T {
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
 @(private = "file")
-g_ui_builder: UI_Builder
+g_ui_builder: Builder
 
-UI_Axis :: enum {
+Axis :: enum {
 	X,
 	Y,
 }
 
-UI_Layout_Mouse_State :: enum {
+Element_Pointer_State :: enum {
 	Away,
 	Pressed,
 	Down,
@@ -43,112 +43,110 @@ UI_Layout_Mouse_State :: enum {
 	Hovered,
 }
 
-UI_Pointer_Kind :: enum {
+Pointer_Kind :: enum {
 	Mouse,
 	Touch,
 }
 
-UI_Pointer_State :: enum {
+Pointer_State :: enum {
 	None,
 	Pressed,
 	Down,
 	Released,
 }
 
-UI_Mouse_State :: UI_Pointer_State
-
-UI_Layout_Mouse_Mode :: enum {
+Pointer_Mode :: enum {
 	Capture,
 	Passthrough,
 	Ignore,
 }
 
-UI_Pointer :: struct {
-	kind:     UI_Pointer_Kind,
-	state:    UI_Pointer_State,
+Pointer :: struct {
+	kind:     Pointer_Kind,
+	state:    Pointer_State,
 	position: [2]f32,
 	delta:    [2]f32,
 	scroll:   [2]f32,
 	is_valid: bool,
 }
 
-UI_Input :: struct {
-	pointer: UI_Pointer,
+Input :: struct {
+	pointer: Pointer,
 }
 
-UI_Input_Event :: struct {
-	mouse_captured:    bool,
+Input_Event :: struct {
+	pointer_captured:  bool,
 	scroll_captured:   bool,
 	selected_once:     bool,
 	hovered_elements:  [dynamic]u32,
 	selected_elements: [dynamic]u32,
 	held_elements:     [dynamic]u32,
 	clicked_elements:  [dynamic]u32,
-	scrolls:           map[u32]UI_Scroll_Data,
+	scrolls:           map[u32]Scroll_Data,
 }
 
-UI_Scroll_Data :: struct #all_or_none {
+Scroll_Data :: struct #all_or_none {
 	offset:         [2]f32,
 	content_size:   [2]f32,
 	min_offset:     [2]f32,
 	pending_offset: Maybe([2]f32),
 }
 
-UI_ClipData :: struct {
+ClipData :: struct {
 	open_clip_stack: [dynamic]Rect,
 }
 
 
-UI_Nine_Patch_Config :: struct {
+Nine_Patch_Config :: struct {
 	source: Rect,
 	left:   i32,
 	top:    i32,
 	right:  i32,
 	bottom: i32,
-	layout: UI_NPatch_Layout,
+	layout: NPatch_Layout,
 }
 
-UI_Image_Fit :: enum {
+Image_Fit :: enum {
 	Stretch,
 	Contain,
 	Cover,
 	Center,
 }
 
-UI_Image :: struct {
-	texture: UI_Texture_Id,
+Image :: struct {
+	texture: Texture_Id,
 	source:  Rect,
 	tint:    [4]u8,
-	fit:     UI_Image_Fit,
-	npatch:  Maybe(UI_Nine_Patch_Config),
+	fit:     Image_Fit,
+	npatch:  Maybe(Nine_Patch_Config),
 }
 
-UI_Image_Command :: struct #all_or_none {
-	texture: UI_Texture_Id,
+Image_Command :: struct #all_or_none {
+	texture: Texture_Id,
 	source:  Rect,
 	dest:    Rect,
-	npatch:  Maybe(UI_Nine_Patch_Config),
+	npatch:  Maybe(Nine_Patch_Config),
 	tint:    [4]u8,
-	fit:     UI_Image_Fit,
+	fit:     Image_Fit,
 }
 
-UI_Render_Command :: union {
-	UI_Rect_Command,
-	UI_Image_Command,
-	UI_Text_Command,
-	UI_Push_Clip_Command,
-	UI_Pop_Clip_Command,
+Render_Command :: union {
+	Rect_Command,
+	Image_Command,
+	Text_Command,
+	Push_Clip_Command,
+	Pop_Clip_Command,
 }
 
-UI_Rect_Command :: struct #all_or_none {
+Rect_Command :: struct #all_or_none {
 	rect:          Rect,
-	corner_radius: UI_Corner_Radius,
-	border:        UI_Border_Config,
+	corner_radius: Corner_Radius,
+	border:        Border_Config,
 	color:         [4]u8,
 }
 
-UI_Text_Command :: struct #all_or_none {
-	font:          UI_Font_Index,
+Text_Command :: struct #all_or_none {
+	font:          Font_Index,
 	rect:          Rect,
 	wrapped_lines: []string,
 	content:       string,
@@ -158,212 +156,212 @@ UI_Text_Command :: struct #all_or_none {
 	color:         [4]u8,
 }
 
-UI_Push_Clip_Command :: struct {
+Push_Clip_Command :: struct {
 	rect: Rect,
 }
 
-UI_Pop_Clip_Command :: struct {}
+Pop_Clip_Command :: struct {}
 
-UI_Pointer_Config :: struct {
-	texture_id: UI_Texture_Id,
+Pointer_Config :: struct {
+	texture_id: Texture_Id,
 	size:       f32,
 	offset:     [2]f32,
 }
 
-UI_Pointer_Attributes :: struct {
-	config: UI_Pointer_Config,
+Pointer_Attributes :: struct {
+	config: Pointer_Config,
 }
 
 
-UI_Glyph :: struct {
+Glyph :: struct {
 	xadvance: f32,
 }
 
-UI_Font :: struct {
+Font :: struct {
 	base_size: f32,
 	spacing:   f32,
-	glyphs:    [96]UI_Glyph,
+	glyphs:    [96]Glyph,
 }
 
-UI_Font_Config :: struct {
+Font_Config :: struct {
 	base_size: f32,
 	spacing:   f32,
 }
 
-UI_Builder :: struct {
-	current_context: ^UI_Context,
+Builder :: struct {
+	current_context: ^Context,
 	last_id:         u32,
-	context_events:  UI_Context_Events,
+	context_events:  Context_Events,
 }
 
-UI_CTX_MAX_EVENT_LISTENERS :: 3
-UI_Context_Events :: struct {
-	on_make:   [dynamic; UI_CTX_MAX_EVENT_LISTENERS]proc(),
-	on_delete: [dynamic; UI_CTX_MAX_EVENT_LISTENERS]proc(),
-	on_begin:  [dynamic; UI_CTX_MAX_EVENT_LISTENERS]proc(),
-	on_end:    [dynamic; UI_CTX_MAX_EVENT_LISTENERS]proc(),
+CTX_MAX_EVENT_LISTENERS :: 3
+Context_Events :: struct {
+	on_make:   [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_delete: [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_begin:  [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
+	on_end:    [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
 }
 
-UI_Context :: struct {
+Context :: struct {
 	canvas_size:        [2]f32,
-	elements:           [dynamic]UI_Element,
-	open_layout_stack:  [dynamic]UI_Index,
-	growable_buffer:    [dynamic]UI_Index,
+	elements:           [dynamic]Element,
+	open_layout_stack:  [dynamic]Index,
+	growable_buffer:    [dynamic]Index,
 	wrapped_text_lines: [dynamic]string,
-	render_commands:    [dynamic]UI_Render_Command,
-	pointer:            UI_Pointer_Attributes,
-	fonts:              []UI_Font,
-	input:              UI_Input,
-	input_event:        UI_Input_Event,
-	clip:               UI_ClipData,
-	ids:                map[u32]UI_Id_Info,
-	floats:             [dynamic]UI_Index,
+	render_commands:    [dynamic]Render_Command,
+	pointer:            Pointer_Attributes,
+	fonts:              []Font,
+	input:              Input,
+	input_event:        Input_Event,
+	clip:               ClipData,
+	ids:                map[u32]Id_Info,
+	floats:             [dynamic]Index,
 	bounds:             map[u32]Rect,
 }
 
 
-UI_Id_Info :: struct {
+Id_Info :: struct {
 	base:       u32,
-	index:      UI_Index,
+	index:      Index,
 	loop_count: i32,
 }
 
-UI_Sizing_Axis :: struct {
-	mode: UI_Size_Mode,
+Sizing_Axis :: struct {
+	mode: Size_Mode,
 	min:  Maybe(f32),
 	max:  Maybe(f32),
 }
 
-UI_Size_Mode :: union #no_nil {
-	UI_Fit_Size,
-	UI_Grow_Size,
-	UI_Percent_Size,
-	UI_Fixed_Size,
+Size_Mode :: union #no_nil {
+	Fit_Size,
+	Grow_Size,
+	Percent_Size,
+	Fixed_Size,
 }
 
-UI_Grow_Size :: struct {}
-UI_Fit_Size :: struct {}
-UI_Fixed_Size :: struct {
+Grow_Size :: struct {}
+Fit_Size :: struct {}
+Fixed_Size :: struct {
 	value: f32,
 }
-UI_Percent_Size :: struct {
+Percent_Size :: struct {
 	value: f32,
 }
 
-UI_Layout_Direction :: enum {
+Layout_Direction :: enum {
 	Left_To_Right,
 	Top_To_Bottom,
 }
 
-UI_Layout_Padding :: struct {
+Layout_Padding :: struct {
 	left:   f32,
 	right:  f32,
 	top:    f32,
 	bottom: f32,
 }
 
-UI_Corner_Radius :: struct {
+Corner_Radius :: struct {
 	top_left:     f32,
 	top_right:    f32,
 	bottom_right: f32,
 	bottom_left:  f32,
 }
 
-UI_Alignment :: struct {
+Alignment :: struct {
 	x: union {
 		f32,
-		UI_Alignment_X,
+		Alignment_X,
 	},
 	y: union {
 		f32,
-		UI_Alignment_Y,
+		Alignment_Y,
 	},
 }
 
 
-UI_Alignment_X :: enum {
+Alignment_X :: enum {
 	Left,
 	Center,
 	Right,
 }
 
-UI_Alignment_Y :: enum {
+Alignment_Y :: enum {
 	Top,
 	Center,
 	Bottom,
 }
 
-UI_Index :: i32
-UI_Font_Index :: i32
+Index :: i32
+Font_Index :: i32
 
-UI_Border_Config :: struct #all_or_none {
+Border_Config :: struct #all_or_none {
 	thickness: f32,
 	color:     [4]u8,
 }
 
-UI_Normalized_End :: enum {
+Normalized_End :: enum {
 	Start,
 	End,
 }
 
-UI_Element_Link :: struct {
-	parent: UI_Index,
-	next:   Maybe(UI_Index),
-	prev:   Maybe(UI_Index),
-	last:   Maybe(UI_Index),
+Element_Link :: struct {
+	parent: Index,
+	next:   Maybe(Index),
+	prev:   Maybe(Index),
+	last:   Maybe(Index),
 }
 
-UI_Layout_Config :: struct {
-	width:            UI_Size_Mode,
-	height:           UI_Size_Mode,
-	padding:          UI_Layout_Padding,
+Layout_Config :: struct {
+	width:            Size_Mode,
+	height:           Size_Mode,
+	padding:          Layout_Padding,
 	child_gap:        f32,
-	layout_direction: UI_Layout_Direction,
+	layout_direction: Layout_Direction,
 	child_alignment:  [2]f32,
 	background_color: [4]u8,
-	background_image: Maybe(UI_Image),
-	corner_radius:    UI_Corner_Radius,
-	border:           UI_Border_Config,
-	mouse_mode:       UI_Layout_Mouse_Mode,
+	background_image: Maybe(Image),
+	corner_radius:    Corner_Radius,
+	border:           Border_Config,
+	pointer_mode:     Pointer_Mode,
 	clip:             bool,
 	scroll:           bool,
 	ignore_scroll:    bool,
-	float_mode:       UI_Float_Mode,
+	float_mode:       Float_Mode,
 	offset:           [2]f32,
 }
 
 
-UI_Float_Mode :: union {
-	UI_Float_None,
-	UI_Float_At_Parent,
-	UI_Float_At_Id,
-	UI_Float_At_Root,
+Float_Mode :: union {
+	Float_None,
+	Float_At_Parent,
+	Float_At_Id,
+	Float_At_Root,
 }
 
-UI_Float_None :: struct {}
-UI_Float_At_Id :: struct {
+Float_None :: struct {}
+Float_At_Id :: struct {
 	attach_id: u32,
-	using _:   UI_Float_Config,
+	using _:   Float_Config,
 }
-UI_Float_At_Parent :: struct {
-	using _: UI_Float_Config,
+Float_At_Parent :: struct {
+	using _: Float_Config,
 }
-UI_Float_At_Root :: struct {
-	using _: UI_Float_Config,
-}
-
-UI_Float_Attach_Points :: struct {
-	element: UI_Anchor_Point,
-	parent:  UI_Anchor_Point,
+Float_At_Root :: struct {
+	using _: Float_Config,
 }
 
-UI_Float_Config :: struct {
-	attach_points: UI_Float_Attach_Points,
+Float_Attach_Points :: struct {
+	element: Anchor_Point,
+	parent:  Anchor_Point,
+}
+
+Float_Config :: struct {
+	attach_points: Float_Attach_Points,
 	offset:        [2]f32,
 	z_index:       i32,
 }
 
-UI_Anchor_Point :: enum {
+Anchor_Point :: enum {
 	LeftTop,
 	LeftCenter,
 	LeftBottom,
@@ -375,61 +373,61 @@ UI_Anchor_Point :: enum {
 	RightBottom,
 }
 
-UI_Text_Config :: struct {
+Text_Config :: struct {
 	content:      string,
-	font_index:   UI_Font_Index,
+	font_index:   Font_Index,
 	font_size:    f32,
 	color:        [4]u8,
 	line_spacing: f32,
 	alignment:    [2]f32,
 }
 
-UI_Element :: struct {
+Element :: struct {
 	position:   [2]f32,
 	size:       [2]f32,
-	limits:     UI_Limits,
-	link:       UI_Element_Link,
+	limits:     Limits,
+	link:       Element_Link,
 	id:         u32,
 	attributes: union {
-		UI_Layout_Attributes,
-		UI_Text_Attributes,
+		Layout_Attributes,
+		Text_Attributes,
 	},
 }
 
-UI_Element_Bound :: struct {
+Element_Bound :: struct {
 	position: [2]f32,
 	size:     [2]f32,
 }
 
-UI_Axis_Limits :: struct {
+Axis_Limits :: struct {
 	min: Maybe(f32),
 	max: Maybe(f32),
 }
 
-UI_Limits :: struct {
-	x: UI_Axis_Limits,
-	y: UI_Axis_Limits,
+Limits :: struct {
+	x: Axis_Limits,
+	y: Axis_Limits,
 }
 
-UI_Layout_Attributes :: struct {
-	config: UI_Layout_Config,
+Layout_Attributes :: struct {
+	config: Layout_Config,
 }
 
-UI_Text_Attributes :: struct {
-	config:                   UI_Text_Config,
+Text_Attributes :: struct {
+	config:                   Text_Config,
 	preferred_size:           [2]f32,
 	bound_size:               [2]f32,
 	wrapped_text_lines_start: i32,
 	wrapped_text_lines_count: i32,
 }
 
-UI_Child_Iter :: struct {
-	ctx:  ^UI_Context,
-	next: Maybe(UI_Index),
+Child_Iter :: struct {
+	ctx:  ^Context,
+	next: Maybe(Index),
 }
 
 @(require_results)
-push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
+push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: u32) -> u32 {
 	if id_entry, ok := ctx.ids[id]; ok {
 		id_entry.loop_count += 1
 
@@ -458,7 +456,7 @@ push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 	}
 }
 
-push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
+push_id :: proc(ctx: ^Context, index: Index, id: u32) {
 	_, existed := ctx.ids[id]
 	if existed {
 		panic("Duplicate ids without manualy using dedupe")
@@ -470,26 +468,26 @@ push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 	}
 }
 
-is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
+is_floating_element :: proc(ctx: ^Context, index: Index) -> bool {
 	ele := &ctx.elements[index]
-	if attr, ok := ele.attributes.(UI_Layout_Attributes); ok {
-		return attr.config.float_mode != UI_Float_None{}
+	if attr, ok := ele.attributes.(Layout_Attributes); ok {
+		return attr.config.float_mode != Float_None{}
 	}
 	return false
 }
 
 open_layout :: proc(
-	ctx: ^UI_Context,
+	ctx: ^Context,
 	id: u32,
-	config: UI_Layout_Config,
-	limits: UI_Limits,
+	config: Layout_Config,
+	limits: Limits,
 ) -> bool {
 	parent := back(ctx.open_layout_stack)
-	index := UI_Index(len(ctx.elements))
+	index := Index(len(ctx.elements))
 
-	ui_ele := UI_Element {
+	ui_ele := Element {
 		id = id,
-		attributes = UI_Layout_Attributes{config = config},
+		attributes = Layout_Attributes{config = config},
 		limits = limits,
 	}
 
@@ -513,13 +511,13 @@ open_layout :: proc(
 	return true
 }
 
-open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
+open_text :: proc(ctx: ^Context, id: u32, config: Text_Config) {
 	parent_idx := back(ctx.open_layout_stack)
-	index := UI_Index(len(ctx.elements))
+	index := Index(len(ctx.elements))
 
-	ui_ele := UI_Element {
+	ui_ele := Element {
 		id = id,
-		attributes = UI_Text_Attributes{config = config},
+		attributes = Text_Attributes{config = config},
 		limits = {},
 	}
 
@@ -538,12 +536,12 @@ open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	calculate_text_width(ctx, index)
 }
 
-close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
+close_layout :: proc(ctx: ^Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
 }
 
-measure_text_width :: proc(input: UI_Text_Config, font_info: UI_Font) -> f32 {
+measure_text_width :: proc(input: Text_Config, font_info: Font) -> f32 {
 	scale :=
 		font_info.base_size > 0 ? (input.font_size / font_info.base_size) : 1.0
 	width: f32 = 0
@@ -556,9 +554,9 @@ measure_text_width :: proc(input: UI_Text_Config, font_info: UI_Font) -> f32 {
 	return width
 }
 
-calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
+calculate_text_width :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
-	text_attr, ok := &current.attributes.(UI_Text_Attributes)
+	text_attr, ok := &current.attributes.(Text_Attributes)
 	if !ok do return
 
 	content := text_attr.config.content
@@ -635,7 +633,7 @@ calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current.size.x = clamp_element_size(current.size.x, current.limits.x)
 }
 
-clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
+clamp_element_size :: proc(current_size: f32, limits: Axis_Limits) -> f32 {
 	res := current_size
 	if min_size, ok := limits.min.(f32); ok && res <= min_size {
 		res = min_size
@@ -646,12 +644,12 @@ clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	return res
 }
 
-fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
+fit_sizing :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(UI_Layout_Attributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok do return
 
-	if fixed_val, ok := layout_get_mode(layout, axis).(UI_Fixed_Size); ok {
+	if fixed_val, ok := layout_get_mode(layout, axis).(Fixed_Size); ok {
 		ele_set_min(current, fixed_val.value, axis)
 		ele_set_max(current, fixed_val.value, axis)
 		ele_set_size(current, fixed_val.value, axis)
@@ -687,7 +685,7 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	children_size += padding
 	children_min_size += padding
 
-	if mode, ok := layout_get_mode(layout, axis).(UI_Fit_Size); ok {
+	if mode, ok := layout_get_mode(layout, axis).(Fit_Size); ok {
 		ele_set_min(
 			current,
 			max(ele_get_min(current, axis), children_min_size),
@@ -701,20 +699,16 @@ fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	)
 }
 
-fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
+fit_sizing_tree :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		fit_sizing_tree(ctx, child_index, axis)
 	}
 	fit_sizing(ctx, index, axis)
 }
 
-grow_and_percent_sizing :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index,
-	axis: UI_Axis,
-) {
+grow_and_percent_sizing :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(UI_Layout_Attributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok || current.link.last == nil do return
 
 	available := ele_get_size(current, axis) - layout_get_pad(layout, axis)
@@ -731,7 +725,7 @@ grow_and_percent_sizing :: proc(
 			} else if percent_size, ok := layout_get_mode(
 				   child^,
 				   axis,
-			   ).(UI_Percent_Size); ok {
+			   ).(Percent_Size); ok {
 				ele_set_size(
 					child,
 					clamp_element_size(
@@ -764,7 +758,7 @@ grow_and_percent_sizing :: proc(
 		} else if percent_size, ok := layout_get_mode(
 			   child^,
 			   axis,
-		   ).(UI_Percent_Size); ok {
+		   ).(Percent_Size); ok {
 			ele_set_size(
 				child,
 				clamp_element_size(
@@ -892,11 +886,7 @@ grow_and_percent_sizing :: proc(
 	}
 }
 
-grow_and_percent_sizing_tree :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index,
-	axis: UI_Axis,
-) {
+grow_and_percent_sizing_tree :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	grow_and_percent_sizing(ctx, index, axis)
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		grow_and_percent_sizing_tree(ctx, child_index, axis)
@@ -912,9 +902,9 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 	return false
 }
 
-wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 	for it := child_iter_start(ctx, index); ele, child_index in child_iter_next(&it) {
-		text_attr, ok := (&ele.attributes.(UI_Text_Attributes))
+		text_attr, ok := (&ele.attributes.(Text_Attributes))
 		if !ok { 	// layout
 			wrap_texts(ctx, child_index)
 			continue
@@ -1048,11 +1038,11 @@ wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 }
 
 
-get_anchor_point :: proc(ele: UI_Element, anchor: UI_Anchor_Point) -> [2]f32 {
+get_anchor_point :: proc(ele: Element, anchor: Anchor_Point) -> [2]f32 {
 	return ele.position + ele.size * get_anchor_offset(anchor)
 }
 
-get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
+get_anchor_offset :: proc(anchor: Anchor_Point) -> [2]f32 {
 	switch anchor {
 	case .LeftTop:
 		return {0, 0}
@@ -1076,11 +1066,11 @@ get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
 	return {0, 0}
 }
 
-calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
+calculate_position :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	current := &ctx.elements[index]
-	layout, ok := current.attributes.(UI_Layout_Attributes)
+	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
-		text_attr := current.attributes.(UI_Text_Attributes)
+		text_attr := current.attributes.(Text_Attributes)
 
 		if ele_get_size(current, axis) > text_get_preferred(text_attr, axis) {
 			remaining :=
@@ -1126,7 +1116,7 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	}
 
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
-		child_layout, is_child_layout := child.attributes.(UI_Layout_Attributes)
+		child_layout, is_child_layout := child.attributes.(Layout_Attributes)
 		child_offset :=
 			offset +
 			(is_child_layout ? ((child_layout.config.ignore_scroll ? -scroll_offset : 0) + layout_get_final_offset(child_layout, axis)) : 0)
@@ -1152,41 +1142,38 @@ calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	}
 }
 
-make_context :: proc(
-	fonts: []UI_Font,
-	pointer: UI_Pointer_Config = {},
-) -> UI_Context {
+make_context :: proc(fonts: []Font, pointer: Pointer_Config = {}) -> Context {
 	for event in g_ui_builder.context_events.on_make {
 		event()
 	}
 
-	fonts_copy := make([]UI_Font, len(fonts))
+	fonts_copy := make([]Font, len(fonts))
 	copy(fonts_copy, fonts)
 
-	return UI_Context {
-		elements = make([dynamic]UI_Element, 0, 5),
-		open_layout_stack = make([dynamic]UI_Index, 0, 5),
-		render_commands = make([dynamic]UI_Render_Command, 0, 5),
-		growable_buffer = make([dynamic]UI_Index, 0, 5),
+	return Context {
+		elements = make([dynamic]Element, 0, 5),
+		open_layout_stack = make([dynamic]Index, 0, 5),
+		render_commands = make([dynamic]Render_Command, 0, 5),
+		growable_buffer = make([dynamic]Index, 0, 5),
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		pointer = {config = pointer},
 		fonts = fonts_copy,
 		input_event = {
-			mouse_captured = false,
+			pointer_captured = false,
 			hovered_elements = make([dynamic]u32, 0, 4),
 			selected_elements = make([dynamic]u32, 0, 4),
 			held_elements = make([dynamic]u32, 0, 4),
 			clicked_elements = make([dynamic]u32, 0, 4),
-			scrolls = make(map[u32]UI_Scroll_Data, 4),
+			scrolls = make(map[u32]Scroll_Data, 4),
 		},
 		clip = {open_clip_stack = make([dynamic]Rect, 0, 2)},
-		ids = make(map[u32]UI_Id_Info, 50),
-		floats = make([dynamic]UI_Index, 0, 4),
+		ids = make(map[u32]Id_Info, 50),
+		floats = make([dynamic]Index, 0, 4),
 		bounds = make(map[u32]Rect, 50),
 	}
 }
 
-delete_context :: proc(ctx: UI_Context) {
+delete_context :: proc(ctx: Context) {
 	for event in g_ui_builder.context_events.on_delete {
 		event()
 	}
@@ -1210,7 +1197,7 @@ delete_context :: proc(ctx: UI_Context) {
 }
 
 @(require_results, deferred_in_out = end)
-begin :: proc(ctx: ^UI_Context, canvas_size: [2]f32, input: UI_Input) -> bool {
+begin :: proc(ctx: ^Context, canvas_size: [2]f32, input: Input) -> bool {
 	g_ui_builder.current_context = ctx
 	for p in g_ui_builder.context_events.on_begin do p()
 
@@ -1232,7 +1219,7 @@ begin :: proc(ctx: ^UI_Context, canvas_size: [2]f32, input: UI_Input) -> bool {
 	return true
 }
 
-end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
+end :: proc(ctx: ^Context, _: [2]f32, _: Input, ok: bool) {
 	if !ok do return
 
 	// close root
@@ -1262,9 +1249,9 @@ end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 		generate_commands(ctx, idx)
 	}
 
-	// mouse input
+	// pointer input
 	{
-		ctx.input_event.mouse_captured = false
+		ctx.input_event.pointer_captured = false
 		ctx.input_event.scroll_captured = false
 		ctx.input_event.selected_once = false
 
@@ -1272,13 +1259,13 @@ end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 		clear(&ctx.input_event.clicked_elements)
 		clear(&ctx.clip.open_clip_stack)
 
-		// detect mouse input on floats first, in reverse z index order
+		// detect pointer input on floats first, in reverse z index order
 		#reverse for idx in ctx.floats {
-			detect_mouse(ctx, idx)
-			if ctx.input_event.mouse_captured && ctx.input_event.scroll_captured do break
+			detect_pointer(ctx, idx)
+			if ctx.input_event.pointer_captured && ctx.input_event.scroll_captured do break
 		}
 		// then the normal layout layer
-		detect_mouse(ctx, 0)
+		detect_pointer(ctx, 0)
 
 		if ctx.input.pointer.state == .Released {
 			clear(&ctx.input_event.held_elements)
@@ -1295,14 +1282,14 @@ end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 	for p in g_ui_builder.context_events.on_end do p()
 }
 
-handle_floats :: proc(ctx: ^UI_Context) {
+handle_floats :: proc(ctx: ^Context) {
 	grow_and_percent_float_root :: proc(
-		ctx: ^UI_Context,
-		index: UI_Index,
-		axis: UI_Axis,
+		ctx: ^Context,
+		index: Index,
+		axis: Axis,
 	) {
 		current := &ctx.elements[index]
-		layout := ctx.elements[index].attributes.(UI_Layout_Attributes)
+		layout := ctx.elements[index].attributes.(Layout_Attributes)
 
 		float_parent_index, _ := get_float_target(
 			ctx^,
@@ -1313,13 +1300,13 @@ handle_floats :: proc(ctx: ^UI_Context) {
 		float_parent := &ctx.elements[float_parent_index]
 
 		#partial switch mode in layout_get_mode(layout, axis) {
-		case UI_Grow_Size:
+		case Grow_Size:
 			size := clamp_element_size(
 				ele_get_size(float_parent, axis),
 				ele_get_lims(current, axis),
 			)
 			ele_set_size(current, size, axis)
-		case UI_Percent_Size:
+		case Percent_Size:
 			size := clamp_element_size(
 				mode.value * ele_get_size(float_parent, axis),
 				ele_get_lims(current, axis),
@@ -1328,9 +1315,9 @@ handle_floats :: proc(ctx: ^UI_Context) {
 		}
 	}
 
-	calculate_float_root_position :: proc(ctx: ^UI_Context, index: UI_Index) {
+	calculate_float_root_position :: proc(ctx: ^Context, index: Index) {
 		ele := &ctx.elements[index]
-		layout := ele.attributes.(UI_Layout_Attributes)
+		layout := ele.attributes.(Layout_Attributes)
 
 		target_index, float_config := get_float_target(
 			ctx^,
@@ -1370,16 +1357,16 @@ handle_floats :: proc(ctx: ^UI_Context) {
 }
 
 
-generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
+generate_commands :: proc(ctx: ^Context, index: Index) {
 	ele := &ctx.elements[index]
 
 	switch attr in ele.attributes {
-	case UI_Layout_Attributes:
+	case Layout_Attributes:
 		if attr.config.background_color.a > 0 ||
 		   attr.config.border.thickness > 0 {
 			append(
 				&ctx.render_commands,
-				UI_Rect_Command{
+				Rect_Command{
 					rect = {
 						ele.position.x,
 						ele.position.y,
@@ -1395,7 +1382,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 		if bg_img, ok := attr.config.background_image.?; ok {
 			append(
 				&ctx.render_commands,
-				UI_Image_Command{
+				Image_Command{
 					texture = bg_img.texture,
 					source = bg_img.source,
 					dest = {
@@ -1413,7 +1400,7 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 		if attr.config.clip && !is_floating_element(ctx, index) {
 			append(
 				&ctx.render_commands,
-				UI_Push_Clip_Command{
+				Push_Clip_Command{
 					rect = {
 						ele.position.x,
 						ele.position.y,
@@ -1423,10 +1410,10 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 				},
 			)
 		}
-	case UI_Text_Attributes:
+	case Text_Attributes:
 		append(
 			&ctx.render_commands,
-			UI_Text_Command{
+			Text_Command{
 				content = attr.config.content,
 				font = attr.config.font_index,
 				font_size = attr.config.font_size,
@@ -1448,25 +1435,25 @@ generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 		generate_commands(ctx, child_index)
 	}
 
-	if layout_attr, ok := ele.attributes.(UI_Layout_Attributes);
+	if layout_attr, ok := ele.attributes.(Layout_Attributes);
 	   ok && layout_attr.config.clip && !is_floating_element(ctx, index) {
-		append(&ctx.render_commands, UI_Pop_Clip_Command{})
+		append(&ctx.render_commands, Pop_Clip_Command{})
 	}
 }
 
-detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
-	detect_mouse_should_stop :: proc(input_event: UI_Input_Event) -> bool {
-		return input_event.mouse_captured && input_event.scroll_captured
+detect_pointer :: proc(ctx: ^Context, index: Index) {
+	detect_pointer_should_stop :: proc(input_event: Input_Event) -> bool {
+		return input_event.pointer_captured && input_event.scroll_captured
 	}
 
-	if detect_mouse_should_stop(ctx.input_event) {
+	if detect_pointer_should_stop(ctx.input_event) {
 		return
 	}
 
-	travel_tree_reverse(ctx, index, on_down = proc(ctx: ^UI_Context, idx: i32) -> (stop: bool) {
+	travel_tree_reverse(ctx, index, on_down = proc(ctx: ^Context, idx: i32) -> (stop: bool) {
 			ele := ctx.elements[idx]
 
-			layout := ele.attributes.(UI_Layout_Attributes) or_return
+			layout := ele.attributes.(Layout_Attributes) or_return
 			ele_rect := ele_get_rect(ele)
 
 			if layout.config.clip && !is_floating_element(ctx, idx) {
@@ -1478,22 +1465,22 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 			}
 
 			return
-		}, on_up = proc(ctx: ^UI_Context, idx: i32) -> (stop: bool) {
+		}, on_up = proc(ctx: ^Context, idx: i32) -> (stop: bool) {
 			ele := ctx.elements[idx]
 
-			layout, ok := ele.attributes.(UI_Layout_Attributes)
+			layout, ok := ele.attributes.(Layout_Attributes)
 			if !ok do return
 
 			defer if layout.config.clip && !is_floating_element(ctx, idx) {
 				pop(&ctx.clip.open_clip_stack)
 			}
 
-			if layout.config.mouse_mode == .Ignore do return
+			if layout.config.pointer_mode == .Ignore do return
 			if !ctx.input.pointer.is_valid do return
 
 			clipped_rect: Rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
-			if !ctx.input_event.mouse_captured {
+			if !ctx.input_event.pointer_captured {
 				if len(ctx.clip.open_clip_stack) > 0 {
 					clipped_rect = intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
 				}
@@ -1517,8 +1504,8 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 					append(&ctx.input_event.hovered_elements, ele.id)
 
-					if layout.config.mouse_mode == .Capture {
-						ctx.input_event.mouse_captured = true
+					if layout.config.pointer_mode == .Capture {
+						ctx.input_event.pointer_captured = true
 					}
 				}
 			}
@@ -1553,17 +1540,17 @@ detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 				}
 			}
 
-			stop = detect_mouse_should_stop(ctx.input_event)
+			stop = detect_pointer_should_stop(ctx.input_event)
 
 			return
 		})
 }
 
 travel_tree_reverse :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index = 0,
-	on_up: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
-	on_down: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
+	ctx: ^Context,
+	index: Index = 0,
+	on_up: proc(ctx: ^Context, index: Index) -> bool = nil,
+	on_down: proc(ctx: ^Context, index: Index) -> bool = nil,
 ) -> bool {
 	if on_down != nil && on_down(ctx, index) do return true
 	it := child_iter_reverse_start(ctx, index)
@@ -1576,17 +1563,17 @@ travel_tree_reverse :: proc(
 	return false
 }
 
-root_layout :: proc(screen_size: [2]f32) -> UI_Element {
-	return UI_Element {
+root_layout :: proc(screen_size: [2]f32) -> Element {
+	return Element {
 		id = 0,
 		position = {0, 0},
 		size = {screen_size.x, screen_size.y},
 		limits = {},
-		attributes = UI_Layout_Attributes {
-			config = UI_Layout_Config {
+		attributes = Layout_Attributes {
+			config = Layout_Config {
 				child_gap = 2,
-				width = UI_Fixed_Size{screen_size.x},
-				height = UI_Fixed_Size{screen_size.y},
+				width = Fixed_Size{screen_size.x},
+				height = Fixed_Size{screen_size.y},
 				layout_direction = .Top_To_Bottom,
 				padding = pad_all(2),
 				background_color = {},
@@ -1596,14 +1583,13 @@ root_layout :: proc(screen_size: [2]f32) -> UI_Element {
 }
 
 child_iter_start :: proc(
-	ctx: ^UI_Context,
-	start_index: UI_Index,
+	ctx: ^Context,
+	start_index: Index,
 	exclude_floats := true,
-) -> UI_Child_Iter {
+) -> Child_Iter {
 	start := ctx.elements[start_index]
 
-	next_index: Maybe(UI_Index) =
-		start.link.last != nil ? start_index + 1 : nil
+	next_index: Maybe(Index) = start.link.last != nil ? start_index + 1 : nil
 
 	// Forwards until we find non float
 	for next_index != nil && is_floating_element(ctx, next_index.?) {
@@ -1614,10 +1600,10 @@ child_iter_start :: proc(
 }
 
 child_iter_next :: proc(
-	it: ^UI_Child_Iter,
+	it: ^Child_Iter,
 ) -> (
-	child: ^UI_Element,
-	child_index: UI_Index,
+	child: ^Element,
+	child_index: Index,
 	cond: bool,
 ) {
 	if it.next == nil {
@@ -1638,9 +1624,9 @@ child_iter_next :: proc(
 }
 
 child_iter_reverse_start :: proc(
-	ctx: ^UI_Context,
-	start_index: UI_Index,
-) -> UI_Child_Iter {
+	ctx: ^Context,
+	start_index: Index,
+) -> Child_Iter {
 	start := ctx.elements[start_index]
 	next_index := start.link.last
 
@@ -1653,10 +1639,10 @@ child_iter_reverse_start :: proc(
 }
 
 child_iter_reverse_next :: proc(
-	it: ^UI_Child_Iter,
+	it: ^Child_Iter,
 ) -> (
-	child: ^UI_Element,
-	child_index: UI_Index,
+	child: ^Element,
+	child_index: Index,
 	cond: bool,
 ) {
 	if it.next == nil {
@@ -1677,52 +1663,52 @@ child_iter_reverse_next :: proc(
 }
 
 get_float_target :: proc(
-	ctx: UI_Context,
-	index: UI_Index,
-	float_mode: UI_Float_Mode,
+	ctx: Context,
+	index: Index,
+	float_mode: Float_Mode,
 ) -> (
-	target_index: UI_Index,
-	config: UI_Float_Config,
+	target_index: Index,
+	config: Float_Config,
 ) {
 	ele := ctx.elements[index]
 	switch mode in float_mode {
-	case UI_Float_At_Parent:
+	case Float_At_Parent:
 		{
 			parent_idx := ele.link.parent
 			target_index = parent_idx
 			config = mode
 		}
-	case UI_Float_At_Id:
+	case Float_At_Id:
 		{
 			id_entry, existed := ctx.ids[mode.attach_id]
 			assert(existed)
 			target_index = id_entry.index
 			config = mode
 		}
-	case UI_Float_At_Root:
+	case Float_At_Root:
 		{
 			target_index = 0
 			config = mode
 		}
-	case UI_Float_None:
+	case Float_None:
 		panic("Element doesn't float")
 	}
 	return
 }
 
-is_grow_layout_or_text :: proc(ele: UI_Element, axis: UI_Axis) -> bool {
+is_grow_layout_or_text :: proc(ele: Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
-	case UI_Text_Attributes:
+	case Text_Attributes:
 		{
 			return true
 		}
-	case UI_Layout_Attributes:
+	case Layout_Attributes:
 		{
 			if axis == .X {
-				_, ok := attr.config.width.(UI_Grow_Size)
+				_, ok := attr.config.width.(Grow_Size)
 				return ok
 			} else {
-				_, ok := attr.config.height.(UI_Grow_Size)
+				_, ok := attr.config.height.(Grow_Size)
 				return ok
 			}
 		}
@@ -1731,7 +1717,7 @@ is_grow_layout_or_text :: proc(ele: UI_Element, axis: UI_Axis) -> bool {
 }
 
 @(private = "file")
-layout_get_pad :: proc(layout: UI_Layout_Attributes, axis: UI_Axis) -> f32 {
+layout_get_pad :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return(
 		axis == .X ? layout.config.padding.left + layout.config.padding.right : layout.config.padding.top + layout.config.padding.bottom \
 	)
@@ -1739,10 +1725,10 @@ layout_get_pad :: proc(layout: UI_Layout_Attributes, axis: UI_Axis) -> f32 {
 
 @(private = "file")
 layout_get_content_size :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index,
-	layout: UI_Layout_Attributes,
-	axis: UI_Axis,
+	ctx: ^Context,
+	index: Index,
+	layout: Layout_Attributes,
+	axis: Axis,
 ) -> f32 {
 	content_size: f32 = 0
 	if layout_is_along(layout, axis) {
@@ -1765,9 +1751,9 @@ layout_get_content_size :: proc(
 
 @(private = "file")
 layout_get_pad_at :: proc(
-	layout: UI_Layout_Attributes,
-	axis: UI_Axis,
-	end: UI_Normalized_End,
+	layout: Layout_Attributes,
+	axis: Axis,
+	end: Normalized_End,
 ) -> f32 {
 	return(
 		axis == .X ? (end == .Start ? layout.config.padding.left : layout.config.padding.right) : (end == .Start ? layout.config.padding.top : layout.config.padding.bottom) \
@@ -1782,97 +1768,91 @@ layout_get_mode :: proc {
 
 @(private = "file")
 layout_get_mode_from_attr :: proc(
-	layout: UI_Layout_Attributes,
-	axis: UI_Axis,
-) -> UI_Size_Mode {
+	layout: Layout_Attributes,
+	axis: Axis,
+) -> Size_Mode {
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
 @(private = "file")
-layout_get_mode_from_ele :: proc(
-	element: UI_Element,
-	axis: UI_Axis,
-) -> UI_Size_Mode {
-	layout := element.attributes.(UI_Layout_Attributes)
+layout_get_mode_from_ele :: proc(element: Element, axis: Axis) -> Size_Mode {
+	layout := element.attributes.(Layout_Attributes)
 	return axis == .X ? layout.config.width : layout.config.height
 }
 
 @(private = "file")
-layout_is_along :: proc(layout: UI_Layout_Attributes, axis: UI_Axis) -> bool {
+layout_is_along :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	return(
 		axis == .X ? layout.config.layout_direction == .Left_To_Right : layout.config.layout_direction == .Top_To_Bottom \
 	)
 }
 
 @(private = "file")
-layout_is_across :: proc(layout: UI_Layout_Attributes, axis: UI_Axis) -> bool {
+layout_is_across :: proc(layout: Layout_Attributes, axis: Axis) -> bool {
 	return(
 		axis == .X ? layout.config.layout_direction == .Top_To_Bottom : layout.config.layout_direction == .Left_To_Right \
 	)
 }
 
 @(private = "file")
-layout_get_final_offset :: proc(
-	layout: UI_Layout_Attributes,
-	axis: UI_Axis,
-) -> f32 {
+layout_get_final_offset :: proc(layout: Layout_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? layout.config.offset.x : layout.config.offset.y
 }
 
 @(private = "file")
-ele_set_size :: proc(element: ^UI_Element, value: f32, axis: UI_Axis) {
+ele_set_size :: proc(element: ^Element, value: f32, axis: Axis) {
 	if axis == .X do element.size.x = value
 	else do element.size.y = value
 }
 
 @(private = "file")
-ele_set_min :: proc(element: ^UI_Element, value: f32, axis: UI_Axis) {
+ele_set_min :: proc(element: ^Element, value: f32, axis: Axis) {
 	if axis == .X do element.limits.x.min = value
 	else do element.limits.y.min = value
 }
 
 @(private = "file")
-ele_set_max :: proc(element: ^UI_Element, value: f32, axis: UI_Axis) {
+ele_set_max :: proc(element: ^Element, value: f32, axis: Axis) {
 	if axis == .X do element.limits.x.max = value
 	else do element.limits.y.max = value
 }
 
 @(private = "file")
-ele_get_size :: proc(element: ^UI_Element, axis: UI_Axis) -> f32 {
+ele_get_size :: proc(element: ^Element, axis: Axis) -> f32 {
 	return axis == .X ? element.size.x : element.size.y
 }
 
 @(private = "file")
-ele_get_min :: proc(element: ^UI_Element, axis: UI_Axis) -> f32 {
+ele_get_min :: proc(element: ^Element, axis: Axis) -> f32 {
 	return(
 		axis == .X ? element.limits.x.min.? or_else 0 : element.limits.y.min.? or_else 0 \
 	)
 }
 
 @(private = "file")
-ele_get_max :: proc(element: ^UI_Element, axis: UI_Axis) -> Maybe(f32) {
+ele_get_max :: proc(element: ^Element, axis: Axis) -> Maybe(f32) {
 	return axis == .X ? element.limits.x.max : element.limits.y.max
 }
 
 @(private = "file")
-ele_get_lims :: proc(element: ^UI_Element, axis: UI_Axis) -> UI_Axis_Limits {
+ele_get_lims :: proc(element: ^Element, axis: Axis) -> Axis_Limits {
 	return axis == .X ? element.limits.x : element.limits.y
 }
 
 @(private = "file")
-ele_set_pos :: proc(element: ^UI_Element, value: f32, axis: UI_Axis) {
+ele_set_pos :: proc(element: ^Element, value: f32, axis: Axis) {
 	if axis == .X do element.position.x = value
 	else do element.position.y = value
 }
 
 @(private = "file")
-ele_get_pos :: proc(element: ^UI_Element, axis: UI_Axis) -> f32 {
+ele_get_pos :: proc(element: ^Element, axis: Axis) -> f32 {
 	if axis == .X do return element.position.x
 	else do return element.position.y
 }
 
 @(private = "file")
-ele_get_rect :: #force_inline proc(element: UI_Element) -> Rect {
+ele_get_rect :: #force_inline proc(element: Element) -> Rect {
 	return {
 		x = element.position.x,
 		y = element.position.y,
@@ -1882,27 +1862,21 @@ ele_get_rect :: #force_inline proc(element: UI_Element) -> Rect {
 }
 
 @(private = "file")
-text_get_preferred :: proc(
-	text_attr: UI_Text_Attributes,
-	axis: UI_Axis,
-) -> f32 {
+text_get_preferred :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? text_attr.preferred_size.x : text_attr.preferred_size.y
 }
 
 @(private = "file")
-text_get_bound_size :: proc(
-	text_attr: UI_Text_Attributes,
-	axis: UI_Axis,
-) -> f32 {
+text_get_bound_size :: proc(text_attr: Text_Attributes, axis: Axis) -> f32 {
 	return axis == .X ? text_attr.bound_size.x : text_attr.bound_size.y
 }
 
 @(private = "file")
-align_get_offset :: proc(alignment: [2]f32, axis: UI_Axis) -> f32 {
+align_get_offset :: proc(alignment: [2]f32, axis: Axis) -> f32 {
 	return axis == .X ? alignment.x : alignment.y
 }
 
-sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
+sort_floats_by_zindex :: proc(ctx: ^Context, indices: []Index) {
 	// ascending sort
 	if len(indices) <= 1 do return
 	// simple insertion sort
@@ -1911,8 +1885,8 @@ sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 		for j > 0 {
 			a := &ctx.elements[indices[j]]
 			b := &ctx.elements[indices[j - 1]]
-			a_float := a.attributes.(UI_Layout_Attributes).config.float_mode
-			b_float := b.attributes.(UI_Layout_Attributes).config.float_mode
+			a_float := a.attributes.(Layout_Attributes).config.float_mode
+			b_float := b.attributes.(Layout_Attributes).config.float_mode
 			a_z := get_float_z_index(a_float)
 			b_z := get_float_z_index(b_float)
 			swap := a_z < b_z
@@ -1926,39 +1900,39 @@ sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	}
 }
 
-get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
+get_float_z_index :: proc(float: Float_Mode) -> i32 {
 	switch float_type in float {
-	case UI_Float_None:
+	case Float_None:
 		panic("Element doesn't float")
-	case UI_Float_At_Parent:
+	case Float_At_Parent:
 		return float_type.z_index
-	case UI_Float_At_Id:
+	case Float_At_Id:
 		return float_type.z_index
-	case UI_Float_At_Root:
+	case Float_At_Root:
 		return float_type.z_index
 	}
 	return 0
 }
 
-BORDER_DEFAULT: UI_Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
+BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 
 @(require_results)
 draw_layout :: proc(
-	width: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
-	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
-	padding: UI_Layout_Padding = {2, 2, 2, 2},
+	width: Sizing_Axis = {mode = Fit_Size{}},
+	height: Sizing_Axis = {mode = Fit_Size{}},
+	padding: Layout_Padding = {2, 2, 2, 2},
 	child_gap: f32 = 2,
-	layout_direction: UI_Layout_Direction = .Left_To_Right,
-	child_alignment: UI_Alignment = {x = .Left, y = .Top},
+	layout_direction: Layout_Direction = .Left_To_Right,
+	child_alignment: Alignment = {x = .Left, y = .Top},
 	background_color: [4]u8 = {},
-	background_image: Maybe(UI_Image) = nil,
-	corner_radius: UI_Corner_Radius = {4, 4, 4, 4},
-	border: UI_Border_Config = BORDER_DEFAULT,
-	mouse_mode: UI_Layout_Mouse_Mode = .Capture,
+	background_image: Maybe(Image) = nil,
+	corner_radius: Corner_Radius = {4, 4, 4, 4},
+	border: Border_Config = BORDER_DEFAULT,
+	pointer_mode: Pointer_Mode = .Capture,
 	clip: bool = false,
 	scroll: bool = false,
 	ignore_scroll: bool = false,
-	float_mode: UI_Float_Mode = UI_Float_None{},
+	float_mode: Float_Mode = Float_None{},
 	offset: [2]f32 = {},
 ) -> bool {
 	return open_layout(
@@ -1974,7 +1948,7 @@ draw_layout :: proc(
 			background_color = background_color,
 			background_image = background_image,
 			corner_radius = corner_radius,
-			mouse_mode = mouse_mode,
+			pointer_mode = pointer_mode,
 			border = border,
 			clip = clip,
 			scroll = scroll,
@@ -1991,11 +1965,11 @@ draw_layout :: proc(
 
 draw_text :: proc(
 	content: string,
-	font_index: UI_Font_Index = 0,
+	font_index: Font_Index = 0,
 	font_size: f32 = 16,
 	color: [4]u8 = {0, 0, 0, 255},
 	line_spacing: f32 = 8,
-	alignment: UI_Alignment = {x = .Left, y = .Top},
+	alignment: Alignment = {x = .Left, y = .Top},
 	loc := #caller_location,
 ) -> bool {
 	open_text(
@@ -2016,54 +1990,54 @@ draw_text :: proc(
 grow :: #force_inline proc(
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
-) -> UI_Sizing_Axis {
-	return {mode = UI_Grow_Size{}, min = min, max = max}
+) -> Sizing_Axis {
+	return {mode = Grow_Size{}, min = min, max = max}
 }
 
 fixed :: #force_inline proc(
 	value: f32 = 0,
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
-) -> UI_Sizing_Axis {
-	return {mode = UI_Fixed_Size{value = value}, min = min, max = max}
+) -> Sizing_Axis {
+	return {mode = Fixed_Size{value = value}, min = min, max = max}
 }
 
 fit :: #force_inline proc(
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
-) -> UI_Sizing_Axis {
-	return {mode = UI_Fit_Size{}, min = min, max = max}
+) -> Sizing_Axis {
+	return {mode = Fit_Size{}, min = min, max = max}
 }
 
 percent :: #force_inline proc(
 	value: f32,
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
-) -> UI_Sizing_Axis {
-	return {mode = UI_Percent_Size{value = value}, min = min, max = max}
+) -> Sizing_Axis {
+	return {mode = Percent_Size{value = value}, min = min, max = max}
 }
 
-pad_all :: #force_inline proc(value: f32) -> UI_Layout_Padding {
-	return UI_Layout_Padding{value, value, value, value}
+pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
+	return Layout_Padding{value, value, value, value}
 }
 
-corner_radius_all :: #force_inline proc(value: f32) -> UI_Corner_Radius {
-	return UI_Corner_Radius{value, value, value, value}
+corner_radius_all :: #force_inline proc(value: f32) -> Corner_Radius {
+	return Corner_Radius{value, value, value, value}
 }
 
 
-mouse_state_on_this :: proc() -> UI_Layout_Mouse_State {
-	return get_layout_mouse_state_by_id(
+pointer_state_on_this :: proc() -> Element_Pointer_State {
+	return get_layout_pointer_state_by_id(
 		g_ui_builder.current_context^,
 		g_ui_builder.last_id,
 	)
 }
 
-mouse_state_on_id :: proc(id: u32) -> UI_Layout_Mouse_State {
-	return get_layout_mouse_state_by_id(g_ui_builder.current_context^, id)
+pointer_state_on_id :: proc(id: u32) -> Element_Pointer_State {
+	return get_layout_pointer_state_by_id(g_ui_builder.current_context^, id)
 }
 
-pointer_state :: proc() -> UI_Pointer_State {
+pointer_state :: proc() -> Pointer_State {
 	return g_ui_builder.current_context.input.pointer.state
 }
 
@@ -2079,15 +2053,11 @@ pointer_is_valid :: proc() -> bool {
 	return g_ui_builder.current_context.input.pointer.is_valid
 }
 
-pointer_kind :: proc() -> UI_Pointer_Kind {
+pointer_kind :: proc() -> Pointer_Kind {
 	return g_ui_builder.current_context.input.pointer.kind
 }
 
-mouse_state :: pointer_state
-mouse_delta :: pointer_delta
-mouse_position :: pointer_position
-
-input_end_frame :: proc(input: ^UI_Input) {
+input_end_frame :: proc(input: ^Input) {
 	#partial switch input.pointer.state {
 	case .Pressed:
 		input.pointer.state = .Down
@@ -2159,7 +2129,7 @@ is_this_clicked :: proc() -> bool {
 
 is_clicked :: is_this_clicked
 
-current_scroll_data :: proc() -> UI_Scroll_Data {
+current_scroll_data :: proc() -> Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
 }
 
@@ -2169,7 +2139,7 @@ set_scroll_offset :: proc(scroll: [2]f32) {
 
 // Internal ultilities
 @(private = "file")
-set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: [2]f32) {
+set_layout_scroll_offset :: proc(ctx: ^Context, new_scroll: [2]f32) {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	scroll := ctx.input_event.scrolls[ctx.elements[open_ele].id]
 	scroll.pending_offset = new_scroll
@@ -2178,17 +2148,17 @@ set_layout_scroll_offset :: proc(ctx: ^UI_Context, new_scroll: [2]f32) {
 }
 
 @(private = "file")
-get_layout_scroll_data :: proc(ctx: UI_Context) -> UI_Scroll_Data {
+get_layout_scroll_data :: proc(ctx: Context) -> Scroll_Data {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	return ctx.input_event.scrolls[ctx.elements[open_ele].id]
 }
 
 
 @(private = "file")
-get_layout_mouse_state_by_id :: proc(
-	ctx: UI_Context,
+get_layout_pointer_state_by_id :: proc(
+	ctx: Context,
 	id: u32,
-) -> UI_Layout_Mouse_State {
+) -> Element_Pointer_State {
 	for ele_id in ctx.input_event.hovered_elements {
 		if ele_id == id {
 			switch ctx.input.pointer.state {
@@ -2207,10 +2177,10 @@ get_layout_mouse_state_by_id :: proc(
 }
 
 @(private = "file")
-get_alignment_offset :: proc(alignment: UI_Alignment) -> [2]f32 {
+get_alignment_offset :: proc(alignment: Alignment) -> [2]f32 {
 	offset: [2]f32
 	switch variant in alignment.x {
-	case UI_Alignment_X:
+	case Alignment_X:
 		{
 			switch variant {
 			case .Left:
@@ -2226,7 +2196,7 @@ get_alignment_offset :: proc(alignment: UI_Alignment) -> [2]f32 {
 	}
 
 	switch variant in alignment.y {
-	case UI_Alignment_Y:
+	case Alignment_Y:
 		{
 			switch variant {
 			case .Top:
@@ -2330,7 +2300,7 @@ declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	g_ui_builder.last_id = new_id
 }
 
-UI_Element_Config :: struct($T: typeid) {
+Element_Config :: struct($T: typeid) {
 	config: T,
 }
 
@@ -2340,7 +2310,7 @@ layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(draw_layout)) {
+) -> Element_Config(type_of(draw_layout)) {
 	return begin_layout(id, loc, reuse_id)
 }
 
@@ -2348,7 +2318,7 @@ begin_layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(draw_layout)) {
+) -> Element_Config(type_of(draw_layout)) {
 	if !reuse_id {
 		declare_id(id, loc)
 	}
@@ -2368,7 +2338,7 @@ defer_end_layout :: proc() -> bool {
 text :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_text)) {
+) -> Element_Config(type_of(draw_text)) {
 	declare_id(id, loc)
 	return {draw_text}
 }
@@ -2378,50 +2348,6 @@ last_id :: proc() -> u32 {
 	return g_ui_builder.last_id
 }
 
-get_builder :: proc "contextless" () -> ^UI_Builder {
+get_builder :: proc "contextless" () -> ^Builder {
 	return &g_ui_builder
 }
-
-Context :: UI_Context
-Input :: UI_Input
-Pointer :: UI_Pointer
-Pointer_Kind :: UI_Pointer_Kind
-Pointer_State :: UI_Pointer_State
-Font :: UI_Font
-Glyph :: UI_Glyph
-Float_At_Root :: UI_Float_At_Root
-Float_At_Parent :: UI_Float_At_Parent
-Float_At_Id :: UI_Float_At_Id
-Float_None :: UI_Float_None
-Float_Mode :: UI_Float_Mode
-Float_Config :: UI_Float_Config
-Float_Attach_Points :: UI_Float_Attach_Points
-Layout_Config :: UI_Layout_Config
-Layout_Padding :: UI_Layout_Padding
-Corner_Radius :: UI_Corner_Radius
-Border_Config :: UI_Border_Config
-Image :: UI_Image
-Nine_Patch_Config :: UI_Nine_Patch_Config
-NPatch_Layout :: UI_NPatch_Layout
-Image_Fit :: UI_Image_Fit
-Layout_Mouse_Mode :: UI_Layout_Mouse_Mode
-Layout_Mouse_State :: UI_Layout_Mouse_State
-Mouse_State :: UI_Mouse_State
-Anchor_Point :: UI_Anchor_Point
-Alignment :: UI_Alignment
-Alignment_X :: UI_Alignment_X
-Alignment_Y :: UI_Alignment_Y
-Sizing_Axis :: UI_Sizing_Axis
-Fixed_Size :: UI_Fixed_Size
-Fit_Size :: UI_Fit_Size
-Grow_Size :: UI_Grow_Size
-Percent_Size :: UI_Percent_Size
-Size_Mode :: UI_Size_Mode
-Text_Config :: UI_Text_Config
-Scroll_Data :: UI_Scroll_Data
-Render_Command :: UI_Render_Command
-Rect_Command :: UI_Rect_Command
-Image_Command :: UI_Image_Command
-Text_Command :: UI_Text_Command
-Push_Clip_Command :: UI_Push_Clip_Command
-Pop_Clip_Command :: UI_Pop_Clip_Command

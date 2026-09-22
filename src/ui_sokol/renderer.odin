@@ -124,8 +124,8 @@ ui_renderer_make_fonts :: proc(
 	r: ^UI_Renderer,
 	font_descs: []UI_Font_Desc,
 	allocator := context.temp_allocator,
-) -> []ui.UI_Font {
-	fonts_out := make([dynamic]ui.UI_Font, len(font_descs))
+) -> []ui.Font {
+	fonts_out := make([dynamic]ui.Font, len(font_descs))
 
 	for desc, i in font_descs {
 		atlas_w, atlas_h := 512, 512
@@ -178,7 +178,7 @@ ui_renderer_make_fonts :: proc(
 			},
 		)
 
-		fonts_out[i] = ui.UI_Font {
+		fonts_out[i] = ui.Font {
 			base_size = desc.base_size,
 			spacing   = desc.spacing,
 		}
@@ -263,7 +263,7 @@ push_sub_quad :: proc(
 }
 
 @(private = "file")
-render_image :: proc(r: ^UI_Renderer, c: ui.UI_Image_Command, view: sg.View) {
+render_image :: proc(r: ^UI_Renderer, c: ui.Image_Command, view: sg.View) {
 	img := sg.query_view_image(view)
 	desc := sg.query_image_desc(img)
 	tex_w := f32(desc.width > 0 ? desc.width : 1)
@@ -569,7 +569,7 @@ render_rounded_rect_filled :: proc(
 	r: ^UI_Renderer,
 	rect: ui.Rect,
 	color: [4]u8,
-	rad: ui.UI_Corner_Radius,
+	rad: ui.Corner_Radius,
 ) {
 	w, h := rect.width, rect.height
 	r_tl := clamp(rad.top_left, 0, min(w / 2, h / 2))
@@ -615,7 +615,7 @@ render_rounded_rect_border :: proc(
 	r: ^UI_Renderer,
 	rect: ui.Rect,
 	color: [4]u8,
-	rad: ui.UI_Corner_Radius,
+	rad: ui.Corner_Radius,
 	thickness: f32,
 ) {
 	if thickness <= 0 do return
@@ -705,7 +705,7 @@ set_active_batch :: proc(r: ^UI_Renderer, view: sg.View, scissor: ui.Rect) {
 
 ui_renderer_render :: proc(
 	r: ^UI_Renderer,
-	ctx: ^ui.UI_Context,
+	ctx: ^ui.Context,
 	base_size: [2]f32,
 	dest_rect: ui.Rect,
 	scale: f32,
@@ -722,7 +722,7 @@ ui_renderer_render :: proc(
 
 	for cmd in ctx.render_commands {
 		switch c in cmd {
-		case ui.UI_Push_Clip_Command:
+		case ui.Push_Clip_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			screen_clip := ui.Rect {
 				x      = dest_rect.x + c.rect.x * scale,
@@ -730,7 +730,7 @@ ui_renderer_render :: proc(
 				width  = c.rect.width * scale,
 				height = c.rect.height * scale,
 			}
-			intersected, ok := ui.ui_intersect_rect(cur, screen_clip)
+			intersected, ok := ui.intersect_rect(cur, screen_clip)
 			if !ok do intersected = ui.Rect{}
 			append(&r.scissor_stack, intersected)
 			set_active_batch(
@@ -739,14 +739,14 @@ ui_renderer_render :: proc(
 				intersected,
 			)
 
-		case ui.UI_Pop_Clip_Command:
+		case ui.Pop_Clip_Command:
 			if len(r.scissor_stack) > 1 {
 				pop(&r.scissor_stack)
 			}
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			set_active_batch(r, r.batches[len(r.batches) - 1].view, cur)
 
-		case ui.UI_Rect_Command:
+		case ui.Rect_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_filled(r, c.rect, c.color, c.corner_radius)
@@ -760,7 +760,7 @@ ui_renderer_render :: proc(
 				)
 			}
 
-		case ui.UI_Image_Command:
+		case ui.Image_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			view := r.white_view
 			if c.texture != 0 {
@@ -771,7 +771,7 @@ ui_renderer_render :: proc(
 			set_active_batch(r, view, cur)
 			render_image(r, c, view)
 
-		case ui.UI_Text_Command:
+		case ui.Text_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			font_idx := int(c.font)
 			if font_idx < len(r.fonts) {
