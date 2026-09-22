@@ -1,279 +1,42 @@
 package ui_extra
 
 import "../ui"
-import "base:intrinsics"
-import "base:runtime"
-import "core:math/rand"
 
-
-Extra_Element_Colors :: struct {
-	normal_color:  [4]u8,
-	hovered_color: [4]u8,
-	held_color:    [4]u8,
-}
-
-Extra_Border_Config :: struct {
-	thickness: f32,
-	colors:    Extra_Element_Colors,
-}
-
-Extra_Button_Kind :: enum {
-	Primary,
-	Secondary,
-	Tertiary,
-	Ghost,
-	Danger,
-	Danger_Tertiary,
-	Danger_Ghost,
-}
-
-color_brightness :: proc(c: [4]u8, factor: f32) -> [4]u8 {
-	r := clamp(f32(c[0]) * (1.0 + factor), 0, 255)
-	g := clamp(f32(c[1]) * (1.0 + factor), 0, 255)
-	b := clamp(f32(c[2]) * (1.0 + factor), 0, 255)
-	return {u8(r), u8(g), u8(b), c[3]}
-}
-
-color_alpha :: proc(c: [4]u8, alpha: f32) -> [4]u8 {
-	return {c[0], c[1], c[2], u8(clamp(alpha * 255.0, 0, 255))}
-}
-
-@(private = "file")
-g_ui_extra_builder: Extra_Builder
-
-Extra_Builder :: struct {
-	last_id:                Maybe(u32),
-	open_vert_scroll_stack: [dynamic]Vert_Scroll_Data,
-}
-
-@(rodata, private = "file")
-g_debug_colors := [?][4]u8 {
-	{255, 128, 128, 255},
-	{255, 175, 128, 255},
-	{255, 192, 128, 255},
-	{255, 226, 128, 255},
-	{253, 255, 128, 255},
-	{181, 255, 128, 255},
-	{128, 255, 204, 255},
-	{128, 255, 255, 255},
-	{128, 230, 255, 255},
-	{128, 179, 255, 255},
-	{128, 128, 255, 255},
-	{179, 128, 255, 255},
-	{230, 128, 255, 255},
-	{255, 128, 230, 255},
-	{255, 128, 179, 255},
-	{172, 172, 172, 255},
-	{255, 179, 179, 255},
-	{255, 207, 179, 255},
-	{255, 217, 179, 255},
-	{255, 237, 179, 255},
-	{254, 255, 179, 255},
-	{211, 255, 179, 255},
-	{179, 255, 225, 255},
-	{179, 255, 255, 255},
-	{179, 240, 255, 255},
-	{179, 209, 255, 255},
-	{179, 179, 255, 255},
-	{209, 179, 255, 255},
-	{240, 179, 255, 255},
-	{255, 179, 240, 255},
-	{255, 179, 209, 255},
-	{86, 86, 86, 255},
-}
-
-Debug_Palette :: struct {
-	previous_index:   int,
-	random_state:     runtime.Default_Random_State,
-	random_generator: rand.Generator,
-}
-
-@(private = "file")
-g_debug_palette: Debug_Palette
-
-
-get_random_color :: proc(
-	brightness: f32 = 0,
-	use_prev: bool = false,
-	alpha: f32 = 1.0,
-) -> [4]u8 {
-	if !use_prev {
-		g_debug_palette.previous_index = rand.int_range(
-			0,
-			len(g_debug_colors),
-			gen = g_debug_palette.random_generator,
-		)
-	}
-	color := g_debug_colors[g_debug_palette.previous_index]
-	return color_alpha(color_brightness(color, brightness), alpha)
-}
-
-@(private = "file", deferred_out = end_wrap_id)
+@(private, deferred_out = end_wrap_id)
 wrap_id :: proc() -> u32 {
 	return ui.last_id()
 }
 
-@(private = "file")
+@(private)
 end_wrap_id :: proc(id: u32) {
 	ui.get_builder().last_id = id
 }
 
-
-@(init, private = "file")
-extra_init :: proc "contextless" () {
-	g_debug_palette.random_generator = runtime.default_random_generator(
-		&g_debug_palette.random_state,
-	)
-
-	append(&ui.get_builder().context_events.on_make, proc() {
-		g_ui_extra_builder.open_vert_scroll_stack = make(
-			[dynamic]Vert_Scroll_Data,
-			0,
-			4,
-		)
-	})
-
-	append(&ui.get_builder().context_events.on_begin, proc() {
-		rand.reset(123, gen = g_debug_palette.random_generator)
-		clear(&g_ui_extra_builder.open_vert_scroll_stack)
-	})
-
-	append(&ui.get_builder().context_events.on_delete, proc() {
-		delete(g_ui_extra_builder.open_vert_scroll_stack)
-	})
-}
-
-
-Vert_Scroll_Data :: struct #all_or_none {
-	scroll_thumb_width:          f32,
-	scroll_thumb_height:         f32,
-	scroll_thumb_color:          [4]u8,
-	scroll_bar_background_color: [4]u8,
-}
-
-
-@(deferred_none = end_draw_vert_scroll)
-vert_scroll :: proc(
+//region: label
+label :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_vert_scroll)) {
+) -> ui.Element_Config(type_of(draw_label)) {
 	ui.declare_id(id, loc)
-	return {draw_vert_scroll}
+	return {draw_label}
 }
 
-draw_vert_scroll :: proc(
-	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	background_color: [4]u8 = [4]u8{255, 255, 255, 255},
-	scroll_thumb_width: f32 = 16,
-	scroll_thumb_height: f32 = 64,
-	scroll_thumb_color: [4]u8 = [4]u8{130, 130, 130, 255},
-	scroll_bar_background_color: [4]u8 = [4]u8{245, 245, 245, 255},
-) -> bool {
-	wrap_id()
-
-	append(
-		&g_ui_extra_builder.open_vert_scroll_stack,
-		(Vert_Scroll_Data){
-			scroll_bar_background_color = scroll_bar_background_color,
-			scroll_thumb_color = scroll_thumb_color,
-			scroll_thumb_width = scroll_thumb_width,
-			scroll_thumb_height = scroll_thumb_height,
-		},
+draw_label :: proc(
+	text: string,
+	alignment: ui.Alignment = {x = .Left, y = .Center},
+	color: Maybe([4]u8) = nil,
+) {
+	c := color.? or_else g_theme.controls[.Label].text[.Normal]
+	ui.text().config(
+		text,
+		alignment = alignment,
+		color = c,
+		font_size = g_theme.font_size,
+		font_index = g_theme.font_index,
 	)
-
-	// use draw_layout to use the last pushed id through vert_scroll
-	if ui.draw_layout(
-		width = width,
-		height = height,
-		clip = true,
-		scroll = true,
-		padding = {},
-		child_gap = 0,
-		background_color = background_color,
-	) {
-		if ui.begin_layout().config(
-			width = ui.grow(),
-			height = ui.fit(),
-			layout_direction = .Top_To_Bottom,
-		) {
-			// content
-		}
-	}
-	return true
 }
 
-
-end_draw_vert_scroll :: proc() {
-	ele_data := pop(&g_ui_extra_builder.open_vert_scroll_stack)
-
-	@(static) scroll_thumb_press_offset: [2]f32
-
-	if ui.defer_end_layout() {
-		if ui.defer_end_layout() {
-			// content
-		}
-
-		// important wrapper, so local id can work locally without collide with content's scrolls
-		if ui.begin_layout().config(
-			width = ui.grow(),
-			height = ui.grow(),
-			padding = {},
-		) {
-			scroll_data := ui.current_scroll_data()
-			scroll_normalized_offset: [2]f32 = {
-				scroll_data.min_offset.x < 0 ? scroll_data.offset.x / scroll_data.min_offset.x : 0,
-				scroll_data.min_offset.y < 0 ? scroll_data.offset.y / scroll_data.min_offset.y : 0,
-			}
-
-			scroll_bar_id := ui.local_id("scroll_bar")
-			scroll_thumb_id := ui.local_id("scroll_thumb")
-
-			if ui.is_id_held(scroll_thumb_id) {
-				bar_rect := ui.rect_by_id(scroll_bar_id)
-				thumb_rect := ui.rect_by_id(scroll_thumb_id)
-
-				if ui.pointer_state() == .Pressed {
-					scroll_thumb_press_offset =
-						ui.pointer_position() - {thumb_rect.x, thumb_rect.y}
-				}
-
-				if ui.pointer_state() == .Down {
-					thumb_desired :=
-						ui.pointer_position() - scroll_thumb_press_offset
-					thumb_local := thumb_desired - {bar_rect.x, bar_rect.y}
-					thumb_range: [2]f32 =
-						{bar_rect.width, bar_rect.height} -
-						{thumb_rect.width, thumb_rect.height}
-
-					offset: [2]f32 = {
-						thumb_range.x > 0 ? clamp(thumb_local.x / thumb_range.x, 0, 1) : 0,
-						thumb_range.y > 0 ? clamp(thumb_local.y / thumb_range.y, 0, 1) : 0,
-					}
-					ui.set_scroll_offset(offset * scroll_data.min_offset)
-				}
-			}
-
-			if ui.layout(scroll_bar_id).config(
-				width = ui.fit(),
-				height = ui.grow(),
-				background_color = ele_data.scroll_bar_background_color,
-				ignore_scroll = true,
-				padding = {},
-				child_alignment = {0, scroll_normalized_offset.y},
-			) {
-				if ui.layout(scroll_thumb_id).config(
-					width = ui.fixed(ele_data.scroll_thumb_width),
-					height = ui.fixed(ele_data.scroll_thumb_height),
-					background_color = ele_data.scroll_thumb_color,
-				) {}
-			}
-		}
-	}
-
-}
-
-// button
+//region: button
 button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
@@ -285,201 +48,387 @@ button :: proc(
 draw_button :: proc(
 	label: string,
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{32}},
-	kind: Extra_Button_Kind,
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
 ) -> bool {
 	wrap_id()
-
-	border: Extra_Border_Config
-	background_colors, label_colors: Extra_Element_Colors
-	padding: ui.Layout_Padding = {16, 16, 8, 8}
-	corner_radius: ui.Corner_Radius = {0, 0, 0, 0}
-
-	switch kind {
-	case .Primary:
-		{
-			background_colors = {
-				normal_color  = COLORS[.Button_Primary],
-				hovered_color = COLORS[.Button_Primary_Hover],
-				held_color    = COLORS[.Button_Primary_Active],
-			}
-			label_colors = {
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-			}
-		}
-	case .Secondary:
-		{
-			background_colors = {
-				normal_color  = COLORS[.Button_Secondary],
-				hovered_color = COLORS[.Button_Secondary_Hover],
-				held_color    = COLORS[.Button_Secondary_Active],
-			}
-			label_colors = {
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-			}
-		}
-	case .Tertiary:
-		{
-			background_colors = {
-				normal_color  = 0,
-				hovered_color = COLORS[.Button_Primary_Hover],
-				held_color    = COLORS[.Button_Primary_Active],
-			}
-			label_colors = {
-				normal_color  = COLORS[.Interactive],
-				hovered_color = COLORS[.Text_On_Color],
-				held_color    = COLORS[.Text_On_Color],
-			}
-			border = {
-				thickness = 1,
-				colors = {
-					normal_color = COLORS[.Button_Primary],
-					hovered_color = COLORS[.Button_Primary_Hover],
-					held_color = COLORS[.Button_Primary_Active],
-				},
-			}
-		}
-	case .Ghost:
-		{
-			background_colors = {
-				normal_color  = 0,
-				hovered_color = COLORS[.Layer_Hover_03],
-				held_color    = COLORS[.Layer_Active_03],
-			}
-			label_colors = {
-				normal_color  = COLORS[.Interactive],
-				hovered_color = COLORS[.Interactive],
-				held_color    = COLORS[.Interactive],
-			}
-		}
-	case .Danger:
-		{
-			background_colors = {
-				normal_color  = COLORS[.Button_Danger_Primary],
-				hovered_color = COLORS[.Button_Danger_Hover],
-				held_color    = COLORS[.Button_Danger_Active],
-			}
-			label_colors = {
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-				COLORS[.Text_On_Color],
-			}
-		}
-	case .Danger_Tertiary:
-		{
-			background_colors = {
-				normal_color  = 0,
-				hovered_color = COLORS[.Button_Danger_Hover],
-				held_color    = COLORS[.Button_Danger_Active],
-			}
-			label_colors = {
-				normal_color  = COLORS[.Text_Error],
-				hovered_color = COLORS[.Text_On_Color],
-				held_color    = COLORS[.Text_On_Color],
-			}
-			border = {
-				thickness = 1,
-				colors = {
-					normal_color = COLORS[.Button_Danger_Primary],
-					hovered_color = COLORS[.Button_Danger_Hover],
-					held_color = COLORS[.Button_Danger_Active],
-				},
-			}
-		}
-	case .Danger_Ghost:
-		{
-			background_colors = {
-				normal_color  = 0,
-				hovered_color = COLORS[.Button_Danger_Hover],
-				held_color    = COLORS[.Button_Danger_Active],
-			}
-			label_colors = {
-				normal_color  = COLORS[.Text_Error],
-				hovered_color = COLORS[.Text_On_Color],
-				held_color    = COLORS[.Text_On_Color],
-			}
-		}
+	if !disabled {
+		ui.register_this_focusable()
 	}
 
-	return draw_button_pro(
-		label,
-		width,
-		height,
-		background_colors,
-		label_colors,
-		border,
-		padding,
-		corner_radius,
-	)
-}
+	state := get_control_state(ui.last_id(), disabled)
+	style := g_theme.controls[.Button]
 
-
-// button pro
-button_pro :: proc(
-	id: Maybe(u32) = nil,
-	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_button_pro)) {
-	ui.declare_id(id, loc)
-	return {draw_button_pro}
-}
-
-draw_button_pro :: proc(
-	label: string,
-	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	background_colors: Extra_Element_Colors,
-	label_colors: Extra_Element_Colors,
-	border: Extra_Border_Config,
-	padding: ui.Layout_Padding,
-	corner_radius: ui.Corner_Radius,
-) -> bool {
-	wrap_id()
-	ui.register_this_focusable()
-
-	clicked := ui.is_this_clicked()
-	background_color := background_colors.normal_color
-	label_color := label_colors.normal_color
-	border_color := border.colors.normal_color
-	border_thickness := border.thickness
-
-	if ui.is_this_held() {
-		background_color = background_colors.held_color
-		label_color = label_colors.held_color
-		border_color = border.colors.held_color
-	} else if ui.is_this_hovered() {
-		background_color = background_colors.hovered_color
-		label_color = label_colors.hovered_color
-		border_color = border.colors.hovered_color
-	} else if ui.is_this_focused() {
-		border_thickness = max(border_thickness, 2)
-		border_color = COLORS[.Focus]
-	}
+	clicked := !disabled && ui.is_this_clicked()
 
 	if ui.layout(reuse_id = true).config(
 		width = width,
 		height = height,
-		background_color = background_color,
-		padding = padding,
+		background_color = style.base[state],
+		padding = style.padding,
 		child_alignment = {.Center, .Center},
-		border = {thickness = border_thickness, color = border_color},
-		corner_radius = corner_radius,
+		border = {thickness = style.border_width, color = style.border[state]},
+		corner_radius = style.corner_radius,
 	) {
 		ui.text().config(
 			label,
 			alignment = {.Center, .Center},
-			color = label_color,
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
 		)
 	}
 
 	return clicked
 }
 
+//region: label_button
+label_button :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_label_button)) {
+	ui.declare_id(id, loc)
+	return {draw_label_button}
+}
 
-// tool tip
+draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
+	wrap_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	state := get_control_state(ui.last_id(), disabled)
+	style := g_theme.controls[.Label_Button]
+
+	clicked := !disabled && ui.is_this_clicked()
+
+	if ui.layout(reuse_id = true).config(
+		width = ui.fit(),
+		height = ui.fit(),
+		padding = style.padding,
+		child_alignment = {.Left, .Center},
+	) {
+		ui.text().config(
+			text,
+			alignment = {.Left, .Center},
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
+		)
+	}
+
+	return clicked
+}
+
+//region: toggle
+toggle :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_toggle)) {
+	ui.declare_id(id, loc)
+	return {draw_toggle}
+}
+
+draw_toggle :: proc(
+	label: string,
+	active: ^bool,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	state := get_control_state(ui.last_id(), disabled)
+	if active^ && state == .Normal {
+		state = .Pressed
+	}
+
+	style := g_theme.controls[.Toggle]
+	clicked := !disabled && ui.is_this_clicked()
+	if clicked {
+		active^ = !active^
+	}
+
+	if ui.layout(reuse_id = true).config(
+		width = width,
+		height = height,
+		background_color = style.base[state],
+		padding = style.padding,
+		child_alignment = {.Center, .Center},
+		border = {thickness = style.border_width, color = style.border[state]},
+		corner_radius = style.corner_radius,
+	) {
+		ui.text().config(
+			label,
+			alignment = {.Center, .Center},
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
+		)
+	}
+
+	return clicked
+}
+
+//region: toggle_group
+toggle_group :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_toggle_group)) {
+	ui.declare_id(id, loc)
+	return {draw_toggle_group}
+}
+
+draw_toggle_group :: proc(
+	options: []string,
+	active_index: ^int,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+
+	changed := false
+	if ui.draw_layout(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		child_gap = 2,
+		padding = {},
+	) {
+		for name, i in options {
+			is_active := (active_index^ == i)
+			btn_id := ui.local_id(name)
+			if !disabled {
+				ui.register_focusable(btn_id)
+			}
+			state := get_control_state(btn_id, disabled)
+			if is_active && state == .Normal {
+				state = .Pressed
+			}
+			style := g_theme.controls[.Toggle]
+
+			if ui.layout(btn_id).config(
+				width = ui.grow(),
+				height = ui.grow(),
+				background_color = style.base[state],
+				padding = style.padding,
+				child_alignment = {.Center, .Center},
+				border = {
+					thickness = style.border_width,
+					color = style.border[state],
+				},
+				corner_radius = style.corner_radius,
+			) {
+				ui.text().config(
+					name,
+					alignment = {.Center, .Center},
+					color = style.text[state],
+					font_size = g_theme.font_size,
+					font_index = g_theme.font_index,
+				)
+			}
+
+			if !disabled && ui.is_id_clicked(btn_id) {
+				if active_index^ != i {
+					active_index^ = i
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
+}
+
+//region: checkbox
+checkbox :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_checkbox)) {
+	ui.declare_id(id, loc)
+	return {draw_checkbox}
+}
+
+draw_checkbox :: proc(
+	label: string,
+	checked: ^bool,
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	state := get_control_state(ui.last_id(), disabled)
+	style := g_theme.controls[.Checkbox]
+
+	clicked := !disabled && ui.is_this_clicked()
+	if clicked {
+		checked^ = !checked^
+	}
+
+	if ui.layout(reuse_id = true).config(
+		width = ui.fit(),
+		height = ui.fit(),
+		layout_direction = .Left_To_Right,
+		child_gap = 8,
+		child_alignment = {.Left, .Center},
+		padding = {2, 2, 2, 2},
+	) {
+		box_id := ui.local_id("box")
+		if ui.layout(box_id).config(
+			width = ui.fixed(18),
+			height = ui.fixed(18),
+			background_color = style.base[state],
+			border = {
+				thickness = style.border_width,
+				color = style.border[state],
+			},
+			corner_radius = style.corner_radius,
+			padding = {2, 2, 2, 2},
+			child_alignment = {.Center, .Center},
+		) {
+			if checked^ {
+				check_mark_id := ui.local_id("check")
+				if ui.layout(check_mark_id).config(
+					width = ui.fixed(10),
+					height = ui.fixed(10),
+					background_color = style.border[.Focused],
+					corner_radius = {2, 2, 2, 2},
+				) {}
+			}
+		}
+		if len(label) > 0 {
+			ui.text().config(
+				label,
+				alignment = {.Left, .Center},
+				color = style.text[state],
+				font_size = g_theme.font_size,
+				font_index = g_theme.font_index,
+			)
+		}
+	}
+
+	return clicked
+}
+
+//region: slider
+slider :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_slider)) {
+	ui.declare_id(id, loc)
+	return {draw_slider}
+}
+
+draw_slider :: proc(
+	value: ^f32,
+	min_val: f32,
+	max_val: f32,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	track_id := ui.last_id()
+	state := get_control_state(track_id, disabled)
+	style := g_theme.controls[.Slider]
+
+	changed := false
+	if !disabled && (ui.is_id_held(track_id) || ui.is_id_clicked(track_id)) {
+		track_rect := ui.rect_by_id(track_id)
+		if track_rect.width > 0 {
+			mouse_pos := ui.pointer_position()
+			normalized := clamp(
+				(mouse_pos.x - track_rect.x) / track_rect.width,
+				0,
+				1,
+			)
+			new_val := min_val + normalized * (max_val - min_val)
+			if new_val != value^ {
+				value^ = new_val
+				changed = true
+			}
+		}
+	}
+
+	normalized :=
+		max_val > min_val ? clamp((value^ - min_val) / (max_val - min_val), 0, 1) : 0
+
+	if ui.layout(reuse_id = true).config(
+		width = width,
+		height = height,
+		background_color = style.base[state],
+		border = {thickness = style.border_width, color = style.border[state]},
+		corner_radius = style.corner_radius,
+		padding = {2, 2, 2, 2},
+		child_alignment = {normalized, .Center},
+	) {
+		thumb_id := ui.local_id("thumb")
+		thumb_w: f32 = 12
+		if ui.layout(thumb_id).config(
+			width = ui.fixed(thumb_w),
+			height = ui.grow(),
+			background_color = style.border[.Focused],
+			corner_radius = {2, 2, 2, 2},
+		) {}
+	}
+
+	return changed
+}
+
+//region: progress_bar
+progress_bar :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Config(type_of(draw_progress_bar)) {
+	ui.declare_id(id, loc)
+	return {draw_progress_bar}
+}
+
+draw_progress_bar :: proc(
+	value: f32,
+	min_val: f32 = 0,
+	max_val: f32 = 1,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+) {
+	wrap_id()
+
+	style := g_theme.controls[.Slider]
+	normalized :=
+		max_val > min_val ? clamp((value - min_val) / (max_val - min_val), 0, 1) : 0
+
+	if ui.layout(reuse_id = true).config(
+		width = width,
+		height = height,
+		background_color = style.base[.Normal],
+		border = {
+			thickness = style.border_width,
+			color = style.border[.Normal],
+		},
+		corner_radius = style.corner_radius,
+		padding = {1, 1, 1, 1},
+		child_alignment = {.Left, .Center},
+	) {
+		fill_id := ui.local_id("fill")
+		if ui.layout(fill_id).config(
+			width = ui.percent(normalized),
+			height = ui.grow(),
+			background_color = style.border[.Focused],
+			corner_radius = {2, 2, 2, 2},
+		) {}
+	}
+}
+
+//region: tooltip
 tooltip :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
@@ -491,148 +440,35 @@ tooltip :: proc(
 draw_tooltip :: proc(
 	target_id: u32,
 	content: string,
-	background_color: [4]u8 = {25, 25, 25, 240},
-	text_color: [4]u8 = [4]u8{222, 23, 23, 255},
-	attach_points: ui.Float_Attach_Points = {
-		element = .LeftCenter,
-		parent = .RightCenter,
-	},
 	offset: [2]f32 = {4, 0},
 ) {
 	wrap_id()
-
 	if ui.is_id_hovered(target_id) {
+		style := g_theme.controls[.Panel]
 		if ui.layout(reuse_id = true).config(
 			width = ui.fit(),
 			height = ui.fit(),
-			background_color = background_color,
+			background_color = style.base[.Normal],
+			border = {
+				thickness = style.border_width,
+				color = style.border[.Focused],
+			},
 			padding = ui.pad_all(6),
 			corner_radius = ui.corner_radius_all(4),
 			pointer_mode = .Ignore,
 			float_mode = ui.Float_At_Id {
 				attach_id = target_id,
 				offset = offset,
-				attach_points = attach_points,
+				attach_points = {element = .LeftCenter, parent = .RightCenter},
 				z_index = 1000,
 			},
 		) {
-			ui.text().config(content, color = [4]u8{255, 255, 255, 255})
+			ui.text().config(
+				content,
+				color = style.text[.Normal],
+				font_size = g_theme.font_size,
+				font_index = g_theme.font_index,
+			)
 		}
-	}
-}
-
-// image
-image :: proc(
-	id: Maybe(u32) = nil,
-	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_image)) {
-	ui.declare_id(id, loc)
-	return {draw_image}
-}
-
-draw_image :: proc(
-	texture: ui.Texture_Id,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
-	source: ui.Rect = {},
-	tint: [4]u8 = [4]u8{255, 255, 255, 255},
-	fit: ui.Image_Fit = .Stretch,
-	npatch: Maybe(ui.Nine_Patch_Config) = nil,
-) {
-	// don't need this since only one element
-	// wrap_id()
-	if ui.draw_layout(
-		width = width,
-		height = height,
-		background_image = ui.Image {
-			texture = texture,
-			source = source,
-			tint = tint,
-			fit = fit,
-			npatch = npatch,
-		},
-	) {}
-}
-
-// switcher
-switcher :: proc(
-	option_type_hint: $E,
-	id: Maybe(u32) = nil,
-	loc := #caller_location,
-) -> (
-	config_wrapper: ui.Element_Config(
-		proc(
-			current_option: ^E,
-			option_names: [E]string,
-			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
-			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{40}},
-		),
-	),
-) where intrinsics.type_is_enum(E) {
-	ui.declare_id(id, loc)
-	return {
-		config = proc(
-			current_option: ^E,
-			option_names: [E]string,
-			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
-			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{40}},
-		) {
-			if ui.draw_layout(
-				width = width,
-				height = height,
-				layout_direction = .Left_To_Right,
-				background_color = COLORS[.Layer_01],
-				border = {thickness = 1, color = COLORS[.Border_Inverse]},
-				padding = ui.pad_all(2),
-			) {
-				new_option: Maybe(E)
-				for option in E {
-					is_selected := option == current_option^
-
-					bg_colors: Extra_Element_Colors
-					lbl_colors: Extra_Element_Colors
-
-					if is_selected {
-						bg_colors = {
-							normal_color  = COLORS[.Background_Inverse],
-							hovered_color = COLORS[.Background_Inverse],
-							held_color    = COLORS[.Background_Inverse],
-						}
-						lbl_colors = {
-							normal_color  = COLORS[.Text_Inverse],
-							hovered_color = COLORS[.Text_Inverse],
-							held_color    = COLORS[.Text_Inverse],
-						}
-					} else {
-						bg_colors = {
-							normal_color  = 0,
-							hovered_color = COLORS[.Layer_Hover_01],
-							held_color    = COLORS[.Layer_Active_01],
-						}
-						lbl_colors = {
-							normal_color  = COLORS[.Text_Secondary],
-							hovered_color = COLORS[.Text_Primary],
-							held_color    = COLORS[.Text_Primary],
-						}
-					}
-
-					if button_pro(ui.local_id(option_names[option])).config(
-						label = option_names[option],
-						width = ui.grow(),
-						height = ui.grow(),
-						background_colors = bg_colors,
-						label_colors = lbl_colors,
-						border = {},
-						padding = {16, 16, 8, 8},
-						corner_radius = {2, 2, 2, 2},
-					) {
-						new_option = option
-					}
-				}
-				if new_option != nil {
-					current_option^ = new_option.?
-				}
-			}
-		},
 	}
 }
