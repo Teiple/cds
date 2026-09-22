@@ -437,11 +437,13 @@ draw_button_pro :: proc(
 	corner_radius: Corner_Radius,
 ) -> bool {
 	wrap_id()
+	register_this_focusable()
 
 	clicked := is_this_clicked()
 	background_color := background_colors.normal_color
 	label_color := label_colors.normal_color
 	border_color := border.colors.normal_color
+	border_thickness := border.thickness
 
 	if is_this_held() {
 		background_color = background_colors.held_color
@@ -451,6 +453,9 @@ draw_button_pro :: proc(
 		background_color = background_colors.hovered_color
 		label_color = label_colors.hovered_color
 		border_color = border.colors.hovered_color
+	} else if is_this_focused() {
+		border_thickness = max(border_thickness, 2)
+		border_color = COLORS[.Focus]
 	}
 
 	if layout(reuse_id = true).config(
@@ -459,7 +464,7 @@ draw_button_pro :: proc(
 		background_color = background_color,
 		padding = padding,
 		child_alignment = {.Center, .Center},
-		border = {thickness = border.thickness, color = border_color},
+		border = {thickness = border_thickness, color = border_color},
 		corner_radius = corner_radius,
 	) {
 		text().config(

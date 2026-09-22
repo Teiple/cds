@@ -20,7 +20,57 @@ handle_event :: proc(
 		return pos
 	}
 
+	map_key :: proc(kc: sapp.Keycode) -> ui.Key {
+		#partial switch kc {
+		case .TAB:
+			return .Tab
+		case .ENTER, .KP_ENTER:
+			return .Enter
+		case .ESCAPE:
+			return .Escape
+		case .SPACE:
+			return .Space
+		case .LEFT:
+			return .Left
+		case .UP:
+			return .Up
+		case .RIGHT:
+			return .Right
+		case .DOWN:
+			return .Down
+		}
+		return .Invalid
+	}
+
+	update_modifiers :: proc(input: ^ui.Input, mods: u32) {
+		input.keyboard.modifiers = {}
+		if mods & sapp.MODIFIER_SHIFT != 0 {
+			input.keyboard.modifiers += {.Shift}
+		}
+		if mods & sapp.MODIFIER_CTRL != 0 {
+			input.keyboard.modifiers += {.Ctrl}
+		}
+		if mods & sapp.MODIFIER_ALT != 0 {
+			input.keyboard.modifiers += {.Alt}
+		}
+		if mods & sapp.MODIFIER_SUPER != 0 {
+			input.keyboard.modifiers += {.Super}
+		}
+	}
+
+	update_modifiers(input, event.modifiers)
+
 	#partial switch event.type {
+	case .KEY_DOWN:
+		k := map_key(event.key_code)
+		if k != .Invalid {
+			input.keyboard.keys[k] = .Pressed
+		}
+	case .KEY_UP:
+		k := map_key(event.key_code)
+		if k != .Invalid {
+			input.keyboard.keys[k] = .Released
+		}
 	case .MOUSE_MOVE:
 		prev := input.pointer.position
 		pos := map_pos({event.mouse_x, event.mouse_y}, screen_to_ui, user_data)

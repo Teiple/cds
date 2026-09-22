@@ -70,8 +70,42 @@ Pointer :: struct {
 	is_valid: bool,
 }
 
+Key_State :: enum {
+	None,
+	Pressed,
+	Down,
+	Released,
+}
+
+Key :: enum {
+	Invalid,
+	Tab,
+	Enter,
+	Escape,
+	Space,
+	Left,
+	Up,
+	Right,
+	Down,
+}
+
+Keyboard_Modifier :: enum {
+	Shift,
+	Ctrl,
+	Alt,
+	Super,
+}
+
+Keyboard_Modifiers :: bit_set[Keyboard_Modifier]
+
+Keyboard :: struct {
+	keys:      [Key]Key_State,
+	modifiers: Keyboard_Modifiers,
+}
+
 Input :: struct {
-	pointer: Pointer,
+	pointer:  Pointer,
+	keyboard: Keyboard,
 }
 
 Input_Event :: struct {
@@ -83,6 +117,8 @@ Input_Event :: struct {
 	held_elements:     [dynamic]u32,
 	clicked_elements:  [dynamic]u32,
 	scrolls:           map[u32]Scroll_Data,
+	focusables:        [dynamic]u32,
+	focused_id:        u32,
 }
 
 Scroll_Data :: struct #all_or_none {
@@ -1165,6 +1201,8 @@ make_context :: proc(fonts: []Font, pointer: Pointer_Config = {}) -> Context {
 			held_elements = make([dynamic]u32, 0, 4),
 			clicked_elements = make([dynamic]u32, 0, 4),
 			scrolls = make(map[u32]Scroll_Data, 4),
+			focusables = make([dynamic]u32, 0, 16),
+			focused_id = 0,
 		},
 		clip = {open_clip_stack = make([dynamic]Rect, 0, 2)},
 		ids = make(map[u32]Id_Info, 50),
@@ -1190,6 +1228,7 @@ delete_context :: proc(ctx: Context) {
 	delete(ctx.input_event.held_elements)
 	delete(ctx.input_event.clicked_elements)
 	delete(ctx.input_event.scrolls)
+	delete(ctx.input_event.focusables)
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
 	delete(ctx.floats)
@@ -1208,6 +1247,7 @@ begin :: proc(ctx: ^Context, canvas_size: [2]f32, input: Input) -> bool {
 	clear(&ctx.elements)
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
+	clear(&ctx.input_event.focusables)
 
 	append(&ctx.elements, root_layout(canvas_size))
 	append(&ctx.open_layout_stack, 0)
@@ -1272,6 +1312,28 @@ end :: proc(ctx: ^Context, _: [2]f32, _: Input, ok: bool) {
 		}
 	}
 
+	if len(ctx.input_event.clicked_elements) > 0 {
+		ctx.input_event.focused_id = ctx.input_event.clicked_elements[0]
+	}
+
+	if ctx.input.keyboard.keys[.Tab] == .Pressed {
+		if .Shift in ctx.input.keyboard.modifiers {
+			focus_previous_in_ctx(ctx)
+		} else {
+			focus_next_in_ctx(ctx)
+		}
+	}
+
+	if ctx.input.keyboard.keys[.Enter] == .Pressed ||
+	   ctx.input.keyboard.keys[.Space] == .Pressed {
+		if ctx.input_event.focused_id != 0 {
+			append(
+				&ctx.input_event.clicked_elements,
+				ctx.input_event.focused_id,
+			)
+			append(&ctx.input_event.held_elements, ctx.input_event.focused_id)
+		}
+	}
 
 	// write bounds, forward to later frame
 	clear(&ctx.bounds)
@@ -1280,6 +1342,35 @@ end :: proc(ctx: ^Context, _: [2]f32, _: Input, ok: bool) {
 	}
 
 	for p in g_ui_builder.context_events.on_end do p()
+}
+
+@(private = "file")
+focus_next_in_ctx :: proc(ctx: ^Context) {
+	if len(ctx.input_event.focusables) == 0 do return
+	current_idx := -1
+	for id, i in ctx.input_event.focusables {
+		if id == ctx.input_event.focused_id {
+			current_idx = i
+			break
+		}
+	}
+	next_idx := (current_idx + 1) % len(ctx.input_event.focusables)
+	ctx.input_event.focused_id = ctx.input_event.focusables[next_idx]
+}
+
+@(private = "file")
+focus_previous_in_ctx :: proc(ctx: ^Context) {
+	if len(ctx.input_event.focusables) == 0 do return
+	current_idx := -1
+	for id, i in ctx.input_event.focusables {
+		if id == ctx.input_event.focused_id {
+			current_idx = i
+			break
+		}
+	}
+	prev_idx :=
+		current_idx <= 0 ? len(ctx.input_event.focusables) - 1 : current_idx - 1
+	ctx.input_event.focused_id = ctx.input_event.focusables[prev_idx]
 }
 
 handle_floats :: proc(ctx: ^Context) {
@@ -2069,6 +2160,15 @@ input_end_frame :: proc(input: ^Input) {
 	}
 	input.pointer.delta = {0, 0}
 	input.pointer.scroll = {0, 0}
+
+	for &state in input.keyboard.keys {
+		#partial switch state {
+		case .Pressed:
+			state = .Down
+		case .Released:
+			state = .None
+		}
+	}
 }
 
 rect_by_id :: proc(id: u32) -> Rect {
@@ -2128,6 +2228,43 @@ is_this_clicked :: proc() -> bool {
 }
 
 is_clicked :: is_this_clicked
+
+register_focusable :: proc(id: u32) {
+	for f_id in g_ui_builder.current_context.input_event.focusables {
+		if f_id == id do return
+	}
+	append(&g_ui_builder.current_context.input_event.focusables, id)
+}
+
+register_this_focusable :: proc() {
+	register_focusable(g_ui_builder.last_id)
+}
+
+is_id_focused :: proc(id: u32) -> bool {
+	return g_ui_builder.current_context.input_event.focused_id == id
+}
+
+is_this_focused :: proc() -> bool {
+	return is_id_focused(g_ui_builder.last_id)
+}
+
+is_focused :: is_this_focused
+
+set_focused_id :: proc(id: u32) {
+	g_ui_builder.current_context.input_event.focused_id = id
+}
+
+clear_focus :: proc() {
+	g_ui_builder.current_context.input_event.focused_id = 0
+}
+
+focus_next :: proc() {
+	focus_next_in_ctx(g_ui_builder.current_context)
+}
+
+focus_previous :: proc() {
+	focus_previous_in_ctx(g_ui_builder.current_context)
+}
 
 current_scroll_data :: proc() -> Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
