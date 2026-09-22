@@ -43,12 +43,19 @@ UI_Layout_Mouse_State :: enum {
 	Hovered,
 }
 
-UI_Mouse_State :: enum {
+UI_Pointer_Kind :: enum {
+	Mouse,
+	Touch,
+}
+
+UI_Pointer_State :: enum {
 	None,
 	Pressed,
 	Down,
 	Released,
 }
+
+UI_Mouse_State :: UI_Pointer_State
 
 UI_Layout_Mouse_Mode :: enum {
 	Capture,
@@ -56,11 +63,17 @@ UI_Layout_Mouse_Mode :: enum {
 	Ignore,
 }
 
+UI_Pointer :: struct {
+	kind:     UI_Pointer_Kind,
+	state:    UI_Pointer_State,
+	position: [2]f32,
+	delta:    [2]f32,
+	scroll:   [2]f32,
+	is_valid: bool,
+}
+
 UI_Input :: struct {
-	mouse_position: [2]f32,
-	mouse_delta:    [2]f32,
-	mouse_state:    UI_Mouse_State,
-	mouse_scroll:   [2]f32,
+	pointer: UI_Pointer,
 }
 
 UI_Input_Event :: struct {
@@ -416,11 +429,7 @@ UI_Child_Iter :: struct {
 }
 
 @(require_results)
-ui_push_and_dedupe_id :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index,
-	id: u32,
-) -> u32 {
+push_and_dedupe_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) -> u32 {
 	if id_entry, ok := ctx.ids[id]; ok {
 		id_entry.loop_count += 1
 
@@ -449,7 +458,7 @@ ui_push_and_dedupe_id :: proc(
 	}
 }
 
-ui_push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
+push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 	_, existed := ctx.ids[id]
 	if existed {
 		panic("Duplicate ids without manualy using dedupe")
@@ -461,7 +470,7 @@ ui_push_id :: proc(ctx: ^UI_Context, index: UI_Index, id: u32) {
 	}
 }
 
-ui_is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
+is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
 	ele := &ctx.elements[index]
 	if attr, ok := ele.attributes.(UI_Layout_Attributes); ok {
 		return attr.config.float_mode != UI_Float_None{}
@@ -469,7 +478,7 @@ ui_is_floating_element :: proc(ctx: ^UI_Context, index: UI_Index) -> bool {
 	return false
 }
 
-ui_open_layout :: proc(
+open_layout :: proc(
 	ctx: ^UI_Context,
 	id: u32,
 	config: UI_Layout_Config,
@@ -497,14 +506,14 @@ ui_open_layout :: proc(
 
 	append(&ctx.elements, ui_ele)
 	append(&ctx.open_layout_stack, index)
-	if ui_is_floating_element(ctx, index) {
+	if is_floating_element(ctx, index) {
 		append(&ctx.floats, index)
 	}
 
 	return true
 }
 
-ui_open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
+open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	parent_idx := back(ctx.open_layout_stack)
 	index := UI_Index(len(ctx.elements))
 
@@ -526,18 +535,15 @@ ui_open_text :: proc(ctx: ^UI_Context, id: u32, config: UI_Text_Config) {
 	ctx.elements[parent_idx].link.last = index
 
 	append(&ctx.elements, ui_ele)
-	ui_calculate_text_width(ctx, index)
+	calculate_text_width(ctx, index)
 }
 
-ui_close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
+close_layout :: proc(ctx: ^UI_Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
 }
 
-ui_measure_text_width :: proc(
-	input: UI_Text_Config,
-	font_info: UI_Font,
-) -> f32 {
+measure_text_width :: proc(input: UI_Text_Config, font_info: UI_Font) -> f32 {
 	scale :=
 		font_info.base_size > 0 ? (input.font_size / font_info.base_size) : 1.0
 	width: f32 = 0
@@ -550,7 +556,7 @@ ui_measure_text_width :: proc(
 	return width
 }
 
-ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
+calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 	current := &ctx.elements[index]
 	text_attr, ok := &current.attributes.(UI_Text_Attributes)
 	if !ok do return
@@ -569,10 +575,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 				line_end -= 1
 			}
 			config.content = content[line_start:line_end]
-			line_w := ui_measure_text_width(
-				config,
-				ctx.fonts[config.font_index],
-			)
+			line_w := measure_text_width(config, ctx.fonts[config.font_index])
 			if line_w > max_line_width {
 				max_line_width = line_w
 			}
@@ -592,7 +595,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if !ui_is_separator(r) && r != '\n' && r != '\r' {
+				if !is_separator(r) && r != '\n' && r != '\r' {
 					break
 				}
 				byte_index += size
@@ -602,7 +605,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			for byte_index < len(content) {
 				r, size := utf8.decode_rune(content[byte_index:])
-				if ui_is_separator(r) || r == '\n' || r == '\r' {
+				if is_separator(r) || r == '\n' || r == '\r' {
 					break
 				}
 				byte_index += size
@@ -616,7 +619,7 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 
 			config.content = content[word_start:word_end]
 
-			word_width := ui_measure_text_width(
+			word_width := measure_text_width(
 				config,
 				ctx.fonts[config.font_index],
 			)
@@ -629,13 +632,10 @@ ui_calculate_text_width :: proc(ctx: ^UI_Context, index: UI_Index) {
 		current.limits.x.min = largest_word_width
 	}
 
-	current.size.x = ui_clamp_element_size(current.size.x, current.limits.x)
+	current.size.x = clamp_element_size(current.size.x, current.limits.x)
 }
 
-ui_clamp_element_size :: proc(
-	current_size: f32,
-	limits: UI_Axis_Limits,
-) -> f32 {
+clamp_element_size :: proc(current_size: f32, limits: UI_Axis_Limits) -> f32 {
 	res := current_size
 	if min_size, ok := limits.min.(f32); ok && res <= min_size {
 		res = min_size
@@ -646,15 +646,15 @@ ui_clamp_element_size :: proc(
 	return res
 }
 
-ui_fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
+fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(UI_Layout_Attributes)
 	if !ok do return
 
-	if fixed, ok := layout_get_mode(layout, axis).(UI_Fixed_Size); ok {
-		ele_set_min(current, fixed.value, axis)
-		ele_set_max(current, fixed.value, axis)
-		ele_set_size(current, fixed.value, axis)
+	if fixed_val, ok := layout_get_mode(layout, axis).(UI_Fixed_Size); ok {
+		ele_set_min(current, fixed_val.value, axis)
+		ele_set_max(current, fixed_val.value, axis)
+		ele_set_size(current, fixed_val.value, axis)
 		return
 	}
 
@@ -664,7 +664,7 @@ ui_fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	children_min_size := f32(0)
 	child_count := 0
 
-	for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 		child_size := ele_get_size(child, axis)
 		child_min := ele_get_min(child, axis)
 
@@ -696,19 +696,19 @@ ui_fit_sizing :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	}
 	ele_set_size(
 		current,
-		ui_clamp_element_size(children_size, ele_get_lims(current, axis)),
+		clamp_element_size(children_size, ele_get_lims(current, axis)),
 		axis,
 	)
 }
 
-ui_fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
-	for it := ui_child_iter_start(ctx, index); child, child_index in ui_child_iter_next(&it) {
-		ui_fit_sizing_tree(ctx, child_index, axis)
+fit_sizing_tree :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		fit_sizing_tree(ctx, child_index, axis)
 	}
-	ui_fit_sizing(ctx, index, axis)
+	fit_sizing(ctx, index, axis)
 }
 
-ui_grow_and_percent_sizing :: proc(
+grow_and_percent_sizing :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index,
 	axis: UI_Axis,
@@ -721,14 +721,11 @@ ui_grow_and_percent_sizing :: proc(
 	percent_basis := available
 
 	if layout_is_across(layout, axis) {
-		for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) {
-			if ui_is_grow_layout_or_text(child^, axis) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+			if is_grow_layout_or_text(child^, axis) {
 				ele_set_size(
 					child,
-					ui_clamp_element_size(
-						available,
-						ele_get_lims(child, axis),
-					),
+					clamp_element_size(available, ele_get_lims(child, axis)),
 					axis,
 				)
 			} else if percent_size, ok := layout_get_mode(
@@ -737,7 +734,7 @@ ui_grow_and_percent_sizing :: proc(
 			   ).(UI_Percent_Size); ok {
 				ele_set_size(
 					child,
-					ui_clamp_element_size(
+					clamp_element_size(
 						percent_size.value * percent_basis,
 						ele_get_lims(child, axis),
 					),
@@ -753,7 +750,7 @@ ui_grow_and_percent_sizing :: proc(
 	defer clear(growables)
 
 	child_count := 0
-	for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) do child_count += 1
+	for it := child_iter_start(ctx, index); child in child_iter_next(&it) do child_count += 1
 	if child_count == 0 do return
 
 	gap_total := f32(child_count - 1) * layout.config.child_gap
@@ -761,8 +758,8 @@ ui_grow_and_percent_sizing :: proc(
 	remaining := available - gap_total
 	percent_basis -= gap_total
 
-	for it := ui_child_iter_start(ctx, index); child, child_index in ui_child_iter_next(&it) {
-		if ui_is_grow_layout_or_text(child^, axis) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		if is_grow_layout_or_text(child^, axis) {
 			append(growables, child_index)
 		} else if percent_size, ok := layout_get_mode(
 			   child^,
@@ -770,7 +767,7 @@ ui_grow_and_percent_sizing :: proc(
 		   ).(UI_Percent_Size); ok {
 			ele_set_size(
 				child,
-				ui_clamp_element_size(
+				clamp_element_size(
 					percent_size.value * percent_basis,
 					ele_get_lims(child, axis),
 				),
@@ -895,18 +892,18 @@ ui_grow_and_percent_sizing :: proc(
 	}
 }
 
-ui_grow_and_percent_sizing_tree :: proc(
+grow_and_percent_sizing_tree :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index,
 	axis: UI_Axis,
 ) {
-	ui_grow_and_percent_sizing(ctx, index, axis)
-	for it := ui_child_iter_start(ctx, index); child, child_index in ui_child_iter_next(&it) {
-		ui_grow_and_percent_sizing_tree(ctx, child_index, axis)
+	grow_and_percent_sizing(ctx, index, axis)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		grow_and_percent_sizing_tree(ctx, child_index, axis)
 	}
 }
 
-ui_is_separator :: #force_inline proc(r: rune) -> bool {
+is_separator :: #force_inline proc(r: rune) -> bool {
 	for sep in WORD_SEPARATION_CHARS {
 		if r == sep {
 			return true
@@ -915,11 +912,11 @@ ui_is_separator :: #force_inline proc(r: rune) -> bool {
 	return false
 }
 
-ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
-	for it := ui_child_iter_start(ctx, index); ele, child_index in ui_child_iter_next(&it) {
+wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
+	for it := child_iter_start(ctx, index); ele, child_index in child_iter_next(&it) {
 		text_attr, ok := (&ele.attributes.(UI_Text_Attributes))
 		if !ok { 	// layout
-			ui_wrap_texts(ctx, child_index)
+			wrap_texts(ctx, child_index)
 			continue
 		}
 
@@ -972,10 +969,7 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 			raw_line_start = raw_index + 1
 
 			config.content = raw_line
-			line_w := ui_measure_text_width(
-				config,
-				ctx.fonts[config.font_index],
-			)
+			line_w := measure_text_width(config, ctx.fonts[config.font_index])
 
 			if line_w <= ele.size.x && !has_newlines {
 				continue
@@ -996,7 +990,7 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 				for byte_index < len(raw_line) {
 					r, size := utf8.decode_rune(raw_line[byte_index:])
-					if !ui_is_separator(r) {
+					if !is_separator(r) {
 						break
 					}
 					byte_index += size
@@ -1006,7 +1000,7 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 
 				for byte_index < len(raw_line) {
 					r, size := utf8.decode_rune(raw_line[byte_index:])
-					if ui_is_separator(r) {
+					if is_separator(r) {
 						break
 					}
 					byte_index += size
@@ -1019,13 +1013,13 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 				}
 
 				config.content = raw_line[whitespace_start:word_start]
-				whitespace_width := ui_measure_text_width(
+				whitespace_width := measure_text_width(
 					config,
 					ctx.fonts[config.font_index],
 				)
 
 				config.content = raw_line[word_start:word_end]
-				word_width := ui_measure_text_width(
+				word_width := measure_text_width(
 					config,
 					ctx.fonts[config.font_index],
 				)
@@ -1054,14 +1048,11 @@ ui_wrap_texts :: proc(ctx: ^UI_Context, index: UI_Index = 0) {
 }
 
 
-ui_get_anchor_point :: proc(
-	ele: UI_Element,
-	anchor: UI_Anchor_Point,
-) -> [2]f32 {
-	return ele.position + ele.size * ui_get_anchor_offset(anchor)
+get_anchor_point :: proc(ele: UI_Element, anchor: UI_Anchor_Point) -> [2]f32 {
+	return ele.position + ele.size * get_anchor_offset(anchor)
 }
 
-ui_get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
+get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
 	switch anchor {
 	case .LeftTop:
 		return {0, 0}
@@ -1085,11 +1076,7 @@ ui_get_anchor_offset :: proc(anchor: UI_Anchor_Point) -> [2]f32 {
 	return {0, 0}
 }
 
-ui_calculate_position :: proc(
-	ctx: ^UI_Context,
-	index: UI_Index,
-	axis: UI_Axis,
-) {
+calculate_position :: proc(ctx: ^UI_Context, index: UI_Index, axis: UI_Axis) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(UI_Layout_Attributes)
 	if !ok {
@@ -1125,7 +1112,7 @@ ui_calculate_position :: proc(
 		remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis)
 
 		child_count := 0
-		for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			remaining -= ele_get_size(child, axis)
 			child_count += 1
 		}
@@ -1138,7 +1125,7 @@ ui_calculate_position :: proc(
 			remaining * align_get_offset(layout.config.child_alignment, axis)
 	}
 
-	for it := ui_child_iter_start(ctx, index); child, child_index in ui_child_iter_next(&it) {
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		child_layout, is_child_layout := child.attributes.(UI_Layout_Attributes)
 		child_offset :=
 			offset +
@@ -1161,11 +1148,11 @@ ui_calculate_position :: proc(
 			offset += ele_get_size(child, axis) + layout.config.child_gap
 		}
 
-		ui_calculate_position(ctx, child_index, axis)
+		calculate_position(ctx, child_index, axis)
 	}
 }
 
-ui_context_make :: proc(
+make_context :: proc(
 	fonts: []UI_Font,
 	pointer: UI_Pointer_Config = {},
 ) -> UI_Context {
@@ -1199,7 +1186,7 @@ ui_context_make :: proc(
 	}
 }
 
-ui_context_delete :: proc(ctx: UI_Context) {
+delete_context :: proc(ctx: UI_Context) {
 	for event in g_ui_builder.context_events.on_delete {
 		event()
 	}
@@ -1222,12 +1209,8 @@ ui_context_delete :: proc(ctx: UI_Context) {
 	delete(ctx.bounds)
 }
 
-@(require_results, deferred_in_out = ui_end)
-ui_begin :: proc(
-	ctx: ^UI_Context,
-	canvas_size: [2]f32,
-	input: UI_Input,
-) -> bool {
+@(require_results, deferred_in_out = end)
+begin :: proc(ctx: ^UI_Context, canvas_size: [2]f32, input: UI_Input) -> bool {
 	g_ui_builder.current_context = ctx
 	for p in g_ui_builder.context_events.on_begin do p()
 
@@ -1239,7 +1222,7 @@ ui_begin :: proc(
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
 
-	append(&ctx.elements, ui_root_layout(canvas_size))
+	append(&ctx.elements, root_layout(canvas_size))
 	append(&ctx.open_layout_stack, 0)
 
 	clear(&ctx.render_commands)
@@ -1249,34 +1232,34 @@ ui_begin :: proc(
 	return true
 }
 
-ui_end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
+end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 	if !ok do return
 
 	// close root
-	ui_close_layout(ctx)
+	close_layout(ctx)
 
-	ui_fit_sizing_tree(ctx, 0, .X)
-	ui_grow_and_percent_sizing_tree(ctx, 0, .X)
-	ui_wrap_texts(ctx, 0)
+	fit_sizing_tree(ctx, 0, .X)
+	grow_and_percent_sizing_tree(ctx, 0, .X)
+	wrap_texts(ctx, 0)
 
-	ui_fit_sizing_tree(ctx, 0, .Y)
-	ui_grow_and_percent_sizing_tree(ctx, 0, .Y)
+	fit_sizing_tree(ctx, 0, .Y)
+	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
-	ui_calculate_position(ctx, 0, .X)
-	ui_calculate_position(ctx, 0, .Y)
+	calculate_position(ctx, 0, .X)
+	calculate_position(ctx, 0, .Y)
 
-	ui_handle_floats(ctx)
+	handle_floats(ctx)
 
 	// generate render commands
 	clear(&ctx.render_commands)
 	clear(&ctx.clip.open_clip_stack)
 
-	ui_generate_commands(ctx, 0)
+	generate_commands(ctx, 0)
 
 	// sort floats by z_index ascending for rendering
-	ui_sort_floats_by_zindex(ctx, ctx.floats[:])
+	sort_floats_by_zindex(ctx, ctx.floats[:])
 	for idx in ctx.floats {
-		ui_generate_commands(ctx, idx)
+		generate_commands(ctx, idx)
 	}
 
 	// mouse input
@@ -1291,13 +1274,13 @@ ui_end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 
 		// detect mouse input on floats first, in reverse z index order
 		#reverse for idx in ctx.floats {
-			ui_detect_mouse(ctx, idx)
+			detect_mouse(ctx, idx)
 			if ctx.input_event.mouse_captured && ctx.input_event.scroll_captured do break
 		}
 		// then the normal layout layer
-		ui_detect_mouse(ctx, 0)
+		detect_mouse(ctx, 0)
 
-		if ctx.input.mouse_state == .Released {
+		if ctx.input.pointer.state == .Released {
 			clear(&ctx.input_event.held_elements)
 		}
 	}
@@ -1312,7 +1295,7 @@ ui_end :: proc(ctx: ^UI_Context, _: [2]f32, _: UI_Input, ok: bool) {
 	for p in g_ui_builder.context_events.on_end do p()
 }
 
-ui_handle_floats :: proc(ctx: ^UI_Context) {
+handle_floats :: proc(ctx: ^UI_Context) {
 	grow_and_percent_float_root :: proc(
 		ctx: ^UI_Context,
 		index: UI_Index,
@@ -1321,7 +1304,7 @@ ui_handle_floats :: proc(ctx: ^UI_Context) {
 		current := &ctx.elements[index]
 		layout := ctx.elements[index].attributes.(UI_Layout_Attributes)
 
-		float_parent_index, _ := ui_get_float_target(
+		float_parent_index, _ := get_float_target(
 			ctx^,
 			index,
 			layout.config.float_mode,
@@ -1331,13 +1314,13 @@ ui_handle_floats :: proc(ctx: ^UI_Context) {
 
 		#partial switch mode in layout_get_mode(layout, axis) {
 		case UI_Grow_Size:
-			size := ui_clamp_element_size(
+			size := clamp_element_size(
 				ele_get_size(float_parent, axis),
 				ele_get_lims(current, axis),
 			)
 			ele_set_size(current, size, axis)
 		case UI_Percent_Size:
-			size := ui_clamp_element_size(
+			size := clamp_element_size(
 				mode.value * ele_get_size(float_parent, axis),
 				ele_get_lims(current, axis),
 			)
@@ -1349,15 +1332,15 @@ ui_handle_floats :: proc(ctx: ^UI_Context) {
 		ele := &ctx.elements[index]
 		layout := ele.attributes.(UI_Layout_Attributes)
 
-		target_index, float_config := ui_get_float_target(
+		target_index, float_config := get_float_target(
 			ctx^,
 			index,
 			layout.config.float_mode,
 		)
 
 		element_offset :=
-			ele.size * ui_get_anchor_offset(float_config.attach_points.element)
-		target_anchor := ui_get_anchor_point(
+			ele.size * get_anchor_offset(float_config.attach_points.element)
+		target_anchor := get_anchor_point(
 			ctx.elements[target_index],
 			float_config.attach_points.parent,
 		)
@@ -1369,25 +1352,25 @@ ui_handle_floats :: proc(ctx: ^UI_Context) {
 	for float_index in ctx.floats {
 		// only fit sizing includes direct sizing on current layout,
 		// grow and percent sizing only calculate children sizing
-		ui_fit_sizing_tree(ctx, float_index, .X)
+		fit_sizing_tree(ctx, float_index, .X)
 
 		grow_and_percent_float_root(ctx, float_index, .X)
-		ui_grow_and_percent_sizing_tree(ctx, float_index, .X)
-		ui_wrap_texts(ctx, float_index)
+		grow_and_percent_sizing_tree(ctx, float_index, .X)
+		wrap_texts(ctx, float_index)
 
-		ui_fit_sizing_tree(ctx, float_index, .Y)
+		fit_sizing_tree(ctx, float_index, .Y)
 
 		grow_and_percent_float_root(ctx, float_index, .Y)
-		ui_grow_and_percent_sizing_tree(ctx, float_index, .Y)
+		grow_and_percent_sizing_tree(ctx, float_index, .Y)
 
 		calculate_float_root_position(ctx, float_index)
-		ui_calculate_position(ctx, float_index, .X)
-		ui_calculate_position(ctx, float_index, .Y)
+		calculate_position(ctx, float_index, .X)
+		calculate_position(ctx, float_index, .Y)
 	}
 }
 
 
-ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
+generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 	ele := &ctx.elements[index]
 
 	switch attr in ele.attributes {
@@ -1427,7 +1410,7 @@ ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 				},
 			)
 		}
-		if attr.config.clip && !ui_is_floating_element(ctx, index) {
+		if attr.config.clip && !is_floating_element(ctx, index) {
 			append(
 				&ctx.render_commands,
 				UI_Push_Clip_Command{
@@ -1461,17 +1444,17 @@ ui_generate_commands :: proc(ctx: ^UI_Context, index: UI_Index) {
 		)
 	}
 
-	for it := ui_child_iter_start(ctx, index); child, child_index in ui_child_iter_next(&it) {
-		ui_generate_commands(ctx, child_index)
+	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
+		generate_commands(ctx, child_index)
 	}
 
 	if layout_attr, ok := ele.attributes.(UI_Layout_Attributes);
-	   ok && layout_attr.config.clip && !ui_is_floating_element(ctx, index) {
+	   ok && layout_attr.config.clip && !is_floating_element(ctx, index) {
 		append(&ctx.render_commands, UI_Pop_Clip_Command{})
 	}
 }
 
-ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
+detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 	detect_mouse_should_stop :: proc(input_event: UI_Input_Event) -> bool {
 		return input_event.mouse_captured && input_event.scroll_captured
 	}
@@ -1480,17 +1463,17 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 		return
 	}
 
-	ui_travel_tree_reverse(ctx, index, on_down = proc(ctx: ^UI_Context, idx: i32) -> (stop: bool) {
+	travel_tree_reverse(ctx, index, on_down = proc(ctx: ^UI_Context, idx: i32) -> (stop: bool) {
 			ele := ctx.elements[idx]
 
 			layout := ele.attributes.(UI_Layout_Attributes) or_return
 			ele_rect := ele_get_rect(ele)
 
-			if layout.config.clip && !ui_is_floating_element(ctx, idx) {
+			if layout.config.clip && !is_floating_element(ctx, idx) {
 				if len(ctx.clip.open_clip_stack) == 0 {
 					append(&ctx.clip.open_clip_stack, ele_rect)
 				} else {
-					append(&ctx.clip.open_clip_stack, ui_intersect_rect(back(ctx.clip.open_clip_stack), ele_rect))
+					append(&ctx.clip.open_clip_stack, intersect_rect(back(ctx.clip.open_clip_stack), ele_rect))
 				}
 			}
 
@@ -1501,21 +1484,22 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 			layout, ok := ele.attributes.(UI_Layout_Attributes)
 			if !ok do return
 
-			defer if layout.config.clip && !ui_is_floating_element(ctx, idx) {
+			defer if layout.config.clip && !is_floating_element(ctx, idx) {
 				pop(&ctx.clip.open_clip_stack)
 			}
 
 			if layout.config.mouse_mode == .Ignore do return
+			if !ctx.input.pointer.is_valid do return
 
 			clipped_rect: Rect = {ele.position.x, ele.position.y, ele.size.x, ele.size.y}
 
 			if !ctx.input_event.mouse_captured {
 				if len(ctx.clip.open_clip_stack) > 0 {
-					clipped_rect = ui_intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
+					clipped_rect = intersect_rect(clipped_rect, back(ctx.clip.open_clip_stack))
 				}
 
-				if ui_rect_contains(ctx.input.mouse_position, clipped_rect) {
-					switch ctx.input.mouse_state {
+				if rect_contains(ctx.input.pointer.position, clipped_rect) {
+					switch ctx.input.pointer.state {
 					case .Pressed:
 						if !ctx.input_event.selected_once {
 							clear(&ctx.input_event.selected_elements)
@@ -1525,7 +1509,7 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 						append(&ctx.input_event.selected_elements, ele.id)
 						append(&ctx.input_event.held_elements, ele.id)
 					case .Released:
-						if ui_is_id_held(ele.id) {
+						if is_id_held(ele.id) {
 							append(&ctx.input_event.clicked_elements, ele.id)
 						}
 					case .None, .Down:
@@ -1540,23 +1524,21 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 			}
 
 			if !ctx.input_event.scroll_captured && layout.config.scroll {
-				mouse_position := ctx.input.mouse_position
-
 				ele_rect := ele_get_rect(ele)
 
 				clipped_rect := ele_rect
 
 				if len(ctx.clip.open_clip_stack) > 0 {
-					clipped_rect = ui_intersect_rect(back(ctx.clip.open_clip_stack), ele_rect)
+					clipped_rect = intersect_rect(back(ctx.clip.open_clip_stack), ele_rect)
 				}
 
-				if ui_rect_contains(ctx.input.mouse_position, clipped_rect) {
+				if rect_contains(ctx.input.pointer.position, clipped_rect) {
 					content_size: [2]f32 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
 					min_offset: [2]f32 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
 
 					cur_scroll := ctx.input_event.scrolls[ele.id]
 					pending_offset, is_pending := cur_scroll.pending_offset.?
-					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + ctx.input.mouse_scroll * 20.0
+					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + ctx.input.pointer.scroll * 20.0
 
 					next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
 
@@ -1577,16 +1559,16 @@ ui_detect_mouse :: proc(ctx: ^UI_Context, index: UI_Index) {
 		})
 }
 
-ui_travel_tree_reverse :: proc(
+travel_tree_reverse :: proc(
 	ctx: ^UI_Context,
 	index: UI_Index = 0,
 	on_up: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
 	on_down: proc(ctx: ^UI_Context, index: UI_Index) -> bool = nil,
 ) -> bool {
 	if on_down != nil && on_down(ctx, index) do return true
-	it := ui_child_iter_reverse_start(ctx, index)
-	for child, child_index in ui_child_iter_reverse_next(&it) {
-		if ui_travel_tree_reverse(ctx, child_index, on_up, on_down) {
+	it := child_iter_reverse_start(ctx, index)
+	for child, child_index in child_iter_reverse_next(&it) {
+		if travel_tree_reverse(ctx, child_index, on_up, on_down) {
 			return true
 		}
 	}
@@ -1594,7 +1576,7 @@ ui_travel_tree_reverse :: proc(
 	return false
 }
 
-ui_root_layout :: proc(screen_size: [2]f32) -> UI_Element {
+root_layout :: proc(screen_size: [2]f32) -> UI_Element {
 	return UI_Element {
 		id = 0,
 		position = {0, 0},
@@ -1606,14 +1588,14 @@ ui_root_layout :: proc(screen_size: [2]f32) -> UI_Element {
 				width = UI_Fixed_Size{screen_size.x},
 				height = UI_Fixed_Size{screen_size.y},
 				layout_direction = .Top_To_Bottom,
-				padding = ui_pad_all(2),
+				padding = pad_all(2),
 				background_color = {},
 			},
 		},
 	}
 }
 
-ui_child_iter_start :: proc(
+child_iter_start :: proc(
 	ctx: ^UI_Context,
 	start_index: UI_Index,
 	exclude_floats := true,
@@ -1624,14 +1606,14 @@ ui_child_iter_start :: proc(
 		start.link.last != nil ? start_index + 1 : nil
 
 	// Forwards until we find non float
-	for next_index != nil && ui_is_floating_element(ctx, next_index.?) {
+	for next_index != nil && is_floating_element(ctx, next_index.?) {
 		next_index = ctx.elements[next_index.?].link.next
 	}
 
 	return {ctx = ctx, next = next_index}
 }
 
-ui_child_iter_next :: proc(
+child_iter_next :: proc(
 	it: ^UI_Child_Iter,
 ) -> (
 	child: ^UI_Element,
@@ -1648,14 +1630,14 @@ ui_child_iter_next :: proc(
 
 	it.next = child.link.next
 
-	for it.next != nil && ui_is_floating_element(it.ctx, it.next.?) {
+	for it.next != nil && is_floating_element(it.ctx, it.next.?) {
 		it.next = it.ctx.elements[it.next.?].link.next
 	}
 
 	return
 }
 
-ui_child_iter_reverse_start :: proc(
+child_iter_reverse_start :: proc(
 	ctx: ^UI_Context,
 	start_index: UI_Index,
 ) -> UI_Child_Iter {
@@ -1663,14 +1645,14 @@ ui_child_iter_reverse_start :: proc(
 	next_index := start.link.last
 
 	// Backwards until we find non float
-	for next_index != nil && ui_is_floating_element(ctx, next_index.?) {
+	for next_index != nil && is_floating_element(ctx, next_index.?) {
 		next_index = ctx.elements[next_index.?].link.prev
 	}
 
 	return {ctx = ctx, next = next_index}
 }
 
-ui_child_iter_reverse_next :: proc(
+child_iter_reverse_next :: proc(
 	it: ^UI_Child_Iter,
 ) -> (
 	child: ^UI_Element,
@@ -1687,14 +1669,14 @@ ui_child_iter_reverse_next :: proc(
 
 	it.next = child.link.prev
 
-	for it.next != nil && ui_is_floating_element(it.ctx, it.next.?) {
+	for it.next != nil && is_floating_element(it.ctx, it.next.?) {
 		it.next = it.ctx.elements[it.next.?].link.prev
 	}
 
 	return
 }
 
-ui_get_float_target :: proc(
+get_float_target :: proc(
 	ctx: UI_Context,
 	index: UI_Index,
 	float_mode: UI_Float_Mode,
@@ -1728,7 +1710,7 @@ ui_get_float_target :: proc(
 	return
 }
 
-ui_is_grow_layout_or_text :: proc(ele: UI_Element, axis: UI_Axis) -> bool {
+is_grow_layout_or_text :: proc(ele: UI_Element, axis: UI_Axis) -> bool {
 	switch attr in ele.attributes {
 	case UI_Text_Attributes:
 		{
@@ -1765,7 +1747,7 @@ layout_get_content_size :: proc(
 	content_size: f32 = 0
 	if layout_is_along(layout, axis) {
 		child_count: i32 = 0
-		for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			content_size += ele_get_size(child, axis)
 			child_count += 1
 		}
@@ -1773,7 +1755,7 @@ layout_get_content_size :: proc(
 			child_count > 0 ? f32(child_count - 1) * layout.config.child_gap : 0
 	} else {
 		max_size: f32 = 0
-		for it := ui_child_iter_start(ctx, index); child in ui_child_iter_next(&it) {
+		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
 			max_size = max(max_size, ele_get_size(child, axis))
 		}
 		content_size += max_size
@@ -1920,7 +1902,7 @@ align_get_offset :: proc(alignment: [2]f32, axis: UI_Axis) -> f32 {
 	return axis == .X ? alignment.x : alignment.y
 }
 
-ui_sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
+sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	// ascending sort
 	if len(indices) <= 1 do return
 	// simple insertion sort
@@ -1931,8 +1913,8 @@ ui_sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 			b := &ctx.elements[indices[j - 1]]
 			a_float := a.attributes.(UI_Layout_Attributes).config.float_mode
 			b_float := b.attributes.(UI_Layout_Attributes).config.float_mode
-			a_z := ui_get_float_z_index(a_float)
-			b_z := ui_get_float_z_index(b_float)
+			a_z := get_float_z_index(a_float)
+			b_z := get_float_z_index(b_float)
 			swap := a_z < b_z
 			if swap {
 				indices[j], indices[j - 1] = indices[j - 1], indices[j]
@@ -1944,7 +1926,7 @@ ui_sort_floats_by_zindex :: proc(ctx: ^UI_Context, indices: []UI_Index) {
 	}
 }
 
-ui_get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
+get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
 	switch float_type in float {
 	case UI_Float_None:
 		panic("Element doesn't float")
@@ -1961,7 +1943,7 @@ ui_get_float_z_index :: proc(float: UI_Float_Mode) -> i32 {
 BORDER_DEFAULT: UI_Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 
 @(require_results)
-ui_draw_layout :: proc(
+draw_layout :: proc(
 	width: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
 	height: UI_Sizing_Axis = {mode = UI_Fit_Size{}},
 	padding: UI_Layout_Padding = {2, 2, 2, 2},
@@ -1979,7 +1961,7 @@ ui_draw_layout :: proc(
 	float_mode: UI_Float_Mode = UI_Float_None{},
 	offset: [2]f32 = {},
 ) -> bool {
-	return ui_open_layout(
+	return open_layout(
 		g_ui_builder.current_context,
 		g_ui_builder.last_id,
 		{
@@ -2007,7 +1989,7 @@ ui_draw_layout :: proc(
 	)
 }
 
-ui_draw_text :: proc(
+draw_text :: proc(
 	content: string,
 	font_index: UI_Font_Index = 0,
 	font_size: f32 = 16,
@@ -2016,7 +1998,7 @@ ui_draw_text :: proc(
 	alignment: UI_Alignment = {x = .Left, y = .Top},
 	loc := #caller_location,
 ) -> bool {
-	ui_open_text(
+	open_text(
 		g_ui_builder.current_context,
 		g_ui_builder.last_id,
 		{
@@ -2031,14 +2013,14 @@ ui_draw_text :: proc(
 	return true
 }
 
-ui_grow :: #force_inline proc(
+grow :: #force_inline proc(
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
 ) -> UI_Sizing_Axis {
 	return {mode = UI_Grow_Size{}, min = min, max = max}
 }
 
-ui_fixed :: #force_inline proc(
+fixed :: #force_inline proc(
 	value: f32 = 0,
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
@@ -2046,14 +2028,14 @@ ui_fixed :: #force_inline proc(
 	return {mode = UI_Fixed_Size{value = value}, min = min, max = max}
 }
 
-ui_fit :: #force_inline proc(
+fit :: #force_inline proc(
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
 ) -> UI_Sizing_Axis {
 	return {mode = UI_Fit_Size{}, min = min, max = max}
 }
 
-ui_percent :: #force_inline proc(
+percent :: #force_inline proc(
 	value: f32,
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
@@ -2061,93 +2043,127 @@ ui_percent :: #force_inline proc(
 	return {mode = UI_Percent_Size{value = value}, min = min, max = max}
 }
 
-ui_pad_all :: #force_inline proc(value: f32) -> UI_Layout_Padding {
+pad_all :: #force_inline proc(value: f32) -> UI_Layout_Padding {
 	return UI_Layout_Padding{value, value, value, value}
 }
 
-ui_corner_radius_all :: #force_inline proc(value: f32) -> UI_Corner_Radius {
+corner_radius_all :: #force_inline proc(value: f32) -> UI_Corner_Radius {
 	return UI_Corner_Radius{value, value, value, value}
 }
 
 
-ui_mouse_state_on_this :: proc() -> UI_Layout_Mouse_State {
+mouse_state_on_this :: proc() -> UI_Layout_Mouse_State {
 	return get_layout_mouse_state_by_id(
 		g_ui_builder.current_context^,
 		g_ui_builder.last_id,
 	)
 }
 
-ui_mouse_state_on_id :: proc(id: u32) -> UI_Layout_Mouse_State {
+mouse_state_on_id :: proc(id: u32) -> UI_Layout_Mouse_State {
 	return get_layout_mouse_state_by_id(g_ui_builder.current_context^, id)
 }
 
-ui_mouse_state :: proc() -> UI_Mouse_State {
-	return g_ui_builder.current_context.input.mouse_state
+pointer_state :: proc() -> UI_Pointer_State {
+	return g_ui_builder.current_context.input.pointer.state
 }
 
-ui_mouse_delta :: proc() -> [2]f32 {
-	return g_ui_builder.current_context.input.mouse_delta
+pointer_delta :: proc() -> [2]f32 {
+	return g_ui_builder.current_context.input.pointer.delta
 }
 
-ui_mouse_position :: proc() -> [2]f32 {
-	return g_ui_builder.current_context.input.mouse_position
+pointer_position :: proc() -> [2]f32 {
+	return g_ui_builder.current_context.input.pointer.position
 }
 
-ui_rect_by_id :: proc(id: u32) -> Rect {
+pointer_is_valid :: proc() -> bool {
+	return g_ui_builder.current_context.input.pointer.is_valid
+}
+
+pointer_kind :: proc() -> UI_Pointer_Kind {
+	return g_ui_builder.current_context.input.pointer.kind
+}
+
+mouse_state :: pointer_state
+mouse_delta :: pointer_delta
+mouse_position :: pointer_position
+
+input_end_frame :: proc(input: ^UI_Input) {
+	#partial switch input.pointer.state {
+	case .Pressed:
+		input.pointer.state = .Down
+	case .Released:
+		input.pointer.state = .None
+		if input.pointer.kind == .Touch {
+			input.pointer.is_valid = false
+		}
+	}
+	input.pointer.delta = {0, 0}
+	input.pointer.scroll = {0, 0}
+}
+
+rect_by_id :: proc(id: u32) -> Rect {
 	rect, ok := g_ui_builder.current_context.bounds[id]
 	assert(ok)
 	return rect
 }
 
-ui_is_id_selected :: proc(id: u32) -> bool {
+is_id_selected :: proc(id: u32) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.selected_elements {
 		if ele_id == id do return true
 	}
 	return false
 }
 
-ui_is_this_selected :: proc() -> bool {
-	return ui_is_id_selected(g_ui_builder.last_id)
+is_this_selected :: proc() -> bool {
+	return is_id_selected(g_ui_builder.last_id)
 }
 
-ui_is_id_held :: proc(id: u32) -> bool {
+is_selected :: is_this_selected
+
+is_id_held :: proc(id: u32) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.held_elements {
 		if ele_id == id do return true
 	}
 	return false
 }
 
-ui_is_this_held :: proc() -> bool {
-	return ui_is_id_held(g_ui_builder.last_id)
+is_this_held :: proc() -> bool {
+	return is_id_held(g_ui_builder.last_id)
 }
 
-ui_is_id_hovered :: proc(id: u32) -> bool {
+is_held :: is_this_held
+
+is_id_hovered :: proc(id: u32) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.hovered_elements {
 		if ele_id == id do return true
 	}
 	return false
 }
 
-ui_is_this_hovered :: proc() -> bool {
-	return ui_is_id_hovered(g_ui_builder.last_id)
+is_this_hovered :: proc() -> bool {
+	return is_id_hovered(g_ui_builder.last_id)
 }
 
-ui_is_id_clicked :: proc(id: u32) -> bool {
+is_hovered :: is_this_hovered
+
+is_id_clicked :: proc(id: u32) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.clicked_elements {
 		if ele_id == id do return true
 	}
 	return false
 }
 
-ui_is_this_clicked :: proc() -> bool {
-	return ui_is_id_clicked(g_ui_builder.last_id)
+is_this_clicked :: proc() -> bool {
+	return is_id_clicked(g_ui_builder.last_id)
 }
 
-ui_current_scroll_data :: proc() -> UI_Scroll_Data {
+is_clicked :: is_this_clicked
+
+current_scroll_data :: proc() -> UI_Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
 }
 
-ui_set_scroll_offset :: proc(scroll: [2]f32) {
+set_scroll_offset :: proc(scroll: [2]f32) {
 	set_layout_scroll_offset(g_ui_builder.current_context, scroll)
 }
 
@@ -2175,7 +2191,7 @@ get_layout_mouse_state_by_id :: proc(
 ) -> UI_Layout_Mouse_State {
 	for ele_id in ctx.input_event.hovered_elements {
 		if ele_id == id {
-			switch ctx.input.mouse_state {
+			switch ctx.input.pointer.state {
 			case .None:
 				return .Hovered
 			case .Pressed:
@@ -2229,7 +2245,7 @@ get_alignment_offset :: proc(alignment: UI_Alignment) -> [2]f32 {
 }
 
 @(require_results)
-ui_intersect_rect :: proc(a, b: Rect) -> (Rect, bool) #optional_ok {
+intersect_rect :: proc(a, b: Rect) -> (Rect, bool) #optional_ok {
 	left := max(a.x, b.x)
 	top := max(a.y, b.y)
 	right := min(a.x + a.width, b.x + b.width)
@@ -2243,7 +2259,7 @@ ui_intersect_rect :: proc(a, b: Rect) -> (Rect, bool) #optional_ok {
 }
 
 @(require_results)
-ui_rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
+rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
 	return(
 		p.x >= rec.x &&
 		p.x <= rec.x + rec.width &&
@@ -2253,7 +2269,7 @@ ui_rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
 }
 
 
-ui_auto_id_hash :: proc(
+auto_id_hash :: proc(
 	parent_hash: u32,
 	loc: runtime.Source_Code_Location,
 ) -> u32 {
@@ -2267,14 +2283,14 @@ ui_auto_id_hash :: proc(
 }
 
 @(require_results)
-ui_global_id :: proc(id: string) -> u32 {
+global_id :: proc(id: string) -> u32 {
 	id := hash.adler32(transmute([]u8)id)
 
 	return id
 }
 
 @(require_results)
-ui_local_id :: proc(id: string) -> u32 {
+local_id :: proc(id: string) -> u32 {
 	parent_hash :=
 		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
 	id := hash.adler32(transmute([]u8)id, parent_hash)
@@ -2283,7 +2299,7 @@ ui_local_id :: proc(id: string) -> u32 {
 }
 
 @(require_results)
-ui_family_id :: proc(id: string, owner: string) -> u32 {
+family_id :: proc(id: string, owner: string) -> u32 {
 	parent_hash :=
 		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
 	id := hash.adler32(transmute([]u8)id, parent_hash)
@@ -2292,15 +2308,15 @@ ui_family_id :: proc(id: string, owner: string) -> u32 {
 }
 
 @(private)
-ui_declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
+declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	index := i32(len(g_ui_builder.current_context.elements))
 
 	new_id: u32
 	if id == nil {
 		parent_hash :=
 			g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-		new_id = ui_auto_id_hash(parent_hash, loc)
-		new_id = ui_push_and_dedupe_id(
+		new_id = auto_id_hash(parent_hash, loc)
+		new_id = push_and_dedupe_id(
 			g_ui_builder.current_context,
 			index,
 			new_id,
@@ -2308,7 +2324,7 @@ ui_declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 
 	} else {
 		new_id = id.?
-		ui_push_id(g_ui_builder.current_context, index, new_id)
+		push_id(g_ui_builder.current_context, index, new_id)
 	}
 
 	g_ui_builder.last_id = new_id
@@ -2319,101 +2335,58 @@ UI_Element_Config :: struct($T: typeid) {
 }
 
 
-@(deferred_none = ui_end_layout)
-ui_layout :: proc(
+@(deferred_none = end_layout)
+layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(ui_draw_layout)) {
-	return ui_begin_layout(id, loc, reuse_id)
+) -> UI_Element_Config(type_of(draw_layout)) {
+	return begin_layout(id, loc, reuse_id)
 }
 
-ui_begin_layout :: proc(
+begin_layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(ui_draw_layout)) {
+) -> UI_Element_Config(type_of(draw_layout)) {
 	if !reuse_id {
-		ui_declare_id(id, loc)
+		declare_id(id, loc)
 	}
-	return {ui_draw_layout}
+	return {draw_layout}
 }
 
 @(private)
-ui_end_layout :: proc() {
-	ui_close_layout(g_ui_builder.current_context)
+end_layout :: proc() {
+	close_layout(g_ui_builder.current_context)
 }
 
-@(deferred_none = ui_end_layout)
-ui_defer_end_layout :: proc() -> bool {
+@(deferred_none = end_layout)
+defer_end_layout :: proc() -> bool {
 	return true
 }
 
-ui_text :: proc(
+text :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(ui_draw_text)) {
-	ui_declare_id(id, loc)
-	return {ui_draw_text}
+) -> UI_Element_Config(type_of(draw_text)) {
+	declare_id(id, loc)
+	return {draw_text}
 }
 
 
-ui_last_id :: proc() -> u32 {
+last_id :: proc() -> u32 {
 	return g_ui_builder.last_id
 }
 
-ui_get_builder :: proc "contextless" () -> ^UI_Builder {
+get_builder :: proc "contextless" () -> ^UI_Builder {
 	return &g_ui_builder
 }
 
-begin :: ui_begin
-end :: ui_end
-make_context :: ui_context_make
-delete_context :: ui_context_delete
-context_make :: ui_context_make
-context_delete :: ui_context_delete
-layout :: ui_layout
-begin_layout :: ui_begin_layout
-end_layout :: ui_end_layout
-defer_end_layout :: ui_defer_end_layout
-draw_layout :: ui_draw_layout
-text :: ui_text
-draw_text :: ui_draw_text
-fixed :: ui_fixed
-fit :: ui_fit
-grow :: ui_grow
-percent :: ui_percent
-pad_all :: ui_pad_all
-corner_radius_all :: ui_corner_radius_all
-is_hovered :: ui_is_this_hovered
-is_held :: ui_is_this_held
-is_clicked :: ui_is_this_clicked
-is_selected :: ui_is_this_selected
-is_this_hovered :: ui_is_this_hovered
-is_this_held :: ui_is_this_held
-is_this_clicked :: ui_is_this_clicked
-is_this_selected :: ui_is_this_selected
-is_id_hovered :: ui_is_id_hovered
-is_id_held :: ui_is_id_held
-is_id_clicked :: ui_is_id_clicked
-is_id_selected :: ui_is_id_selected
-mouse_state :: ui_mouse_state
-mouse_delta :: ui_mouse_delta
-mouse_position :: ui_mouse_position
-current_scroll_data :: ui_current_scroll_data
-set_scroll_offset :: ui_set_scroll_offset
-intersect_rect :: ui_intersect_rect
-rect_contains :: ui_rect_contains
-global_id :: ui_global_id
-local_id :: ui_local_id
-family_id :: ui_family_id
-last_id :: ui_last_id
-get_builder :: ui_get_builder
-
-measure_text_width :: ui_measure_text_width
-
 Context :: UI_Context
 Input :: UI_Input
+Pointer :: UI_Pointer
+Pointer_Kind :: UI_Pointer_Kind
+Pointer_State :: UI_Pointer_State
 Font :: UI_Font
 Glyph :: UI_Glyph
 Float_At_Root :: UI_Float_At_Root

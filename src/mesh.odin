@@ -27,6 +27,7 @@ mesh_make_from_data :: proc(vertices: []Vertex, indices: []u16) -> Mesh {
 		usage = {index_buffer = true},
 		data = {ptr = raw_data(indices), size = len(indices) * size_of(u16)},
 	})
+	mesh.index_count = i32(len(indices))
 
 	when ODIN_DEBUG {
 		wireframe_indices := mesh_make_line_indices(indices)

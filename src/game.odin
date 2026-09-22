@@ -27,35 +27,25 @@ Game_State :: struct {
 
 g_state: Game_State
 
+screen_to_ui :: proc(pos: [2]f32, user_data: rawptr) -> [2]f32 {
+	vp := cast(^Viewport)user_data
+	return viewport_screen_to_virtual(vp^, pos)
+}
+
 update_input_event :: proc(event: sapp.Event) {
-	#partial switch event.type {
+	ev := event
+	#partial switch ev.type {
 	case .KEY_DOWN:
-		if event.key_code == .ESCAPE {
+		if ev.key_code == .ESCAPE {
 			sapp.quit()
 		}
-	case .MOUSE_MOVE:
-		screen_pos := [2]f32{event.mouse_x, event.mouse_y}
-		g_state.ui.input.mouse_position = viewport_screen_to_virtual(
-			g_state.viewport,
-			screen_pos,
-		)
-		if g_state.viewport.scale > 0 {
-			g_state.ui.input.mouse_delta = {
-				event.mouse_dx / g_state.viewport.scale,
-				event.mouse_dy / g_state.viewport.scale,
-			}
-		}
-	case .MOUSE_DOWN:
-		if event.mouse_button == .LEFT {
-			g_state.ui.input.mouse_state = .Pressed
-		}
-	case .MOUSE_UP:
-		if event.mouse_button == .LEFT {
-			g_state.ui.input.mouse_state = .Released
-		}
-	case .MOUSE_SCROLL:
-		g_state.ui.input.mouse_scroll = {event.scroll_x, event.scroll_y}
 	}
+	ui_sokol.handle_event(
+		&g_state.ui.input,
+		&ev,
+		screen_to_ui,
+		&g_state.viewport,
+	)
 }
 
 compute_mvp :: proc(

@@ -100,18 +100,7 @@ main :: proc() {
 							cast(ui.Rect)g_state.viewport.dest_rect,
 							g_state.viewport.scale,
 						)
-
-						// Reset temporal mouse events since there is no per frame input polling
-						{
-							if g_state.ui.input.mouse_state == .Pressed {
-								g_state.ui.input.mouse_state = .Down
-							} else if g_state.ui.input.mouse_state ==
-							   .Released {
-								g_state.ui.input.mouse_state = .None
-							}
-							g_state.ui.input.mouse_delta = {0, 0}
-							g_state.ui.input.mouse_scroll = {0, 0}
-						}
+						ui_sokol.end_frame(&g_state.ui.input)
 					}
 
 					if ui.begin(
@@ -151,32 +140,6 @@ main :: proc() {
 								.Wireframe = "Wireframe",
 							},
 						)
-					}
-				}
-
-				// 3D
-				{
-					positions := [5][3]f32 {
-						{-3.0, 0.0, 0.0},
-						{-1.5, 0.0, 0.0},
-						{0.0, 0.0, 0.0},
-						{1.5, 0.0, 0.0},
-						{3.0, 0.0, 0.0},
-					}
-
-					rotation :=
-						linalg.quaternion_angle_axis_f32(
-							g_state.frame_time.time * 1.5,
-							{1.0, 0.0, 0.0},
-						) *
-						linalg.quaternion_angle_axis_f32(
-							g_state.frame_time.time * 1.0,
-							{0.0, 1.0, 0.0},
-						)
-
-					for mesh, i in g_state.meshes {
-						draw_mesh(mesh, positions[i], rotation)
-						draw_debug_wire_mesh(mesh, positions[i], rotation)
 					}
 				}
 			}
