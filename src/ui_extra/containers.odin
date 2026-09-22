@@ -14,7 +14,7 @@ vbox :: proc(
 
 draw_vbox :: proc(
 	gap: f32 = 4,
-	padding: ui.Layout_Padding = {},
+	padding: ui.Padding = {},
 	alignment: ui.Alignment = {x = .Left, y = .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
@@ -42,7 +42,7 @@ hbox :: proc(
 
 draw_hbox :: proc(
 	gap: f32 = 4,
-	padding: ui.Layout_Padding = {},
+	padding: ui.Padding = {},
 	alignment: ui.Alignment = {x = .Left, y = .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
@@ -73,7 +73,7 @@ draw_panel :: proc(
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	layout_direction: ui.Layout_Direction = .Top_To_Bottom,
 	gap: f32 = 4,
-	padding: Maybe(ui.Layout_Padding) = nil,
+	padding: Maybe(ui.Padding) = nil,
 ) -> bool {
 	wrap_id()
 	style := g_theme.controls[.Panel]
@@ -108,7 +108,7 @@ draw_group_box :: proc(
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	gap: f32 = 4,
-	padding: ui.Layout_Padding = {8, 8, 8, 8},
+	padding: ui.Padding = {8, 8, 8, 8},
 ) -> bool {
 	wrap_id()
 	style := g_theme.controls[.Panel]

@@ -115,7 +115,7 @@ main :: proc() {
 						@(static) slider_val: f32 = 0.5
 
 						if uie.panel().config(
-							padding = ui.Layout_Padding{12, 12, 12, 12},
+							padding = ui.Padding{12, 12, 12, 12},
 							width = ui.grow(),
 							height = ui.grow(),
 						) {

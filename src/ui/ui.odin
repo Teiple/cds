@@ -289,7 +289,7 @@ Layout_Direction :: enum {
 	Top_To_Bottom,
 }
 
-Layout_Padding :: struct {
+Padding :: struct {
 	left:   f32,
 	right:  f32,
 	top:    f32,
@@ -350,7 +350,7 @@ Element_Link :: struct {
 Layout_Config :: struct {
 	width:            Size_Mode,
 	height:           Size_Mode,
-	padding:          Layout_Padding,
+	padding:          Padding,
 	child_gap:        f32,
 	layout_direction: Layout_Direction,
 	child_alignment:  [2]f32,
@@ -2011,7 +2011,7 @@ BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 draw_layout :: proc(
 	width: Sizing_Axis = {mode = Fit_Size{}},
 	height: Sizing_Axis = {mode = Fit_Size{}},
-	padding: Layout_Padding = {2, 2, 2, 2},
+	padding: Padding = {2, 2, 2, 2},
 	child_gap: f32 = 2,
 	layout_direction: Layout_Direction = .Left_To_Right,
 	child_alignment: Alignment = {x = .Left, y = .Top},
@@ -2108,8 +2108,8 @@ percent :: #force_inline proc(
 	return {mode = Percent_Size{value = value}, min = min, max = max}
 }
 
-pad_all :: #force_inline proc(value: f32) -> Layout_Padding {
-	return Layout_Padding{value, value, value, value}
+pad_all :: #force_inline proc(value: f32) -> Padding {
+	return Padding{value, value, value, value}
 }
 
 corner_radius_all :: #force_inline proc(value: f32) -> Corner_Radius {

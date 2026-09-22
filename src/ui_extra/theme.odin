@@ -45,7 +45,7 @@ Control_Style :: struct {
 	text:          [Control_State][4]u8,
 	border_width:  f32,
 	corner_radius: ui.Corner_Radius,
-	padding:       ui.Layout_Padding,
+	padding:       ui.Padding,
 }
 
 Style_Theme :: struct {
