@@ -52,14 +52,16 @@ draw_button :: proc(
 	disabled: bool = false,
 ) -> bool {
 	wrap_id()
+	id := ui.last_id()
 	if !disabled {
 		ui.register_this_focusable()
 	}
 
-	state := get_control_state(ui.last_id(), disabled)
+	state := get_control_state(id, disabled)
 	style := g_theme.controls[.Button]
 
 	clicked := !disabled && ui.is_this_clicked()
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
 	if ui.layout(reuse_id = true).config(
 		width = width,
@@ -68,6 +70,7 @@ draw_button :: proc(
 		padding = style.padding,
 		child_alignment = {.Center, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
 		corner_radius = style.corner_radius,
 	) {
 		ui.text().config(
@@ -93,20 +96,23 @@ label_button :: proc(
 
 draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 	wrap_id()
+	id := ui.last_id()
 	if !disabled {
 		ui.register_this_focusable()
 	}
 
-	state := get_control_state(ui.last_id(), disabled)
+	state := get_control_state(id, disabled)
 	style := g_theme.controls[.Label_Button]
 
 	clicked := !disabled && ui.is_this_clicked()
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
 	if ui.layout(reuse_id = true).config(
 		width = ui.fit(),
 		height = ui.fit(),
 		padding = style.padding,
 		child_alignment = {.Left, .Center},
+		outline = outline,
 	) {
 		ui.text().config(
 			text,
@@ -137,20 +143,19 @@ draw_toggle :: proc(
 	disabled: bool = false,
 ) -> bool {
 	wrap_id()
+	id := ui.last_id()
 	if !disabled {
 		ui.register_this_focusable()
 	}
 
-	state := get_control_state(ui.last_id(), disabled)
-	if active^ && state == .Normal {
-		state = .Pressed
-	}
-
+	state := get_control_state(id, disabled, active^)
 	style := g_theme.controls[.Toggle]
 	clicked := !disabled && ui.is_this_clicked()
 	if clicked {
 		active^ = !active^
 	}
+
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
 	if ui.layout(reuse_id = true).config(
 		width = width,
@@ -159,6 +164,7 @@ draw_toggle :: proc(
 		padding = style.padding,
 		child_alignment = {.Center, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
 		corner_radius = style.corner_radius,
 	) {
 		ui.text().config(
@@ -205,11 +211,9 @@ draw_toggle_group :: proc(
 			if !disabled {
 				ui.register_focusable(btn_id)
 			}
-			state := get_control_state(btn_id, disabled)
-			if is_active && (state == .Normal || state == .Focused) {
-				state = .Pressed
-			}
+			state := get_control_state(btn_id, disabled, is_active)
 			style := g_theme.controls[.Toggle]
+			outline := get_control_outline(style, !disabled && ui.is_id_focused(btn_id))
 
 			if ui.layout(btn_id).config(
 				width = ui.grow(),
@@ -221,6 +225,7 @@ draw_toggle_group :: proc(
 					thickness = style.border_width,
 					color = style.border[state],
 				},
+				outline = outline,
 				corner_radius = style.corner_radius,
 			) {
 				ui.text().config(
@@ -258,17 +263,20 @@ draw_checkbox :: proc(
 	disabled: bool = false,
 ) -> bool {
 	wrap_id()
+	id := ui.last_id()
 	if !disabled {
 		ui.register_this_focusable()
 	}
 
-	state := get_control_state(ui.last_id(), disabled)
+	state := get_control_state(id, disabled, checked^)
 	style := g_theme.controls[.Checkbox]
 
 	clicked := !disabled && ui.is_this_clicked()
 	if clicked {
 		checked^ = !checked^
 	}
+
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
 	if ui.layout(reuse_id = true).config(
 		width = ui.fit(),
@@ -277,15 +285,17 @@ draw_checkbox :: proc(
 		child_gap = 8,
 		child_alignment = {.Left, .Center},
 		padding = {2, 2, 2, 2},
+		outline = outline,
 	) {
 		box_id := ui.local_id("box")
+		box_state := get_control_state(box_id, disabled, checked^)
 		if ui.layout(box_id).config(
 			width = ui.fixed(18),
 			height = ui.fixed(18),
-			background_color = style.base[state],
+			background_color = style.base[box_state],
 			border = {
 				thickness = style.border_width,
-				color = style.border[state],
+				color = style.border[box_state],
 			},
 			corner_radius = style.corner_radius,
 			padding = {2, 2, 2, 2},
@@ -342,6 +352,7 @@ draw_slider :: proc(
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
 	style := g_theme.controls[.Slider]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(track_id))
 
 	changed := false
 	if !disabled && (ui.is_id_held(track_id) || ui.is_id_clicked(track_id)) {
@@ -369,6 +380,7 @@ draw_slider :: proc(
 		height = height,
 		background_color = style.base[state],
 		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
 		corner_radius = style.corner_radius,
 		padding = {2, 2, 2, 2},
 		child_alignment = {normalized, .Center},

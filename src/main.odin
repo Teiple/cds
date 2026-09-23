@@ -33,6 +33,7 @@ main :: proc() {
 		width = 960,
 		height = 540,
 		disable_vsync = true,
+		sample_count = 2,
 		init_cb = proc "c" () {
 			context = g_odin_ctx
 

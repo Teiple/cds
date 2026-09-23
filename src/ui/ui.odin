@@ -336,6 +336,12 @@ Border_Config :: struct #all_or_none {
 	color:     [4]u8,
 }
 
+Outline_Config :: struct #all_or_none {
+	thickness: f32,
+	offset:    f32,
+	color:     [4]u8,
+}
+
 Normalized_End :: enum {
 	Start,
 	End,
@@ -359,6 +365,7 @@ Layout_Config :: struct {
 	background_image: Maybe(Image),
 	corner_radius:    Corner_Radius,
 	border:           Border_Config,
+	outline:          Outline_Config,
 	pointer_mode:     Pointer_Mode,
 	clip:             bool,
 	scroll:           bool,
@@ -1328,11 +1335,19 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 	if ctx.input.keyboard.keys[.Enter] == .Pressed ||
 	   ctx.input.keyboard.keys[.Space] == .Pressed {
 		if ctx.input_event.focused_id != 0 {
+			append(&ctx.input_event.held_elements, ctx.input_event.focused_id)
+		}
+	}
+
+	if ctx.input.keyboard.keys[.Enter] == .Released ||
+	   ctx.input.keyboard.keys[.Space] == .Released {
+		if ctx.input_event.focused_id != 0 &&
+		   is_id_held(ctx.input_event.focused_id) {
 			append(
 				&ctx.input_event.clicked_elements,
 				ctx.input_event.focused_id,
 			)
-			append(&ctx.input_event.held_elements, ctx.input_event.focused_id)
+			clear(&ctx.input_event.held_elements)
 		}
 	}
 
@@ -1468,6 +1483,32 @@ generate_commands :: proc(ctx: ^Context, index: Index) {
 					color = attr.config.background_color,
 					corner_radius = attr.config.corner_radius,
 					border = attr.config.border,
+				},
+			)
+		}
+		if attr.config.outline.thickness > 0 &&
+		   attr.config.outline.color.a > 0 {
+			off := attr.config.outline.offset
+			append(
+				&ctx.render_commands,
+				Rect_Command{
+					rect = {
+						ele.position.x - off,
+						ele.position.y - off,
+						ele.size.x + off * 2,
+						ele.size.y + off * 2,
+					},
+					color = {0, 0, 0, 0},
+					corner_radius = {
+						attr.config.corner_radius.top_left > 0 ? attr.config.corner_radius.top_left + off : 0,
+						attr.config.corner_radius.top_right > 0 ? attr.config.corner_radius.top_right + off : 0,
+						attr.config.corner_radius.bottom_right > 0 ? attr.config.corner_radius.bottom_right + off : 0,
+						attr.config.corner_radius.bottom_left > 0 ? attr.config.corner_radius.bottom_left + off : 0,
+					},
+					border = {
+						thickness = attr.config.outline.thickness,
+						color = attr.config.outline.color,
+					},
 				},
 			)
 		}
@@ -2020,6 +2061,7 @@ draw_layout :: proc(
 	background_image: Maybe(Image) = nil,
 	corner_radius: Corner_Radius = {4, 4, 4, 4},
 	border: Border_Config = BORDER_DEFAULT,
+	outline: Outline_Config = {},
 	pointer_mode: Pointer_Mode = .Capture,
 	clip: bool = false,
 	scroll: bool = false,
@@ -2042,6 +2084,7 @@ draw_layout :: proc(
 			corner_radius = corner_radius,
 			pointer_mode = pointer_mode,
 			border = border,
+			outline = outline,
 			clip = clip,
 			scroll = scroll,
 			float_mode = float_mode,
