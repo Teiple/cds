@@ -4,18 +4,18 @@ import "../ui"
 import "core:fmt"
 
 @(private, deferred_out = end_wrap_id)
-wrap_id :: proc() -> u32 {
+wrap_id :: proc() -> ui.Id {
 	return ui.last_id()
 }
 
 @(private)
-end_wrap_id :: proc(id: u32) {
+end_wrap_id :: proc(id: ui.Id) {
 	ui.get_builder().last_id = id
 }
 
 //region: label
 label :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_label)) {
 	ui.declare_id(id, loc)
@@ -39,7 +39,7 @@ draw_label :: proc(
 
 //region: button
 button :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_button)) {
 	ui.declare_id(id, loc)
@@ -88,7 +88,7 @@ draw_button :: proc(
 
 //region: label_button
 label_button :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_label_button)) {
 	ui.declare_id(id, loc)
@@ -129,7 +129,7 @@ draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 
 //region: toggle
 toggle :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_toggle)) {
 	ui.declare_id(id, loc)
@@ -182,7 +182,7 @@ draw_toggle :: proc(
 
 //region: toggle_group
 toggle_group :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_toggle_group)) {
 	ui.declare_id(id, loc)
@@ -270,7 +270,7 @@ draw_toggle_group :: proc(
 
 //region: tab_bar
 tab_bar :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_tab_bar)) {
 	ui.declare_id(id, loc)
@@ -357,7 +357,7 @@ draw_tab_bar :: proc(
 
 //region: checkbox
 checkbox :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_checkbox)) {
 	ui.declare_id(id, loc)
@@ -436,7 +436,7 @@ draw_checkbox :: proc(
 
 //region: spinner
 spinner :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_spinner)) {
 	ui.declare_id(id, loc)
@@ -536,7 +536,7 @@ draw_spinner :: proc(
 
 //region: value_box
 value_box :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_value_box)) {
 	ui.declare_id(id, loc)
@@ -617,7 +617,7 @@ draw_value_box :: proc(
 
 //region: combo_box
 combo_box :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_combo_box)) {
 	ui.declare_id(id, loc)
@@ -685,7 +685,7 @@ draw_combo_box :: proc(
 
 //region: dropdown_box
 dropdown_box :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_dropdown_box)) {
 	ui.declare_id(id, loc)
@@ -809,7 +809,7 @@ draw_dropdown_box :: proc(
 
 //region: slider
 slider :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_slider)) {
 	ui.declare_id(id, loc)
@@ -896,7 +896,7 @@ draw_slider :: proc(
 
 //region: progress_bar
 progress_bar :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_progress_bar)) {
 	ui.declare_id(id, loc)
@@ -940,7 +940,7 @@ draw_progress_bar :: proc(
 
 //region: tooltip
 tooltip :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_tooltip)) {
 	ui.declare_id(id, loc)
@@ -948,7 +948,7 @@ tooltip :: proc(
 }
 
 draw_tooltip :: proc(
-	target_id: u32,
+	target_id: ui.Id,
 	content: string,
 	offset: [2]f32 = {4, 0},
 ) {

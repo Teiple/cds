@@ -245,7 +245,7 @@ set_theme :: proc(theme: Style_Theme) {
 }
 
 get_control_state :: proc(
-	id: u32,
+	id: ui.Id,
 	disabled: bool = false,
 	selected: bool = false,
 ) -> Control_State {

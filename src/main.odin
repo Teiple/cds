@@ -9,6 +9,7 @@ import slog "sokol/log"
 
 import "base:runtime"
 import linalg "core:math/linalg"
+import "core:os"
 
 import "ui"
 import uie "ui_extra"
@@ -24,6 +25,7 @@ current_display_mode: Display_Mode
 
 main :: proc() {
 	ENTRY_POINT := #location(main)
+	entry_dir := os.dir(ENTRY_POINT.file_path)
 
 	debug_track_allocator_init()
 	defer debug_track_allocator_stop()
@@ -33,7 +35,6 @@ main :: proc() {
 		width = 960,
 		height = 540,
 		disable_vsync = true,
-		sample_count = 2,
 		init_cb = proc "c" () {
 			context = g_odin_ctx
 
@@ -60,7 +61,11 @@ main :: proc() {
 			// fonts will be copy over to ui context
 			defer delete(fonts)
 
-			g_state.ui.ctx = ui.make_context(fonts = fonts)
+			ENTRY_POINT := #location(main)
+			g_state.ui.ctx = ui.make_context(
+				fonts = fonts,
+				entry_dir = os.dir(ENTRY_POINT.file_path),
+			)
 			g_state.camera = {
 				fovy_degrees = 60,
 				position     = {0, 1.5, 6.0},

@@ -5,7 +5,7 @@ import "../ui"
 //region: vbox
 @(deferred_none = end_container)
 vbox :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_vbox)) {
 	ui.declare_id(id, loc)
@@ -33,7 +33,7 @@ draw_vbox :: proc(
 //region: hbox
 @(deferred_none = end_container)
 hbox :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_hbox)) {
 	ui.declare_id(id, loc)
@@ -61,7 +61,7 @@ draw_hbox :: proc(
 //region: panel
 @(deferred_none = end_container)
 panel :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_panel)) {
 	ui.declare_id(id, loc)
@@ -96,7 +96,7 @@ draw_panel :: proc(
 //region: group_box
 @(deferred_none = end_group_box)
 group_box :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_group_box)) {
 	ui.declare_id(id, loc)
@@ -146,7 +146,7 @@ draw_group_box :: proc(
 //region: window_box
 @(deferred_none = end_group_box)
 window_box :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_window_box)) {
 	ui.declare_id(id, loc)
@@ -232,7 +232,7 @@ end_container :: proc() {
 
 //region: line
 line :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_line)) {
 	ui.declare_id(id, loc)
@@ -278,7 +278,7 @@ draw_line :: proc(
 
 //region: status_bar
 status_bar :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> ui.Element_Draw(type_of(draw_status_bar)) {
 	ui.declare_id(id, loc)

@@ -15,6 +15,7 @@ Rect :: struct {
 
 Texture_Id :: distinct u64
 Font_Id :: distinct u32
+Id :: u64
 
 NPatch_Layout :: enum {
 	NINE_PATCH,
@@ -113,13 +114,13 @@ Input_Event :: struct {
 	pointer_captured:  bool,
 	scroll_captured:   bool,
 	selected_once:     bool,
-	hovered_elements:  [dynamic]u32,
-	selected_elements: [dynamic]u32,
-	held_elements:     [dynamic]u32,
-	clicked_elements:  [dynamic]u32,
-	scrolls:           map[u32]Scroll_Data,
-	focusables:        [dynamic]u32,
-	focused_id:        u32,
+	hovered_elements:  [dynamic]Id,
+	selected_elements: [dynamic]Id,
+	held_elements:     [dynamic]Id,
+	clicked_elements:  [dynamic]Id,
+	scrolls:           map[Id]Scroll_Data,
+	focusables:        [dynamic]Id,
+	focused_id:        Id,
 }
 
 Scroll_Data :: struct #all_or_none {
@@ -227,7 +228,7 @@ Font_Config :: struct {
 
 Builder :: struct {
 	current_context: ^Context,
-	last_id:         u32,
+	last_id:         Id,
 	context_events:  Context_Events,
 }
 
@@ -251,14 +252,15 @@ Context :: struct {
 	input:              Input,
 	input_event:        Input_Event,
 	clip:               ClipData,
-	ids:                map[u32]Id_Info,
+	ids:                map[Id]Id_Info,
 	floats:             [dynamic]Index,
-	bounds:             map[u32]Rect,
+	bounds:             map[Id]Rect,
+	entry_dir:          string,
 }
 
 
 Id_Info :: struct {
-	base:       u32,
+	base:       Id,
 	index:      Index,
 	loop_count: i32,
 }
@@ -384,7 +386,7 @@ Float_Mode :: union {
 
 Float_None :: struct {}
 Float_At_Id :: struct {
-	attach_id: u32,
+	attach_id: Id,
 	using _:   Float_Config,
 }
 Float_At_Parent :: struct {
@@ -431,7 +433,7 @@ Element :: struct {
 	size:       [2]f32,
 	limits:     Limits,
 	link:       Element_Link,
-	id:         u32,
+	id:         Id,
 	attributes: union {
 		Layout_Attributes,
 		Text_Attributes,
@@ -471,7 +473,7 @@ Child_Iter :: struct {
 }
 
 @(require_results)
-push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: u32) -> u32 {
+push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
 	if id_entry, ok := ctx.ids[id]; ok {
 		id_entry.loop_count += 1
 
@@ -480,8 +482,8 @@ push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: u32) -> u32 {
 		loop_tag := "loop"
 		loop_tail := transmute([4]u8)id_entry.loop_count
 
-		new_id := hash.adler32(transmute([]u8)loop_tag, id)
-		new_id = hash.adler32(loop_tail[:], id)
+		new_id := hash.fnv64a(transmute([]u8)loop_tag, id)
+		new_id = hash.fnv64a(loop_tail[:], new_id)
 
 		ctx.ids[new_id] = {
 			base       = id,
@@ -500,7 +502,7 @@ push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: u32) -> u32 {
 	}
 }
 
-push_id :: proc(ctx: ^Context, index: Index, id: u32) {
+push_id :: proc(ctx: ^Context, index: Index, id: Id) {
 	_, existed := ctx.ids[id]
 	if existed {
 		panic("Duplicate ids without manualy using dedupe")
@@ -522,7 +524,7 @@ is_floating_element :: proc(ctx: ^Context, index: Index) -> bool {
 
 open_layout :: proc(
 	ctx: ^Context,
-	id: u32,
+	id: Id,
 	config: Layout_Config,
 	limits: Limits,
 ) -> bool {
@@ -555,7 +557,7 @@ open_layout :: proc(
 	return true
 }
 
-open_text :: proc(ctx: ^Context, id: u32, config: Text_Config) {
+open_text :: proc(ctx: ^Context, id: Id, config: Text_Config) {
 	parent_idx := back(ctx.open_layout_stack)
 	index := Index(len(ctx.elements))
 
@@ -1186,7 +1188,11 @@ calculate_position :: proc(ctx: ^Context, index: Index, axis: Axis) {
 	}
 }
 
-make_context :: proc(fonts: []Font, pointer: Pointer_Config = {}) -> Context {
+make_context :: proc(
+	pointer: Pointer_Config = {texture_id = 0, size = 16, offset = {0, 0}},
+	fonts: []Font = {},
+	entry_dir: string = "",
+) -> Context {
 	for event in g_ui_builder.context_events.on_make {
 		event()
 	}
@@ -1204,18 +1210,19 @@ make_context :: proc(fonts: []Font, pointer: Pointer_Config = {}) -> Context {
 		fonts = fonts_copy,
 		input_event = {
 			pointer_captured = false,
-			hovered_elements = make([dynamic]u32, 0, 4),
-			selected_elements = make([dynamic]u32, 0, 4),
-			held_elements = make([dynamic]u32, 0, 4),
-			clicked_elements = make([dynamic]u32, 0, 4),
-			scrolls = make(map[u32]Scroll_Data, 4),
-			focusables = make([dynamic]u32, 0, 16),
+			hovered_elements = make([dynamic]Id, 0, 4),
+			selected_elements = make([dynamic]Id, 0, 4),
+			held_elements = make([dynamic]Id, 0, 4),
+			clicked_elements = make([dynamic]Id, 0, 4),
+			scrolls = make(map[Id]Scroll_Data, 4),
+			focusables = make([dynamic]Id, 0, 16),
 			focused_id = 0,
 		},
 		clip = {open_clip_stack = make([dynamic]Rect, 0, 2)},
-		ids = make(map[u32]Id_Info, 50),
+		ids = make(map[Id]Id_Info, 50),
 		floats = make([dynamic]Index, 0, 4),
-		bounds = make(map[u32]Rect, 50),
+		bounds = make(map[Id]Rect, 50),
+		entry_dir = entry_dir,
 	}
 }
 
@@ -1328,7 +1335,6 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 			focus_previous_in_ctx(ctx)
 		} else {
 			focus_next_in_ctx(ctx)
-			fmt.println("Focus next")
 		}
 	}
 
@@ -2168,7 +2174,7 @@ pointer_state_on_this :: proc() -> Element_Pointer_State {
 	)
 }
 
-pointer_state_on_id :: proc(id: u32) -> Element_Pointer_State {
+pointer_state_on_id :: proc(id: Id) -> Element_Pointer_State {
 	return get_layout_pointer_state_by_id(g_ui_builder.current_context^, id)
 }
 
@@ -2216,13 +2222,13 @@ input_end_frame :: proc(input: ^Input) {
 	}
 }
 
-rect_by_id :: proc(id: u32) -> Rect {
+rect_by_id :: proc(id: Id) -> Rect {
 	rect, ok := g_ui_builder.current_context.bounds[id]
 	assert(ok)
 	return rect
 }
 
-is_id_selected :: proc(id: u32) -> bool {
+is_id_selected :: proc(id: Id) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.selected_elements {
 		if ele_id == id do return true
 	}
@@ -2235,7 +2241,7 @@ is_this_selected :: proc() -> bool {
 
 is_selected :: is_this_selected
 
-is_id_held :: proc(id: u32) -> bool {
+is_id_held :: proc(id: Id) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.held_elements {
 		if ele_id == id do return true
 	}
@@ -2248,7 +2254,7 @@ is_this_held :: proc() -> bool {
 
 is_held :: is_this_held
 
-is_id_hovered :: proc(id: u32) -> bool {
+is_id_hovered :: proc(id: Id) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.hovered_elements {
 		if ele_id == id do return true
 	}
@@ -2261,7 +2267,7 @@ is_this_hovered :: proc() -> bool {
 
 is_hovered :: is_this_hovered
 
-is_id_clicked :: proc(id: u32) -> bool {
+is_id_clicked :: proc(id: Id) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.clicked_elements {
 		if ele_id == id do return true
 	}
@@ -2274,7 +2280,7 @@ is_this_clicked :: proc() -> bool {
 
 is_clicked :: is_this_clicked
 
-register_focusable :: proc(id: u32) {
+register_focusable :: proc(id: Id) {
 	for f_id in g_ui_builder.current_context.input_event.focusables {
 		if f_id == id do return
 	}
@@ -2285,7 +2291,7 @@ register_this_focusable :: proc() {
 	register_focusable(g_ui_builder.last_id)
 }
 
-is_id_focused :: proc(id: u32) -> bool {
+is_id_focused :: proc(id: Id) -> bool {
 	return g_ui_builder.current_context.input_event.focused_id == id
 }
 
@@ -2295,7 +2301,7 @@ is_this_focused :: proc() -> bool {
 
 is_focused :: is_this_focused
 
-set_focused_id :: proc(id: u32) {
+set_focused_id :: proc(id: Id) {
 	g_ui_builder.current_context.input_event.focused_id = id
 }
 
@@ -2358,7 +2364,7 @@ get_layout_scroll_data :: proc(ctx: Context) -> Scroll_Data {
 @(private = "file")
 get_layout_pointer_state_by_id :: proc(
 	ctx: Context,
-	id: u32,
+	id: Id,
 ) -> Element_Pointer_State {
 	for ele_id in ctx.input_event.hovered_elements {
 		if ele_id == id {
@@ -2441,47 +2447,48 @@ rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
 
 
 auto_id_hash :: proc(
-	parent_hash: u32,
+	parent_hash: Id,
 	loc: runtime.Source_Code_Location,
-) -> u32 {
+) -> Id {
 	line := transmute([4]u8)loc.line
 	column := transmute([4]u8)loc.column
-	h: u32 = parent_hash
-	h = hash.adler32(transmute([]u8)loc.file_path, h)
-	h = hash.adler32(line[:], h)
-	h = hash.adler32(column[:], h)
+	path := loc.file_path
+	if g_ui_builder.current_context != nil {
+		entry_dir := g_ui_builder.current_context.entry_dir
+		if len(entry_dir) > 0 && len(path) >= len(entry_dir) && path[:len(entry_dir)] == entry_dir {
+			path = path[len(entry_dir):]
+		}
+	}
+	h: u64 = parent_hash
+	h = hash.fnv64a(transmute([]u8)path, h)
+	h = hash.fnv64a(line[:], h)
+	h = hash.fnv64a(column[:], h)
 	return h
 }
 
 @(require_results)
-global_id :: proc(id: string) -> u32 {
-	id := hash.adler32(transmute([]u8)id)
-
-	return id
+global_id :: proc(id: string) -> Id {
+	return hash.fnv64a(transmute([]u8)id)
 }
 
 @(require_results)
-local_id :: proc(id: string) -> u32 {
+local_id :: proc(id: string) -> Id {
 	parent_hash :=
 		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	id := hash.adler32(transmute([]u8)id, parent_hash)
-
-	return id
+	return hash.fnv64a(transmute([]u8)id, parent_hash)
 }
 
 @(require_results)
-family_id :: proc(id: string, owner: string) -> u32 {
+family_id :: proc(id: string, owner: string) -> Id {
 	parent_hash :=
 		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	id := hash.adler32(transmute([]u8)id, parent_hash)
-
-	return id
+	return hash.fnv64a(transmute([]u8)id, parent_hash)
 }
 
-declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
+declare_id :: proc(id: Maybe(Id), loc: runtime.Source_Code_Location) {
 	index := i32(len(g_ui_builder.current_context.elements))
 
-	new_id: u32
+	new_id: Id
 	if id == nil {
 		parent_hash :=
 			g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
@@ -2506,7 +2513,7 @@ Element_Draw :: struct($T: typeid) {
 
 @(deferred_none = end_layout)
 layout :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(Id) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
 ) -> Element_Draw(type_of(draw_layout)) {
@@ -2514,7 +2521,7 @@ layout :: proc(
 }
 
 begin_layout :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(Id) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
 ) -> Element_Draw(type_of(draw_layout)) {
@@ -2534,7 +2541,7 @@ defer_end_layout :: proc() -> bool {
 }
 
 text :: proc(
-	id: Maybe(u32) = nil,
+	id: Maybe(Id) = nil,
 	loc := #caller_location,
 ) -> Element_Draw(type_of(draw_text)) {
 	declare_id(id, loc)
@@ -2542,7 +2549,7 @@ text :: proc(
 }
 
 
-last_id :: proc() -> u32 {
+last_id :: proc() -> Id {
 	return g_ui_builder.last_id
 }
 
