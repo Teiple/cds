@@ -107,52 +107,172 @@ main :: proc() {
 					}
 
 					if ui.begin(&g_state.ui.ctx, g_state.viewport.base_size) {
+						@(static) tab_idx: int = 0
+						tabs := []string{"Controls", "Containers", "Pickers"}
+
+
 						if uie.panel().draw(
 							width = ui.grow(),
 							height = ui.grow(),
+							padding = ui.pad_all(12),
+							gap = 10,
 						) {
-							if uie.vbox().draw() {
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
+							uie.tab_bar().draw(
+								tabs,
+								&tab_idx,
+								width = ui.grow(),
+								height = ui.fixed(30),
+							)
+
+							switch tab_idx {
+							case 0:
+								if uie.vbox().draw(gap = 8) {
+									@(static) btn_click_count: int = 0
+									btn_id := ui.local_id("demo_btn")
+									btn_text := fmt.tprintf(
+										"Clicked %d times",
+										btn_click_count,
+									)
+									if uie.button(btn_id).draw(
+										btn_text,
+										width = ui.fixed(160),
+									) {
+										btn_click_count += 1
+									}
+									uie.tooltip().draw(
+										btn_id,
+										"Click me to increment counter",
+									)
+
+									if uie.label_button().draw(
+										"Label Button",
+									) {
+										btn_click_count = 0
+									}
+
+									@(static) toggle_val: bool = false
+									uie.toggle().draw(
+										"Toggle",
+										&toggle_val,
+										width = ui.fixed(140),
+									)
+
+									@(static) group_val: int = 1
+									diff_options := []string {
+										"Easy",
+										"Normal",
+										"Hard",
+									}
+									uie.toggle_group().draw(
+										diff_options,
+										&group_val,
+										width = ui.fixed(240),
+									)
+
+									@(static) check_val: bool = true
+									uie.checkbox().draw(
+										"Enable Shadows",
+										&check_val,
+									)
+
+									@(static) slider_val: f32 = 45.0
+									uie.slider().draw(
+										&slider_val,
+										0,
+										100,
+										width = ui.fixed(240),
+									)
+
+									uie.progress_bar().draw(
+										slider_val,
+										0,
+										100,
+										width = ui.fixed(240),
+									)
+								}
+							case 1:
+								if uie.vbox().draw(gap = 8) {
+									if uie.group_box().draw(
+										"Audio Settings",
+										width = ui.fixed(320),
+									) {
+										uie.label().draw("Master Volume")
+										uie.line().draw()
+										uie.label().draw("Sound Effects")
+									}
+
+									@(static) win_closed: bool = false
+									if !win_closed {
+										if uie.window_box().draw(
+											"Window Dialog",
+											&win_closed,
+											width = ui.fixed(320),
+										) {
+											uie.label().draw(
+												"Window content area",
+											)
+											uie.line().draw("Section Divider")
+											uie.label().draw(
+												"More content below",
+											)
+										}
+									}
+
+									uie.status_bar().draw(
+										"Ready - Sokol Odin UI Showcase",
+									)
+								}
+
+
+							case 2:
+								if uie.vbox().draw(gap = 8) {
+									@(static) spin_val: int = 5
+									uie.spinner().draw(&spin_val, 0, 20)
+
+									@(static) val_box: int = 42
+									@(static) val_box_edit: bool = false
+									uie.value_box().draw(
+										&val_box,
+										0,
+										100,
+										&val_box_edit,
+									)
+
+									@(static) combo_idx: int = 0
+									combo_opts := []string {
+										"Option A",
+										"Option B",
+										"Option C",
+									}
+									uie.combo_box().draw(
+										combo_opts,
+										&combo_idx,
+										width = ui.fixed(180),
+									)
+
+									@(static) drop_idx: int = 0
+									@(static) drop_edit: bool = false
+									drop_opts := []string {
+										"High Quality",
+										"Medium Quality",
+										"Low Quality",
+									}
+									uie.dropdown_box().draw(
+										drop_opts,
+										&drop_idx,
+										&drop_edit,
+										width = ui.fixed(180),
+									)
+								}
+
 							}
-							if uie.hbox().draw() {
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-							}
-							if uie.vbox().draw() {
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.line().draw()
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.line().draw()
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.line().draw()
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-								uie.label().draw("Hello World")
-							}
-							if uie.button().draw("Hello World") {
-								fmt.println("Hello World")
-							}
-							@(static) active: bool = false
-							uie.toggle().draw("Mute Audio", &active)
-							@(static) checked: bool = true
-							uie.checkbox().draw("Enable VSync", &checked)
-							@(static) mode: int = 0
-							options := []string{"Easy", "Normal", "Hard"}
-							uie.toggle_group().draw(options, &mode)
 						}
 					}
 				}
 			}
 
 
+			free_all(context.temp_allocator)
 		},
 		cleanup_cb = proc "c" () {
 			context = g_odin_ctx

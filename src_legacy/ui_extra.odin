@@ -123,7 +123,7 @@ Vert_Scroll_Data :: struct #all_or_none {
 vert_scroll :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_vert_scroll)) {
+) -> UI_Element_Draw(type_of(draw_vert_scroll)) {
 	ui_declare_id(id, loc)
 	return {draw_vert_scroll}
 }
@@ -244,7 +244,7 @@ end_draw_vert_scroll :: proc() {
 button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_button)) {
+) -> UI_Element_Draw(type_of(draw_button)) {
 	ui_declare_id(id, loc)
 	return {draw_button}
 }
@@ -283,7 +283,7 @@ draw_button :: proc(
 tooltip :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_tooltip)) {
+) -> UI_Element_Draw(type_of(draw_tooltip)) {
 	ui_declare_id(id, loc)
 	return {draw_tooltip}
 }
@@ -325,7 +325,7 @@ draw_tooltip :: proc(
 image :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(draw_image)) {
+) -> UI_Element_Draw(type_of(draw_image)) {
 	ui_declare_id(id, loc)
 	return {draw_image}
 }

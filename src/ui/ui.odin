@@ -2311,6 +2311,25 @@ focus_previous :: proc() {
 	focus_previous_in_ctx(g_ui_builder.current_context)
 }
 
+key_state :: proc(k: Key) -> Key_State {
+	return g_ui_builder.current_context.input.keyboard.keys[k]
+}
+
+is_key_pressed :: proc(k: Key) -> bool {
+	return g_ui_builder.current_context.input.keyboard.keys[k] == .Pressed
+}
+
+is_key_down :: proc(k: Key) -> bool {
+	return(
+		g_ui_builder.current_context.input.keyboard.keys[k] == .Down ||
+		g_ui_builder.current_context.input.keyboard.keys[k] == .Pressed \
+	)
+}
+
+is_key_released :: proc(k: Key) -> bool {
+	return g_ui_builder.current_context.input.keyboard.keys[k] == .Released
+}
+
 current_scroll_data :: proc() -> Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
 }
@@ -2484,7 +2503,6 @@ declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 Element_Draw :: struct($T: typeid) {
 	draw: T,
 }
-
 
 @(deferred_none = end_layout)
 layout :: proc(

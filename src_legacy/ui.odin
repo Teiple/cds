@@ -2299,7 +2299,7 @@ ui_declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	g_ui_builder.last_id = new_id
 }
 
-UI_Element_Config :: struct($T: typeid) {
+UI_Element_Draw :: struct($T: typeid) {
 	config: T,
 }
 
@@ -2309,7 +2309,7 @@ ui_layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(ui_draw_layout)) {
+) -> UI_Element_Draw(type_of(ui_draw_layout)) {
 	return ui_begin_layout(id, loc, reuse_id)
 }
 
@@ -2317,7 +2317,7 @@ ui_begin_layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> UI_Element_Config(type_of(ui_draw_layout)) {
+) -> UI_Element_Draw(type_of(ui_draw_layout)) {
 	if !reuse_id {
 		ui_declare_id(id, loc)
 	}
@@ -2337,7 +2337,7 @@ ui_defer_end_layout :: proc() -> bool {
 ui_text :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> UI_Element_Config(type_of(ui_draw_text)) {
+) -> UI_Element_Draw(type_of(ui_draw_text)) {
 	ui_declare_id(id, loc)
 	return {ui_draw_text}
 }

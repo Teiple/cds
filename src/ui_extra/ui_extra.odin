@@ -1,6 +1,7 @@
 package ui_extra
 
 import "../ui"
+import "core:fmt"
 
 @(private, deferred_out = end_wrap_id)
 wrap_id :: proc() -> u32 {
@@ -198,7 +199,7 @@ draw_toggle_group :: proc(
 	wrap_id()
 
 	changed := false
-	if ui.draw_layout(
+	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		layout_direction = .Left_To_Right,
@@ -217,6 +218,22 @@ draw_toggle_group :: proc(
 				style,
 				!disabled && ui.is_id_focused(btn_id),
 			)
+
+			if !disabled && ui.is_id_focused(btn_id) {
+				if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
+					active_index^ =
+						(active_index^ - 1 + len(options)) % len(options)
+					changed = true
+					prev_id := ui.local_id(options[active_index^])
+					ui.set_focused_id(prev_id)
+				}
+				if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
+					active_index^ = (active_index^ + 1) % len(options)
+					changed = true
+					next_id := ui.local_id(options[active_index^])
+					ui.set_focused_id(next_id)
+				}
+			}
 
 			if ui.layout(btn_id).draw(
 				width = ui.grow(),
@@ -241,6 +258,93 @@ draw_toggle_group :: proc(
 			}
 
 			if !disabled && ui.is_id_clicked(btn_id) {
+				if active_index^ != i {
+					active_index^ = i
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
+}
+
+//region: tab_bar
+tab_bar :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_tab_bar)) {
+	ui.declare_id(id, loc)
+	return {draw_tab_bar}
+}
+
+draw_tab_bar :: proc(
+	tabs: []string,
+	active_index: ^int,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	changed := false
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		child_gap = 2,
+		padding = {},
+	) {
+		for name, i in tabs {
+			is_active := (active_index^ == i)
+			tab_id := ui.local_id(name)
+			if !disabled {
+				ui.register_focusable(tab_id)
+			}
+			state := get_control_state(tab_id, disabled, is_active)
+			style := g_theme.controls[.TabBar]
+			outline := get_control_outline(
+				style,
+				!disabled && ui.is_id_focused(tab_id),
+			)
+
+			if !disabled && ui.is_id_focused(tab_id) {
+				if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
+					active_index^ = (active_index^ - 1 + len(tabs)) % len(tabs)
+					changed = true
+					prev_id := ui.local_id(tabs[active_index^])
+					ui.set_focused_id(prev_id)
+				}
+				if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
+					active_index^ = (active_index^ + 1) % len(tabs)
+					changed = true
+					next_id := ui.local_id(tabs[active_index^])
+					ui.set_focused_id(next_id)
+				}
+			}
+
+			if ui.layout(tab_id).draw(
+				width = ui.grow(),
+				height = ui.grow(),
+				background_color = style.base[state],
+				padding = style.padding,
+				child_alignment = {.Center, .Center},
+				border = {
+					thickness = style.border_width,
+					color = style.border[state],
+				},
+				outline = outline,
+				corner_radius = style.corner_radius,
+			) {
+				ui.text().draw(
+					name,
+					alignment = {.Center, .Center},
+					color = style.text[state],
+					font_size = g_theme.font_size,
+					font_index = g_theme.font_index,
+				)
+			}
+
+			if !disabled && ui.is_id_clicked(tab_id) {
 				if active_index^ != i {
 					active_index^ = i
 					changed = true
@@ -303,7 +407,7 @@ draw_checkbox :: proc(
 			corner_radius = style.corner_radius,
 			padding = {2, 2, 2, 2},
 			child_alignment = {.Center, .Center},
-			pointer_mode = .Passthrough, // -> let the containing layout catch the click
+			pointer_mode = .Passthrough,
 		) {
 			if checked^ {
 				check_mark_id := ui.local_id("check")
@@ -312,7 +416,7 @@ draw_checkbox :: proc(
 					height = ui.fixed(10),
 					background_color = style.border[.Focused],
 					corner_radius = {2, 2, 2, 2},
-					pointer_mode = .Passthrough, // -> let the containing layout catch the click
+					pointer_mode = .Passthrough,
 				) {}
 			}
 		}
@@ -328,6 +432,379 @@ draw_checkbox :: proc(
 	}
 
 	return clicked
+}
+
+//region: spinner
+spinner :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_spinner)) {
+	ui.declare_id(id, loc)
+	return {draw_spinner}
+}
+
+draw_spinner :: proc(
+	value: ^int,
+	min_val: int,
+	max_val: int,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	id := ui.last_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	style := g_theme.controls[.Spinner]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
+	changed := false
+
+	if !disabled && ui.is_id_focused(id) {
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
+			if value^ > min_val {
+				value^ -= 1
+				changed = true
+			}
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
+			if value^ < max_val {
+				value^ += 1
+				changed = true
+			}
+		}
+	}
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		child_gap = 2,
+		padding = {},
+		outline = outline,
+	) {
+		btn_left := ui.local_id("dec")
+		if button(btn_left).draw(
+			"<",
+			width = ui.fixed(24),
+			height = ui.grow(),
+			disabled = disabled || value^ <= min_val,
+		) {
+			value^ -= 1
+			changed = true
+		}
+
+		box_id := ui.local_id("val")
+		box_state := get_control_state(box_id, disabled)
+		if ui.layout(box_id).draw(
+			width = ui.grow(),
+			height = ui.grow(),
+			background_color = style.base[box_state],
+			border = {
+				thickness = style.border_width,
+				color = style.border[box_state],
+			},
+			corner_radius = style.corner_radius,
+			padding = {4, 4, 2, 2},
+			child_alignment = {.Center, .Center},
+		) {
+			text_str := fmt.tprintf("%d", value^)
+			ui.text().draw(
+				text_str,
+				alignment = {.Center, .Center},
+				color = style.text[box_state],
+				font_size = g_theme.font_size,
+				font_index = g_theme.font_index,
+			)
+		}
+
+		btn_right := ui.local_id("inc")
+		if button(btn_right).draw(
+			">",
+			width = ui.fixed(24),
+			height = ui.grow(),
+			disabled = disabled || value^ >= max_val,
+		) {
+			value^ += 1
+			changed = true
+		}
+	}
+
+	return changed
+}
+
+//region: value_box
+value_box :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_value_box)) {
+	ui.declare_id(id, loc)
+	return {draw_value_box}
+}
+
+draw_value_box :: proc(
+	value: ^int,
+	min_val: int,
+	max_val: int,
+	edit_mode: ^bool = nil,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{80}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	id := ui.last_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	is_editing := edit_mode != nil && edit_mode^
+	state := get_control_state(id, disabled, is_editing)
+	style := g_theme.controls[.Value_Box]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
+	changed := false
+
+	if !disabled && ui.is_this_clicked() {
+		if edit_mode != nil {
+			edit_mode^ = !edit_mode^
+		}
+	}
+
+	if !disabled && ui.is_id_focused(id) {
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
+			if value^ > min_val {
+				value^ -= 1
+				changed = true
+			}
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
+			if value^ < max_val {
+				value^ += 1
+				changed = true
+			}
+		}
+		if ui.is_key_pressed(.Enter) ||
+		   ui.is_key_pressed(.Space) ||
+		   ui.is_key_pressed(.Escape) {
+			if edit_mode != nil {
+				edit_mode^ = false
+			}
+		}
+	}
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		background_color = style.base[state],
+		padding = style.padding,
+		child_alignment = {.Center, .Center},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+	) {
+		text_str := fmt.tprintf("%d", value^)
+		ui.text().draw(
+			text_str,
+			alignment = {.Center, .Center},
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
+		)
+	}
+
+	return changed
+}
+
+//region: combo_box
+combo_box :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_combo_box)) {
+	ui.declare_id(id, loc)
+	return {draw_combo_box}
+}
+
+draw_combo_box :: proc(
+	options: []string,
+	active_index: ^int,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	id := ui.last_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	state := get_control_state(id, disabled)
+	style := g_theme.controls[.ComboBox]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
+	changed := false
+
+	if !disabled && ui.is_id_focused(id) {
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
+			active_index^ = (active_index^ - 1 + len(options)) % len(options)
+			changed = true
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
+			active_index^ = (active_index^ + 1) % len(options)
+			changed = true
+		}
+	}
+
+	if !disabled && ui.is_this_clicked() {
+		active_index^ = (active_index^ + 1) % len(options)
+		changed = true
+	}
+
+	label :=
+		active_index^ >= 0 && active_index^ < len(options) ? options[active_index^] : ""
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		background_color = style.base[state],
+		padding = style.padding,
+		child_alignment = {.Left, .Center},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+	) {
+		ui.text().draw(
+			label,
+			alignment = {.Left, .Center},
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
+		)
+	}
+
+	return changed
+}
+
+//region: dropdown_box
+dropdown_box :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_dropdown_box)) {
+	ui.declare_id(id, loc)
+	return {draw_dropdown_box}
+}
+
+draw_dropdown_box :: proc(
+	options: []string,
+	active_index: ^int,
+	edit_mode: ^bool,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> bool {
+	wrap_id()
+	id := ui.last_id()
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	state := get_control_state(id, disabled, edit_mode^)
+	style := g_theme.controls[.DropdownBox]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
+	changed := false
+
+	if !disabled && ui.is_this_clicked() {
+		edit_mode^ = !edit_mode^
+	}
+
+	if !disabled && ui.is_id_focused(id) {
+		if edit_mode^ {
+			if ui.is_key_pressed(.Up) {
+				active_index^ =
+					(active_index^ - 1 + len(options)) % len(options)
+				changed = true
+			}
+			if ui.is_key_pressed(.Down) {
+				active_index^ = (active_index^ + 1) % len(options)
+				changed = true
+			}
+			if ui.is_key_pressed(.Escape) ||
+			   ui.is_key_pressed(.Enter) ||
+			   ui.is_key_pressed(.Space) {
+				edit_mode^ = false
+			}
+		}
+	}
+
+	label :=
+		active_index^ >= 0 && active_index^ < len(options) ? options[active_index^] : ""
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		background_color = style.base[state],
+		padding = style.padding,
+		child_alignment = {.Left, .Center},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+	) {
+		ui.text().draw(
+			label,
+			alignment = {.Left, .Center},
+			color = style.text[state],
+			font_size = g_theme.font_size,
+			font_index = g_theme.font_index,
+		)
+
+		if edit_mode^ && !disabled {
+			if ui.layout().draw(
+				width = ui.grow(),
+				height = ui.fit(),
+				layout_direction = .Top_To_Bottom,
+				padding = {2, 2, 2, 2},
+				child_gap = 1,
+				background_color = g_theme.controls[.Panel].base[.Normal],
+				border = {
+					thickness = style.border_width,
+					color = style.border[.Focused],
+				},
+				corner_radius = style.corner_radius,
+				float_mode = ui.Float_At_Parent {
+					offset = {0, 2},
+					attach_points = {element = .LeftTop, parent = .LeftBottom},
+					z_index = 500,
+				},
+			) {
+				for opt, i in options {
+					opt_id := ui.local_id(opt)
+					is_selected := (active_index^ == i)
+					opt_state := get_control_state(opt_id, false, is_selected)
+					if ui.layout(opt_id).draw(
+						width = ui.grow(),
+						height = ui.fit(),
+						background_color = is_selected ? style.base[.Selected] : (ui.is_id_hovered(opt_id) ? style.base[.Focused] : {0, 0, 0, 0}),
+						padding = {6, 6, 2, 2},
+						child_alignment = {.Left, .Center},
+					) {
+						ui.text().draw(
+							opt,
+							alignment = {.Left, .Center},
+							color = style.text[opt_state],
+							font_size = g_theme.font_size,
+							font_index = g_theme.font_index,
+						)
+					}
+					if ui.is_id_clicked(opt_id) {
+						active_index^ = i
+						edit_mode^ = false
+						changed = true
+					}
+				}
+			}
+		}
+	}
+
+
+	return changed
 }
 
 //region: slider
@@ -361,6 +838,19 @@ draw_slider :: proc(
 	)
 
 	changed := false
+
+	if !disabled && ui.is_id_focused(track_id) {
+		step := (max_val - min_val) * 0.05
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
+			value^ = clamp(value^ - step, min_val, max_val)
+			changed = true
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
+			value^ = clamp(value^ + step, min_val, max_val)
+			changed = true
+		}
+	}
+
 	if !disabled && (ui.is_id_held(track_id) || ui.is_id_clicked(track_id)) {
 		track_rect := ui.rect_by_id(track_id)
 		if track_rect.width > 0 {

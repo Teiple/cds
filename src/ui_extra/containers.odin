@@ -143,6 +143,82 @@ draw_group_box :: proc(
 	return true
 }
 
+//region: window_box
+@(deferred_none = end_group_box)
+window_box :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_window_box)) {
+	ui.declare_id(id, loc)
+	return {draw_window_box}
+}
+
+draw_window_box :: proc(
+	title: string,
+	closed: ^bool = nil,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	gap: f32 = 4,
+	padding: ui.Padding = {8, 8, 8, 8},
+) -> bool {
+	wrap_id()
+	style := g_theme.controls[.Panel]
+
+	if ui.draw_layout(
+		width = width,
+		height = height,
+		layout_direction = .Top_To_Bottom,
+		child_gap = 0,
+		padding = {},
+		background_color = style.base[.Normal],
+		border = {
+			thickness = style.border_width,
+			color = style.border[.Normal],
+		},
+		corner_radius = style.corner_radius,
+	) {
+		title_id := ui.local_id("title_bar")
+		if ui.begin_layout(title_id).draw(
+			width = ui.grow(),
+			height = ui.fixed(28),
+			layout_direction = .Left_To_Right,
+			padding = {8, 4, 4, 4},
+			child_alignment = {.Left, .Center},
+			background_color = g_theme.controls[.Button].base[.Normal],
+		) {
+			ui.text().draw(
+				title,
+				color = style.text[.Normal],
+				font_size = g_theme.font_size,
+				font_index = g_theme.font_index,
+				alignment = {.Left, .Center},
+			)
+			if closed != nil {
+				close_id := ui.local_id("close_btn")
+				if button(close_id).draw(
+					"x",
+					width = ui.fixed(20),
+					height = ui.fixed(20),
+				) {
+					closed^ = true
+				}
+			}
+			ui.end_layout()
+		}
+
+		content_id := ui.local_id("content")
+		if ui.begin_layout(content_id).draw(
+			width = ui.grow(),
+			height = ui.fit(),
+			layout_direction = .Top_To_Bottom,
+			child_gap = gap,
+			padding = padding,
+		) {
+		}
+	}
+	return true
+}
+
 end_group_box :: proc() {
 	if ui.defer_end_layout() {
 		if ui.defer_end_layout() {
@@ -196,6 +272,48 @@ draw_line :: proc(
 				height = ui.fixed(1),
 				background_color = c,
 			) {}
+		}
+	}
+}
+
+//region: status_bar
+status_bar :: proc(
+	id: Maybe(u32) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_status_bar)) {
+	ui.declare_id(id, loc)
+	return {draw_status_bar}
+}
+
+draw_status_bar :: proc(
+	text: string = "",
+	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{24}},
+	padding: ui.Padding = {6, 6, 2, 2},
+) {
+	wrap_id()
+	style := g_theme.controls[.StatusBar]
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		padding = padding,
+		child_alignment = {.Left, .Center},
+		background_color = style.base[.Normal],
+		border = {
+			thickness = style.border_width,
+			color = style.border[.Normal],
+		},
+		corner_radius = style.corner_radius,
+	) {
+		if len(text) > 0 {
+			ui.text().draw(
+				text,
+				color = style.text[.Normal],
+				font_size = g_theme.font_size,
+				font_index = g_theme.font_index,
+				alignment = {.Left, .Center},
+			)
 		}
 	}
 }
