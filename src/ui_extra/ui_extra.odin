@@ -16,18 +16,18 @@ end_wrap_id :: proc(id: u32) {
 label :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_label)) {
+) -> ui.Element_Draw(type_of(draw_label)) {
 	ui.declare_id(id, loc)
 	return {draw_label}
 }
 
 draw_label :: proc(
 	text: string,
-	alignment: ui.Alignment = {x = .Left, y = .Center},
+	alignment: ui.Alignment = {.Left, .Center},
 	color: Maybe([4]u8) = nil,
 ) {
 	c := color.? or_else g_theme.controls[.Label].text[.Normal]
-	ui.text().config(
+	ui.text().draw(
 		text,
 		alignment = alignment,
 		color = c,
@@ -40,7 +40,7 @@ draw_label :: proc(
 button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_button)) {
+) -> ui.Element_Draw(type_of(draw_button)) {
 	ui.declare_id(id, loc)
 	return {draw_button}
 }
@@ -63,7 +63,7 @@ draw_button :: proc(
 	clicked := !disabled && ui.is_this_clicked()
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		background_color = style.base[state],
@@ -73,7 +73,7 @@ draw_button :: proc(
 		outline = outline,
 		corner_radius = style.corner_radius,
 	) {
-		ui.text().config(
+		ui.text().draw(
 			label,
 			alignment = {.Center, .Center},
 			color = style.text[state],
@@ -89,7 +89,7 @@ draw_button :: proc(
 label_button :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_label_button)) {
+) -> ui.Element_Draw(type_of(draw_label_button)) {
 	ui.declare_id(id, loc)
 	return {draw_label_button}
 }
@@ -107,14 +107,14 @@ draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 	clicked := !disabled && ui.is_this_clicked()
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = ui.fit(),
 		height = ui.fit(),
 		padding = style.padding,
 		child_alignment = {.Left, .Center},
 		outline = outline,
 	) {
-		ui.text().config(
+		ui.text().draw(
 			text,
 			alignment = {.Left, .Center},
 			color = style.text[state],
@@ -130,7 +130,7 @@ draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 toggle :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_toggle)) {
+) -> ui.Element_Draw(type_of(draw_toggle)) {
 	ui.declare_id(id, loc)
 	return {draw_toggle}
 }
@@ -157,7 +157,7 @@ draw_toggle :: proc(
 
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		background_color = style.base[state],
@@ -167,7 +167,7 @@ draw_toggle :: proc(
 		outline = outline,
 		corner_radius = style.corner_radius,
 	) {
-		ui.text().config(
+		ui.text().draw(
 			label,
 			alignment = {.Center, .Center},
 			color = style.text[state],
@@ -183,7 +183,7 @@ draw_toggle :: proc(
 toggle_group :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_toggle_group)) {
+) -> ui.Element_Draw(type_of(draw_toggle_group)) {
 	ui.declare_id(id, loc)
 	return {draw_toggle_group}
 }
@@ -213,9 +213,12 @@ draw_toggle_group :: proc(
 			}
 			state := get_control_state(btn_id, disabled, is_active)
 			style := g_theme.controls[.Toggle]
-			outline := get_control_outline(style, !disabled && ui.is_id_focused(btn_id))
+			outline := get_control_outline(
+				style,
+				!disabled && ui.is_id_focused(btn_id),
+			)
 
-			if ui.layout(btn_id).config(
+			if ui.layout(btn_id).draw(
 				width = ui.grow(),
 				height = ui.grow(),
 				background_color = style.base[state],
@@ -228,7 +231,7 @@ draw_toggle_group :: proc(
 				outline = outline,
 				corner_radius = style.corner_radius,
 			) {
-				ui.text().config(
+				ui.text().draw(
 					name,
 					alignment = {.Center, .Center},
 					color = style.text[state],
@@ -252,7 +255,7 @@ draw_toggle_group :: proc(
 checkbox :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_checkbox)) {
+) -> ui.Element_Draw(type_of(draw_checkbox)) {
 	ui.declare_id(id, loc)
 	return {draw_checkbox}
 }
@@ -278,7 +281,7 @@ draw_checkbox :: proc(
 
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = ui.fit(),
 		height = ui.fit(),
 		layout_direction = .Left_To_Right,
@@ -289,7 +292,7 @@ draw_checkbox :: proc(
 	) {
 		box_id := ui.local_id("box")
 		box_state := get_control_state(box_id, disabled, checked^)
-		if ui.layout(box_id).config(
+		if ui.layout(box_id).draw(
 			width = ui.fixed(18),
 			height = ui.fixed(18),
 			background_color = style.base[box_state],
@@ -304,7 +307,7 @@ draw_checkbox :: proc(
 		) {
 			if checked^ {
 				check_mark_id := ui.local_id("check")
-				if ui.layout(check_mark_id).config(
+				if ui.layout(check_mark_id).draw(
 					width = ui.fixed(10),
 					height = ui.fixed(10),
 					background_color = style.border[.Focused],
@@ -314,7 +317,7 @@ draw_checkbox :: proc(
 			}
 		}
 		if len(label) > 0 {
-			ui.text().config(
+			ui.text().draw(
 				label,
 				alignment = {.Left, .Center},
 				color = style.text[state],
@@ -331,7 +334,7 @@ draw_checkbox :: proc(
 slider :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_slider)) {
+) -> ui.Element_Draw(type_of(draw_slider)) {
 	ui.declare_id(id, loc)
 	return {draw_slider}
 }
@@ -352,7 +355,10 @@ draw_slider :: proc(
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
 	style := g_theme.controls[.Slider]
-	outline := get_control_outline(style, !disabled && ui.is_id_focused(track_id))
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(track_id),
+	)
 
 	changed := false
 	if !disabled && (ui.is_id_held(track_id) || ui.is_id_clicked(track_id)) {
@@ -375,7 +381,7 @@ draw_slider :: proc(
 	normalized :=
 		max_val > min_val ? clamp((value^ - min_val) / (max_val - min_val), 0, 1) : 0
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		background_color = style.base[state],
@@ -387,7 +393,7 @@ draw_slider :: proc(
 	) {
 		thumb_id := ui.local_id("thumb")
 		thumb_w: f32 = 12
-		if ui.layout(thumb_id).config(
+		if ui.layout(thumb_id).draw(
 			width = ui.fixed(thumb_w),
 			height = ui.grow(),
 			background_color = style.border[.Focused],
@@ -402,7 +408,7 @@ draw_slider :: proc(
 progress_bar :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_progress_bar)) {
+) -> ui.Element_Draw(type_of(draw_progress_bar)) {
 	ui.declare_id(id, loc)
 	return {draw_progress_bar}
 }
@@ -420,7 +426,7 @@ draw_progress_bar :: proc(
 	normalized :=
 		max_val > min_val ? clamp((value - min_val) / (max_val - min_val), 0, 1) : 0
 
-	if ui.layout(reuse_id = true).config(
+	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		background_color = style.base[.Normal],
@@ -433,7 +439,7 @@ draw_progress_bar :: proc(
 		child_alignment = {.Left, .Center},
 	) {
 		fill_id := ui.local_id("fill")
-		if ui.layout(fill_id).config(
+		if ui.layout(fill_id).draw(
 			width = ui.percent(normalized),
 			height = ui.grow(),
 			background_color = style.border[.Focused],
@@ -446,7 +452,7 @@ draw_progress_bar :: proc(
 tooltip :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_tooltip)) {
+) -> ui.Element_Draw(type_of(draw_tooltip)) {
 	ui.declare_id(id, loc)
 	return {draw_tooltip}
 }
@@ -459,7 +465,7 @@ draw_tooltip :: proc(
 	wrap_id()
 	if ui.is_id_hovered(target_id) {
 		style := g_theme.controls[.Panel]
-		if ui.layout(reuse_id = true).config(
+		if ui.layout(reuse_id = true).draw(
 			width = ui.fit(),
 			height = ui.fit(),
 			background_color = style.base[.Normal],
@@ -477,7 +483,7 @@ draw_tooltip :: proc(
 				z_index = 1000,
 			},
 		) {
-			ui.text().config(
+			ui.text().draw(
 				content,
 				color = style.text[.Normal],
 				font_size = g_theme.font_size,

@@ -159,7 +159,7 @@ draw_vert_scroll :: proc(
 		child_gap = 0,
 		background_color = background_color,
 	) {
-		if ui_begin_layout().config(
+		if ui_begin_layout().draw(
 			width = ui_grow(),
 			height = ui_fit(),
 			layout_direction = .Top_To_Bottom,
@@ -182,7 +182,7 @@ end_draw_vert_scroll :: proc() {
 		}
 
 		// important wrapper, so local id can work locally without collide with content's scrolls
-		if ui_begin_layout().config(
+		if ui_begin_layout().draw(
 			width = ui_grow(),
 			height = ui_grow(),
 			padding = {},
@@ -221,7 +221,7 @@ end_draw_vert_scroll :: proc() {
 				}
 			}
 
-			if ui_layout(scroll_bar_id).config(
+			if ui_layout(scroll_bar_id).draw(
 				width = ui_fit(),
 				height = ui_grow(),
 				background_color = ele_data.scroll_bar_background_color,
@@ -229,7 +229,7 @@ end_draw_vert_scroll :: proc() {
 				padding = {},
 				child_alignment = {0, scroll_normalized_offset.y},
 			) {
-				if ui_layout(scroll_thumb_id).config(
+				if ui_layout(scroll_thumb_id).draw(
 					width = ui_fixed(ele_data.scroll_thumb_width),
 					height = ui_fixed(ele_data.scroll_thumb_height),
 					background_color = ele_data.scroll_thumb_color,
@@ -266,18 +266,14 @@ draw_button :: proc(
 		background_color = rl.ColorBrightness(color, 0.1)
 	}
 
-	if ui_layout(reuse_id = true).config(
+	if ui_layout(reuse_id = true).draw(
 		width = width,
 		height = height,
 		background_color = background_color,
 		padding = ui_pad_all(8),
 		child_alignment = {.Center, .Center},
 	) {
-		ui_text().config(
-			label,
-			alignment = {.Center, .Center},
-			color = rl.WHITE,
-		)
+		ui_text().draw(label, alignment = {.Center, .Center}, color = rl.WHITE)
 	}
 
 	return clicked
@@ -306,7 +302,7 @@ draw_tooltip :: proc(
 	wrap_id()
 
 	if ui_is_id_hovered(target_id) {
-		if ui_layout(reuse_id = true).config(
+		if ui_layout(reuse_id = true).draw(
 			width = ui_fit(),
 			height = ui_fit(),
 			background_color = background_color,
@@ -320,7 +316,7 @@ draw_tooltip :: proc(
 				z_index = 1000,
 			},
 		) {
-			ui_text().config(content, color = rl.WHITE)
+			ui_text().draw(content, color = rl.WHITE)
 		}
 	}
 }

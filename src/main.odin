@@ -107,46 +107,46 @@ main :: proc() {
 					}
 
 					if ui.begin(&g_state.ui.ctx, g_state.viewport.base_size) {
-						if uie.panel().config(
+						if uie.panel().draw(
 							width = ui.grow(),
 							height = ui.grow(),
 						) {
-							if uie.vbox().config() {
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
+							if uie.vbox().draw() {
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
 							}
-							if uie.hbox().config() {
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
+							if uie.hbox().draw() {
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
 							}
-							if uie.vbox().config() {
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.line().config()
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.line().config()
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.line().config()
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
-								uie.label().config("Hello World")
+							if uie.vbox().draw() {
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.line().draw()
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.line().draw()
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.line().draw()
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
+								uie.label().draw("Hello World")
 							}
-							if uie.button().config("Hello World") {
+							if uie.button().draw("Hello World") {
 								fmt.println("Hello World")
 							}
 							@(static) active: bool = false
-							uie.toggle().config("Mute Audio", &active)
+							uie.toggle().draw("Mute Audio", &active)
 							@(static) checked: bool = true
-							uie.checkbox().config("Enable VSync", &checked)
+							uie.checkbox().draw("Enable VSync", &checked)
 							@(static) mode: int = 0
 							options := []string{"Easy", "Normal", "Hard"}
-							uie.toggle_group().config(options, &mode)
+							uie.toggle_group().draw(options, &mode)
 						}
 					}
 				}

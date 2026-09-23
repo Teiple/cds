@@ -7,7 +7,7 @@ import "../ui"
 vbox :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_vbox)) {
+) -> ui.Element_Draw(type_of(draw_vbox)) {
 	ui.declare_id(id, loc)
 	return {draw_vbox}
 }
@@ -15,7 +15,7 @@ vbox :: proc(
 draw_vbox :: proc(
 	gap: f32 = 4,
 	padding: ui.Padding = {},
-	alignment: ui.Alignment = {x = .Left, y = .Top},
+	alignment: ui.Alignment = {.Left, .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 ) -> bool {
@@ -35,7 +35,7 @@ draw_vbox :: proc(
 hbox :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_hbox)) {
+) -> ui.Element_Draw(type_of(draw_hbox)) {
 	ui.declare_id(id, loc)
 	return {draw_hbox}
 }
@@ -43,7 +43,7 @@ hbox :: proc(
 draw_hbox :: proc(
 	gap: f32 = 4,
 	padding: ui.Padding = {},
-	alignment: ui.Alignment = {x = .Left, y = .Top},
+	alignment: ui.Alignment = {.Left, .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 ) -> bool {
@@ -63,7 +63,7 @@ draw_hbox :: proc(
 panel :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_panel)) {
+) -> ui.Element_Draw(type_of(draw_panel)) {
 	ui.declare_id(id, loc)
 	return {draw_panel}
 }
@@ -98,7 +98,7 @@ draw_panel :: proc(
 group_box :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_group_box)) {
+) -> ui.Element_Draw(type_of(draw_group_box)) {
 	ui.declare_id(id, loc)
 	return {draw_group_box}
 }
@@ -126,13 +126,13 @@ draw_group_box :: proc(
 		},
 		corner_radius = style.corner_radius,
 	) {
-		ui.text().config(
+		ui.text().draw(
 			title,
 			color = style.text[.Normal],
 			font_size = g_theme.font_size,
 			font_index = g_theme.font_index,
 		)
-		if ui.begin_layout().config(
+		if ui.begin_layout().draw(
 			width = ui.grow(),
 			height = ui.fit(),
 			layout_direction = .Top_To_Bottom,
@@ -158,7 +158,7 @@ end_container :: proc() {
 line :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> ui.Element_Config(type_of(draw_line)) {
+) -> ui.Element_Draw(type_of(draw_line)) {
 	ui.declare_id(id, loc)
 	return {draw_line}
 }
@@ -170,14 +170,14 @@ draw_line :: proc(
 ) {
 	c := color.? or_else g_theme.controls[.Default].border[.Normal]
 	if len(text) == 0 {
-		if ui.layout(reuse_id = true).config(
+		if ui.layout(reuse_id = true).draw(
 			width = width,
 			height = ui.fixed(1),
 			background_color = c,
 			padding = {},
 		) {}
 	} else {
-		if ui.layout(reuse_id = true).config(
+		if ui.layout(reuse_id = true).draw(
 			width = width,
 			height = ui.fit(),
 			layout_direction = .Left_To_Right,
@@ -185,13 +185,13 @@ draw_line :: proc(
 			child_alignment = {.Left, .Center},
 			padding = {0, 0, 4, 4},
 		) {
-			ui.text().config(
+			ui.text().draw(
 				text,
 				color = g_theme.controls[.Label].text[.Normal],
 				font_size = g_theme.font_size,
 				font_index = g_theme.font_index,
 			)
-			if ui.layout().config(
+			if ui.layout().draw(
 				width = ui.grow(),
 				height = ui.fixed(1),
 				background_color = c,

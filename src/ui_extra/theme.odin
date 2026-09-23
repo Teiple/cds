@@ -103,7 +103,7 @@ BUTTON_STYLE: Control_Style : {
 	},
 	text = DEFAULT_CONTROL_STYLE.text,
 	border_width = 1,
-	outline_width = 1.5,
+	outline_width = 1,
 	outline_offset = 2,
 	corner_radius = {4, 4, 4, 4},
 	padding = {12, 12, 6, 6},

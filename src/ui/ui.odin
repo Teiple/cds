@@ -2481,8 +2481,8 @@ declare_id :: proc(id: Maybe(u32), loc: runtime.Source_Code_Location) {
 	g_ui_builder.last_id = new_id
 }
 
-Element_Config :: struct($T: typeid) {
-	config: T,
+Element_Draw :: struct($T: typeid) {
+	draw: T,
 }
 
 
@@ -2491,7 +2491,7 @@ layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> Element_Config(type_of(draw_layout)) {
+) -> Element_Draw(type_of(draw_layout)) {
 	return begin_layout(id, loc, reuse_id)
 }
 
@@ -2499,7 +2499,7 @@ begin_layout :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
 	reuse_id: bool = false,
-) -> Element_Config(type_of(draw_layout)) {
+) -> Element_Draw(type_of(draw_layout)) {
 	if !reuse_id {
 		declare_id(id, loc)
 	}
@@ -2518,7 +2518,7 @@ defer_end_layout :: proc() -> bool {
 text :: proc(
 	id: Maybe(u32) = nil,
 	loc := #caller_location,
-) -> Element_Config(type_of(draw_text)) {
+) -> Element_Draw(type_of(draw_text)) {
 	declare_id(id, loc)
 	return {draw_text}
 }

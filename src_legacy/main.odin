@@ -106,7 +106,7 @@ main :: proc() {
 
 		if ui_begin(&ui_ctx, main_viewport) {
 			when ODIN_DEBUG {
-				if ui_layout().config(
+				if ui_layout().draw(
 					width = ui_grow(),
 					height = ui_fixed(64),
 					float_mode = UI_Float_At_Root {
@@ -118,7 +118,7 @@ main :: proc() {
 					corner_radius = {4, 4, 0, 0},
 					mouse_mode = .Ignore,
 				) {
-					ui_text().config(
+					ui_text().draw(
 						fmt.tprintf(
 							"Allocated: %.2f KB | Frame rate: %.f FPS",
 							f32(track.current_memory_allocated) / 1024,
