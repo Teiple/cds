@@ -2,6 +2,7 @@ package ui_sokol
 
 import sapp "../sokol/app"
 import "../ui"
+import "core:fmt"
 
 handle_event :: proc(
 	input: ^ui.Input,
@@ -115,8 +116,4 @@ handle_event :: proc(
 		input.pointer.kind = .Touch
 		input.pointer.state = .Released
 	}
-}
-
-end_frame :: proc(input: ^ui.Input) {
-	ui.input_end_frame(input)
 }

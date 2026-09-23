@@ -1,5 +1,7 @@
 package game
 
+import "core:fmt"
+import "core:slice/heap"
 import sapp "sokol/app"
 import sg "sokol/gfx"
 import sglue "sokol/glue"
@@ -101,65 +103,49 @@ main :: proc() {
 							cast(ui.Rect)g_state.viewport.dest_rect,
 							g_state.viewport.scale,
 						)
-						ui_sokol.end_frame(&g_state.ui.input)
 					}
 
-					if ui.begin(
-						&g_state.ui.ctx,
-						g_state.viewport.base_size,
-						g_state.ui.input,
-					) {
-						@(static) toggle := true
-						@(static) toggle_state := false
-						@(static) selected_display := 0
-						@(static) slider_val: f32 = 0.5
-
+					if ui.begin(&g_state.ui.ctx, g_state.viewport.base_size) {
 						if uie.panel().config(
-							padding = ui.Padding{12, 12, 12, 12},
 							width = ui.grow(),
 							height = ui.grow(),
 						) {
-							if uie.vbox().config(gap = 8) {
+							if uie.vbox().config() {
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+							}
+							if uie.hbox().config() {
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+							}
+							if uie.vbox().config() {
+								uie.label().config("Hello World")
 								uie.label().config("Hello World")
 								uie.line().config()
-
-								if uie.hbox().config(gap = 8) {
-									if uie.button().config("Primary Action") {
-									}
-									if uie.label_button().config(
-										"Label Action",
-									) {
-									}
-									uie.toggle().config(
-										"Toggle",
-										&toggle_state,
-									)
-								}
-
-								uie.checkbox().config("Toggle", &toggle)
-
-								display_options := []string {
-									"Unlit",
-									"Wireframe",
-								}
-								uie.toggle_group().config(
-									display_options,
-									&selected_display,
-								)
-
-								if uie.hbox().config(
-									gap = 8,
-									alignment = ui.Alignment {
-										x = .Left,
-										y = .Center,
-									},
-								) {
-									uie.label().config("Scale:")
-									uie.slider().config(&slider_val, 0.1, 2.0)
-								}
-
-								uie.progress_bar().config(slider_val, 0.1, 2.0)
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.line().config()
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.line().config()
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
+								uie.label().config("Hello World")
 							}
+							if uie.button().config("Hello World") {
+								fmt.println("Hello World")
+							}
+							@(static) active: bool = false
+							uie.toggle().config("Mute Audio", &active)
+							@(static) checked: bool = true
+							uie.checkbox().config("Enable VSync", &checked)
+							@(static) mode: int = 0
+							options := []string{"Easy", "Normal", "Hard"}
+							uie.toggle_group().config(options, &mode)
 						}
 					}
 				}

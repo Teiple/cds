@@ -1,6 +1,7 @@
 package ui
 
 import "base:runtime"
+import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:unicode/utf8"
@@ -1236,12 +1237,11 @@ delete_context :: proc(ctx: Context) {
 }
 
 @(require_results, deferred_in_out = end)
-begin :: proc(ctx: ^Context, canvas_size: [2]f32, input: Input) -> bool {
+begin :: proc(ctx: ^Context, canvas_size: [2]f32) -> bool {
 	g_ui_builder.current_context = ctx
 	for p in g_ui_builder.context_events.on_begin do p()
 
 	ctx.canvas_size = canvas_size
-	ctx.input = input
 
 	clear(&ctx.ids)
 	clear(&ctx.elements)
@@ -1259,7 +1259,7 @@ begin :: proc(ctx: ^Context, canvas_size: [2]f32, input: Input) -> bool {
 	return true
 }
 
-end :: proc(ctx: ^Context, _: [2]f32, _: Input, ok: bool) {
+end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 	if !ok do return
 
 	// close root
@@ -1321,6 +1321,7 @@ end :: proc(ctx: ^Context, _: [2]f32, _: Input, ok: bool) {
 			focus_previous_in_ctx(ctx)
 		} else {
 			focus_next_in_ctx(ctx)
+			fmt.println("Focus next")
 		}
 	}
 
@@ -2158,6 +2159,7 @@ input_end_frame :: proc(input: ^Input) {
 			input.pointer.is_valid = false
 		}
 	}
+
 	input.pointer.delta = {0, 0}
 	input.pointer.scroll = {0, 0}
 

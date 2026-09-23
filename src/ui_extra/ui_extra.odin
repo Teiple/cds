@@ -206,7 +206,7 @@ draw_toggle_group :: proc(
 				ui.register_focusable(btn_id)
 			}
 			state := get_control_state(btn_id, disabled)
-			if is_active && state == .Normal {
+			if is_active && (state == .Normal || state == .Focused) {
 				state = .Pressed
 			}
 			style := g_theme.controls[.Toggle]
@@ -290,6 +290,7 @@ draw_checkbox :: proc(
 			corner_radius = style.corner_radius,
 			padding = {2, 2, 2, 2},
 			child_alignment = {.Center, .Center},
+			pointer_mode = .Passthrough, // -> let the containing layout catch the click
 		) {
 			if checked^ {
 				check_mark_id := ui.local_id("check")
@@ -298,6 +299,7 @@ draw_checkbox :: proc(
 					height = ui.fixed(10),
 					background_color = style.border[.Focused],
 					corner_radius = {2, 2, 2, 2},
+					pointer_mode = .Passthrough, // -> let the containing layout catch the click
 				) {}
 			}
 		}

@@ -2,13 +2,14 @@ package ui_sokol
 
 import sg "../sokol/gfx"
 import "../ui"
+import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import stbtt "vendor:stb/truetype"
 
 ARC_SEGMENTS :: 12
 
-UI_Vertex :: struct {
+Vertex :: struct {
 	pos:   [2]f32,
 	uv:    [2]f32,
 	color: [4]u8,
@@ -29,7 +30,7 @@ UI_Sokol_Font :: struct {
 	spacing:   f32,
 }
 
-UI_Renderer :: struct {
+Renderer :: struct {
 	pipeline:      sg.Pipeline,
 	vertex_buffer: sg.Buffer,
 	index_buffer:  sg.Buffer,
@@ -37,18 +38,14 @@ UI_Renderer :: struct {
 	white_image:   sg.Image,
 	white_view:    sg.View,
 	fonts:         [dynamic]UI_Sokol_Font,
-	vertices:      [dynamic]UI_Vertex,
+	vertices:      [dynamic]Vertex,
 	indices:       [dynamic]u16,
 	batches:       [dynamic]Draw_Batch,
 	scissor_stack: [dynamic]ui.Rect,
 }
 
-ui_renderer_init :: proc(
-	r: ^UI_Renderer,
-	max_vertices := 16384,
-	max_indices := 32768,
-) {
-	r.vertices = make([dynamic]UI_Vertex, 0, max_vertices)
+init :: proc(r: ^Renderer, max_vertices := 16384, max_indices := 32768) {
+	r.vertices = make([dynamic]Vertex, 0, max_vertices)
 	r.indices = make([dynamic]u16, 0, max_indices)
 	r.batches = make([dynamic]Draw_Batch, 0, 64)
 	r.scissor_stack = make([dynamic]ui.Rect, 0, 16)
@@ -56,7 +53,7 @@ ui_renderer_init :: proc(
 
 	r.vertex_buffer = sg.make_buffer({
 		usage = {vertex_buffer = true, dynamic_update = true},
-		size = uint(max_vertices * size_of(UI_Vertex)),
+		size = uint(max_vertices * size_of(Vertex)),
 	})
 
 	r.index_buffer = sg.make_buffer({
@@ -72,15 +69,15 @@ ui_renderer_init :: proc(
 	}
 	pip_desc.layout.attrs[ATTR_ui_pos] = {
 		format = .FLOAT2,
-		offset = i32(offset_of(UI_Vertex, pos)),
+		offset = i32(offset_of(Vertex, pos)),
 	}
 	pip_desc.layout.attrs[ATTR_ui_uv0] = {
 		format = .FLOAT2,
-		offset = i32(offset_of(UI_Vertex, uv)),
+		offset = i32(offset_of(Vertex, uv)),
 	}
 	pip_desc.layout.attrs[ATTR_ui_color0] = {
 		format = .UBYTE4N,
-		offset = i32(offset_of(UI_Vertex, color)),
+		offset = i32(offset_of(Vertex, color)),
 	}
 	pip_desc.colors[0].blend = {
 		enabled          = true,
@@ -114,15 +111,15 @@ ui_renderer_init :: proc(
 	r.white_view = sg.make_view({texture = {image = r.white_image}})
 }
 
-UI_Font_Desc :: struct {
+Font_Desc :: struct {
 	ttf:       []byte,
 	base_size: f32,
 	spacing:   f32,
 }
 
-ui_renderer_make_fonts :: proc(
-	r: ^UI_Renderer,
-	font_descs: []UI_Font_Desc,
+make_fonts :: proc(
+	r: ^Renderer,
+	font_descs: []Font_Desc,
 	allocator := context.temp_allocator,
 ) -> []ui.Font {
 	fonts_out := make([dynamic]ui.Font, len(font_descs))
@@ -190,7 +187,7 @@ ui_renderer_make_fonts :: proc(
 	return fonts_out[:]
 }
 
-ui_renderer_destroy :: proc(r: ^UI_Renderer) {
+destroy :: proc(r: ^Renderer) {
 	delete(r.vertices)
 	delete(r.indices)
 	delete(r.batches)
@@ -213,7 +210,7 @@ ui_renderer_destroy :: proc(r: ^UI_Renderer) {
 
 @(private = "file")
 push_quad :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	p0, p1, p2, p3: [2]f32,
 	uv0, uv1, uv2, uv3: [2]f32,
 	color: [4]u8,
@@ -222,10 +219,10 @@ push_quad :: proc(
 
 	append(
 		&r.vertices,
-		UI_Vertex{pos = p0, uv = uv0, color = color},
-		UI_Vertex{pos = p1, uv = uv1, color = color},
-		UI_Vertex{pos = p2, uv = uv2, color = color},
-		UI_Vertex{pos = p3, uv = uv3, color = color},
+		Vertex{p0, uv0, color},
+		Vertex{p1, uv1, color},
+		Vertex{p2, uv2, color},
+		Vertex{p3, uv3, color},
 	)
 
 	append(
@@ -245,7 +242,7 @@ push_quad :: proc(
 
 @(private = "file")
 push_sub_quad :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	px0, py0, px1, py1: f32,
 	uv_x0, uv_y0, uv_x1, uv_y1: f32,
 	color: [4]u8,
@@ -263,7 +260,7 @@ push_sub_quad :: proc(
 }
 
 @(private = "file")
-render_image :: proc(r: ^UI_Renderer, c: ui.Image_Command, view: sg.View) {
+render_image :: proc(r: ^Renderer, c: ui.Image_Command, view: sg.View) {
 	img := sg.query_view_image(view)
 	desc := sg.query_image_desc(img)
 	tex_w := f32(desc.width > 0 ? desc.width : 1)
@@ -443,7 +440,7 @@ render_image :: proc(r: ^UI_Renderer, c: ui.Image_Command, view: sg.View) {
 
 @(private = "file")
 draw_text_line :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	font: ^UI_Sokol_Font,
 	text: string,
 	start_x, start_y: f32,
@@ -482,7 +479,7 @@ draw_text_line :: proc(
 }
 
 @(private = "file")
-push_rect_solid :: proc(r: ^UI_Renderer, rect: ui.Rect, color: [4]u8) {
+push_rect_solid :: proc(r: ^Renderer, rect: ui.Rect, color: [4]u8) {
 	if rect.width <= 0 || rect.height <= 0 {
 		return
 	}
@@ -503,7 +500,7 @@ push_rect_solid :: proc(r: ^UI_Renderer, rect: ui.Rect, color: [4]u8) {
 
 @(private = "file")
 push_circle_sector :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	center: [2]f32,
 	radius: f32,
 	start_angle_deg, end_angle_deg: f32,
@@ -515,13 +512,13 @@ push_circle_sector :: proc(
 	uv: [2]f32 = {0.5, 0.5}
 	step := (end_angle_deg - start_angle_deg) / f32(ARC_SEGMENTS)
 	center_idx := u16(len(r.vertices))
-	append(&r.vertices, UI_Vertex{pos = center, uv = uv, color = color})
+	append(&r.vertices, Vertex{center, uv, color})
 
 	for i in 0 ..= ARC_SEGMENTS {
 		angle := math.to_radians_f32(start_angle_deg + f32(i) * step)
 		pos :=
 			center + [2]f32{math.cos(angle) * radius, math.sin(angle) * radius}
-		append(&r.vertices, UI_Vertex{pos = pos, uv = uv, color = color})
+		append(&r.vertices, Vertex{pos, uv, color})
 	}
 
 	for i in 0 ..< ARC_SEGMENTS {
@@ -539,7 +536,7 @@ push_circle_sector :: proc(
 
 @(private = "file")
 push_ring_sector :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	center: [2]f32,
 	inner_r, outer_r: f32,
 	start_angle_deg, end_angle_deg: f32,
@@ -566,7 +563,7 @@ push_ring_sector :: proc(
 
 @(private = "file")
 render_rounded_rect_filled :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	rect: ui.Rect,
 	color: [4]u8,
 	rad: ui.Corner_Radius,
@@ -612,7 +609,7 @@ render_rounded_rect_filled :: proc(
 
 @(private = "file")
 render_rounded_rect_border :: proc(
-	r: ^UI_Renderer,
+	r: ^Renderer,
 	rect: ui.Rect,
 	color: [4]u8,
 	rad: ui.Corner_Radius,
@@ -683,7 +680,7 @@ render_rounded_rect_border :: proc(
 }
 
 @(private = "file")
-set_active_batch :: proc(r: ^UI_Renderer, view: sg.View, scissor: ui.Rect) {
+set_active_batch :: proc(r: ^Renderer, view: sg.View, scissor: ui.Rect) {
 	if len(r.batches) > 0 {
 		last := &r.batches[len(r.batches) - 1]
 		if last.view.id == view.id && last.scissor == scissor {
@@ -703,8 +700,8 @@ set_active_batch :: proc(r: ^UI_Renderer, view: sg.View, scissor: ui.Rect) {
 	)
 }
 
-ui_renderer_render :: proc(
-	r: ^UI_Renderer,
+render :: proc(
+	r: ^Renderer,
 	ctx: ^ui.Context,
 	base_size: [2]f32,
 	dest_rect: ui.Rect,
@@ -818,10 +815,7 @@ ui_renderer_render :: proc(
 
 	sg.update_buffer(
 		r.vertex_buffer,
-		{
-			ptr = raw_data(r.vertices),
-			size = len(r.vertices) * size_of(UI_Vertex),
-		},
+		{ptr = raw_data(r.vertices), size = len(r.vertices) * size_of(Vertex)},
 	)
 	sg.update_buffer(
 		r.index_buffer,
@@ -859,12 +853,6 @@ ui_renderer_render :: proc(
 		)
 		sg.draw(b.element_base, b.num_elements, 1)
 	}
-}
 
-init :: ui_renderer_init
-destroy :: ui_renderer_destroy
-make_fonts :: ui_renderer_make_fonts
-render :: ui_renderer_render
-Renderer :: UI_Renderer
-Vertex :: UI_Vertex
-Font_Desc :: UI_Font_Desc
+	ui.input_end_frame(&ctx.input)
+}

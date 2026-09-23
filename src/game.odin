@@ -20,7 +20,6 @@ Game_State :: struct {
 	ui:            struct {
 		ctx:      ui.Context,
 		renderer: ui_sokol.Renderer,
-		input:    ui.Input,
 	},
 	button_clicks: int,
 }
@@ -41,7 +40,7 @@ update_input_event :: proc(event: sapp.Event) {
 		}
 	}
 	ui_sokol.handle_event(
-		&g_state.ui.input,
+		&g_state.ui.ctx.input,
 		&ev,
 		screen_to_ui,
 		&g_state.viewport,

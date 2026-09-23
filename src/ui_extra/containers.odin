@@ -170,14 +170,14 @@ draw_line :: proc(
 ) {
 	c := color.? or_else g_theme.controls[.Default].border[.Normal]
 	if len(text) == 0 {
-		if ui.draw_layout(
+		if ui.layout(reuse_id = true).config(
 			width = width,
 			height = ui.fixed(1),
 			background_color = c,
 			padding = {},
 		) {}
 	} else {
-		if ui.draw_layout(
+		if ui.layout(reuse_id = true).config(
 			width = width,
 			height = ui.fit(),
 			layout_direction = .Left_To_Right,
