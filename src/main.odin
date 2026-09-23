@@ -110,6 +110,37 @@ main :: proc() {
 						@(static) tab_idx: int = 0
 						tabs := []string{"Controls", "Containers", "Pickers"}
 
+						if ui.layout().draw(
+							width = ui.fit(),
+							height = ui.fit(),
+							padding = {8, 8, 4, 4},
+							background_color = {20, 20, 25, 200},
+							border = {
+								thickness = 1,
+								color = {60, 60, 70, 255},
+							},
+							corner_radius = ui.corner_radius_all(4),
+							float_mode = ui.Float_At_Root {
+								offset = {-12, 12},
+								attach_points = {
+									element = .RightTop,
+									parent = .RightTop,
+								},
+								z_index = 1000,
+							},
+						) {
+							fps_text := fmt.tprintf(
+								"FPS: %.0f (%.2f ms)",
+								g_state.frame_time.average_fps,
+								dt * 1000.0,
+							)
+							ui.text().draw(
+								fps_text,
+								color = {100, 240, 120, 255},
+								font_size = 14,
+								font_index = 0,
+							)
+						}
 
 						if uie.panel().draw(
 							width = ui.grow(),

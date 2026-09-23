@@ -1,56 +1,172 @@
 package main
 
+import "base:runtime"
 import "core:fmt"
 import "core:hash"
-import "core:strings"
+import "core:os"
 import "core:time"
 
-ITERATIONS :: 200_000
-
-TEST_LENGTHS := [?]int{8, 16, 32, 64, 128, 256, 512}
+ITERATIONS :: 1_000_000
 
 main :: proc() {
-	sample_buffer := strings.repeat(
-		"abcdefghijklmnopqrstuvwxyz0123456789_/",
-		20,
-	)
-	defer delete(sample_buffer)
+	entry_point := #location()
+	loc := #location()
+	entry_dir := os.dir(entry_point.file_path)
 
-	for len in TEST_LENGTHS {
-		chunk := transmute([]u8)sample_buffer[:len]
-
-		{
-			start := time.tick_now()
-			h: u32 = 0
-			for _ in 0 ..< ITERATIONS {
-				h = hash.adler32(chunk)
-			}
-			ms := time.duration_milliseconds(time.tick_since(start))
-			ns_per_op := (ms * 1_000_000.0) / ITERATIONS
-			ns_per_byte := ns_per_op / f64(len)
-			fmt.printfln(
-				"Len %3d | Adler32: %6.2f ns/op (%4.2f ns/char)",
-				len,
-				ns_per_op,
-				ns_per_byte,
-			)
+	// 1. Full Path + Adler32
+	{
+		start := time.tick_now()
+		h: u32 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_full_adler(loc)
 		}
-
-		{
-			start := time.tick_now()
-			h: u64 = 0
-			for _ in 0 ..< ITERATIONS {
-				h = hash.fnv64a(chunk)
-			}
-			ms := time.duration_milliseconds(time.tick_since(start))
-			ns_per_op := (ms * 1_000_000.0) / ITERATIONS
-			ns_per_byte := ns_per_op / f64(len)
-			fmt.printfln(
-				"Len %3d | FNV64a:  %6.2f ns/op (%4.2f ns/char)",
-				len,
-				ns_per_op,
-				ns_per_byte,
-			)
-		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Full path (Adler32):     %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
 	}
+
+	// 2. Sliced Path + Adler32
+	{
+		start := time.tick_now()
+		h: u32 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_slice_adler(entry_dir, loc)
+		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Sliced path (Adler32):   %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
+	}
+
+	// 3. Sliced Path + FNV32a
+	{
+		start := time.tick_now()
+		h: u32 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_slice_fnv(entry_dir, loc)
+		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Sliced path (FNV32a):    %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
+	}
+
+	// 4. Procedure Name + FNV32a
+	{
+		start := time.tick_now()
+		h: u32 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_procedure_fnv(loc)
+		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Procedure name (FNV32a): %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
+	}
+
+	{
+		start := time.tick_now()
+		h: u64 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_slice_fnv64(entry_dir, loc)
+		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Sliced path (FNV64a):    %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
+	}
+
+	{
+		start := time.tick_now()
+		h: u64 = 0
+		for _ in 0 ..< ITERATIONS {
+			h = hash_procedure_fnv64(loc)
+		}
+		duration := time.duration_milliseconds(time.tick_since(start))
+		fmt.printfln(
+			"Procedure name (FNV64a): %.2f ms (%.2f ns/op, hash: %v)",
+			duration,
+			(duration * 1_000_000.0) / ITERATIONS,
+			h,
+		)
+	}
+}
+
+hash_full_adler :: proc(loc: runtime.Source_Code_Location) -> u32 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.adler32(transmute([]u8)loc.file_path)
+	h = hash.adler32(line[:], h)
+	h = hash.adler32(column[:], h)
+	return h
+}
+
+hash_slice_adler :: proc(
+	entry_dir: string,
+	loc: runtime.Source_Code_Location,
+) -> u32 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.adler32(transmute([]u8)(loc.file_path[len(entry_dir):]))
+	h = hash.adler32(line[:], h)
+	h = hash.adler32(column[:], h)
+	return h
+}
+
+hash_slice_fnv :: proc(
+	entry_dir: string,
+	loc: runtime.Source_Code_Location,
+) -> u32 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.fnv32a(transmute([]u8)(loc.file_path[len(entry_dir):]))
+	h = hash.fnv32a(line[:], h)
+	h = hash.fnv32a(column[:], h)
+	return h
+}
+
+hash_procedure_fnv :: proc(loc: runtime.Source_Code_Location) -> u32 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.fnv32a(transmute([]u8)loc.procedure)
+	h = hash.fnv32a(line[:], h)
+	h = hash.fnv32a(column[:], h)
+	return h
+}
+
+hash_slice_fnv64 :: proc(
+	entry_dir: string,
+	loc: runtime.Source_Code_Location,
+) -> u64 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.fnv64a(transmute([]u8)(loc.file_path[len(entry_dir):]))
+	h = hash.fnv64a(line[:], h)
+	h = hash.fnv64a(column[:], h)
+	return h
+}
+
+hash_procedure_fnv64 :: proc(loc: runtime.Source_Code_Location) -> u64 {
+	line := transmute([4]u8)loc.line
+	column := transmute([4]u8)loc.column
+	h := hash.fnv64a(transmute([]u8)loc.procedure)
+	h = hash.fnv64a(line[:], h)
+	h = hash.fnv64a(column[:], h)
+	return h
 }
