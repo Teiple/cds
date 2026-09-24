@@ -84,7 +84,7 @@ draw_panel :: proc(
 		layout_direction = layout_direction,
 		child_gap = gap,
 		padding = pad,
-		background_color = style.base[.Normal],
+		background_color = style.background[.Normal],
 		border = {
 			thickness = style.border_width,
 			color = style.border[.Normal],
@@ -119,7 +119,7 @@ draw_group_box :: proc(
 		layout_direction = .Top_To_Bottom,
 		child_gap = 4,
 		padding = padding,
-		background_color = style.base[.Normal],
+		background_color = style.background[.Normal],
 		border = {
 			thickness = style.border_width,
 			color = style.border[.Normal],
@@ -170,32 +170,31 @@ draw_window_box :: proc(
 		layout_direction = .Top_To_Bottom,
 		child_gap = 0,
 		padding = {},
-		background_color = style.base[.Normal],
+		background_color = style.background[.Normal],
 		border = {
 			thickness = style.border_width,
 			color = style.border[.Normal],
 		},
 		corner_radius = style.corner_radius,
 	) {
-		title_id := ui.local_id("title_bar")
-		if ui.begin_layout(title_id).draw(
+		if ui.begin_layout(ui.local_id("title_bar")).draw(
 			width = ui.grow(),
 			height = ui.fixed(28),
 			layout_direction = .Left_To_Right,
 			padding = {8, 4, 4, 4},
 			child_alignment = {.Left, .Center},
-			background_color = g_theme.controls[.Button].base[.Normal],
+			background_color = g_theme.controls[.WindowBox].background[.Normal],
+			corner_radius = {2, 2, 0, 0},
 		) {
 			ui.text().draw(
 				title,
-				color = style.text[.Normal],
+				color = g_theme.controls[.WindowBox].text[.Normal],
 				font_size = g_theme.font_size,
 				font_index = g_theme.font_index,
 				alignment = {.Left, .Center},
 			)
 			if closed != nil {
-				close_id := ui.local_id("close_btn")
-				if button(close_id).draw(
+				if button(ui.local_id("close_btn")).draw(
 					"x",
 					width = ui.fixed(20),
 					height = ui.fixed(20),
@@ -299,7 +298,7 @@ draw_status_bar :: proc(
 		layout_direction = .Left_To_Right,
 		padding = padding,
 		child_alignment = {.Left, .Center},
-		background_color = style.base[.Normal],
+		background_color = style.background[.Normal],
 		border = {
 			thickness = style.border_width,
 			color = style.border[.Normal],

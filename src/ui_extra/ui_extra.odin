@@ -68,7 +68,7 @@ draw_button :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		padding = style.padding,
 		child_alignment = {.Center, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
@@ -162,7 +162,7 @@ draw_toggle :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		padding = style.padding,
 		child_alignment = {.Center, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
@@ -237,7 +237,7 @@ draw_toggle_group :: proc(
 			if ui.layout(btn_id).draw(
 				width = ui.grow(),
 				height = ui.grow(),
-				background_color = style.base[state],
+				background_color = style.background[state],
 				padding = style.padding,
 				child_alignment = {.Center, .Center},
 				border = {
@@ -330,7 +330,7 @@ draw_tab_bar :: proc(
 			if ui.layout(tab_id).draw(
 				width = ui.grow(),
 				height = ui.grow(),
-				background_color = style.base[state],
+				background_color = style.background[state],
 				padding = style.padding,
 				child_alignment = {.Center, .Center},
 				border = {
@@ -411,7 +411,7 @@ draw_checkbox :: proc(
 		if ui.layout(box_id).draw(
 			width = ui.fixed(18),
 			height = ui.fixed(18),
-			background_color = style.base[box_state],
+			background_color = style.background[box_state],
 			border = {
 				thickness = style.border_width,
 				color = style.border[box_state],
@@ -529,7 +529,7 @@ draw_spinner_i32 :: proc(
 		if ui.layout(box_id).draw(
 			width = ui.grow(),
 			height = ui.grow(),
-			background_color = style.base[box_state],
+			background_color = style.background[box_state],
 			border = {
 				thickness = style.border_width,
 				color = style.border[box_state],
@@ -642,7 +642,7 @@ draw_spinner_f32 :: proc(
 		if ui.layout(box_id).draw(
 			width = ui.grow(),
 			height = ui.grow(),
-			background_color = style.base[box_state],
+			background_color = style.background[box_state],
 			border = {
 				thickness = style.border_width,
 				color = style.border[box_state],
@@ -737,7 +737,7 @@ draw_value_box :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		padding = style.padding,
 		child_alignment = {.Center, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
@@ -806,7 +806,7 @@ draw_combo_box :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		padding = style.padding,
 		child_alignment = {.Left, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
@@ -882,7 +882,7 @@ draw_dropdown_box :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		padding = style.padding,
 		child_alignment = {.Left, .Center},
 		border = {thickness = style.border_width, color = style.border[state]},
@@ -904,7 +904,7 @@ draw_dropdown_box :: proc(
 				layout_direction = .Top_To_Bottom,
 				padding = {2, 2, 2, 2},
 				child_gap = 1,
-				background_color = g_theme.controls[.Panel].base[.Normal],
+				background_color = g_theme.controls[.Panel].background[.Normal],
 				border = {
 					thickness = style.border_width,
 					color = style.border[.Focused],
@@ -923,7 +923,7 @@ draw_dropdown_box :: proc(
 					if ui.layout(opt_id).draw(
 						width = ui.grow(),
 						height = ui.fit(),
-						background_color = is_selected ? style.base[.Selected] : (ui.is_id_hovered(opt_id) ? style.base[.Focused] : {0, 0, 0, 0}),
+						background_color = is_selected ? style.background[.Selected] : (ui.is_id_hovered(opt_id) ? style.background[.Focused] : {0, 0, 0, 0}),
 						padding = {6, 6, 2, 2},
 						child_alignment = {.Left, .Center},
 					) {
@@ -1002,7 +1002,7 @@ draw_slider_h_f32 :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		border = {thickness = style.border_width, color = style.border[state]},
 		outline = outline,
 		corner_radius = style.corner_radius,
@@ -1097,7 +1097,7 @@ draw_slider_v_f32 :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		border = {thickness = style.border_width, color = style.border[state]},
 		outline = outline,
 		corner_radius = style.corner_radius,
@@ -1195,7 +1195,7 @@ draw_slider_h_i32 :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		border = {thickness = style.border_width, color = style.border[state]},
 		outline = outline,
 		corner_radius = style.corner_radius,
@@ -1294,7 +1294,7 @@ draw_slider_v_i32 :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[state],
+		background_color = style.background[state],
 		border = {thickness = style.border_width, color = style.border[state]},
 		outline = outline,
 		corner_radius = style.corner_radius,
@@ -1365,7 +1365,7 @@ draw_progress_bar :: proc(
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
-		background_color = style.base[.Normal],
+		background_color = style.background[.Normal],
 		border = {
 			thickness = style.border_width,
 			color = style.border[.Normal],
@@ -1404,7 +1404,7 @@ draw_tooltip :: proc(
 		if ui.layout(reuse_id = true).draw(
 			width = ui.fit(),
 			height = ui.fit(),
-			background_color = style.base[.Normal],
+			background_color = style.background[.Normal],
 			border = {
 				thickness = style.border_width,
 				color = style.border[.Focused],
