@@ -411,7 +411,6 @@ draw_checkbox :: proc(
 		if ui.layout(box_id).draw(
 			width = ui.fixed(18),
 			height = ui.fixed(18),
-			background_color = style.background[box_state],
 			border = {
 				thickness = style.border_width,
 				color = style.border[box_state],
@@ -422,11 +421,10 @@ draw_checkbox :: proc(
 			pointer_mode = .Passthrough,
 		) {
 			if checked^ {
-				check_mark_id := ui.local_id("check")
-				if ui.layout(check_mark_id).draw(
-					width = ui.fixed(10),
-					height = ui.fixed(10),
-					background_color = style.border[.Focused],
+				if ui.layout(ui.local_id("check")).draw(
+					width = ui.fixed(14),
+					height = ui.fixed(14),
+					background_color = style.background[.Active],
 					corner_radius = {2, 2, 2, 2},
 					pointer_mode = .Passthrough,
 				) {}
@@ -907,7 +905,7 @@ draw_dropdown_box :: proc(
 				background_color = g_theme.controls[.Panel].background[.Normal],
 				border = {
 					thickness = style.border_width,
-					color = style.border[.Focused],
+					color = style.border[.Hovered],
 				},
 				corner_radius = style.corner_radius,
 				float_mode = ui.Float_At_Parent {
@@ -923,7 +921,7 @@ draw_dropdown_box :: proc(
 					if ui.layout(opt_id).draw(
 						width = ui.grow(),
 						height = ui.fit(),
-						background_color = is_selected ? style.background[.Selected] : (ui.is_id_hovered(opt_id) ? style.background[.Focused] : {0, 0, 0, 0}),
+						background_color = is_selected ? style.background[.Active] : (ui.is_id_hovered(opt_id) ? style.background[.Hovered] : {0, 0, 0, 0}),
 						padding = {6, 6, 2, 2},
 						child_alignment = {.Left, .Center},
 					) {
@@ -1037,7 +1035,7 @@ draw_slider_h_f32 :: proc(
 		if ui.layout(thumb_id).draw(
 			width = ui.fixed(thumb_w),
 			height = ui.grow(),
-			background_color = style.border[.Focused],
+			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 		) {}
 	}
@@ -1133,7 +1131,7 @@ draw_slider_v_f32 :: proc(
 		if ui.layout(thumb_id).draw(
 			width = ui.grow(),
 			height = ui.fixed(thumb_h),
-			background_color = style.border[.Focused],
+			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 		) {}
 	}
@@ -1232,7 +1230,7 @@ draw_slider_h_i32 :: proc(
 		if ui.layout(thumb_id).draw(
 			width = ui.fixed(thumb_w),
 			height = ui.grow(),
-			background_color = style.border[.Focused],
+			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 		) {}
 	}
@@ -1332,7 +1330,7 @@ draw_slider_v_i32 :: proc(
 		if ui.layout(thumb_id).draw(
 			width = ui.grow(),
 			height = ui.fixed(thumb_h),
-			background_color = style.border[.Focused],
+			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 		) {}
 	}
@@ -1378,7 +1376,7 @@ draw_progress_bar :: proc(
 		if ui.layout(fill_id).draw(
 			width = ui.percent(normalized),
 			height = ui.grow(),
-			background_color = style.border[.Focused],
+			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 		) {}
 	}
@@ -1407,7 +1405,7 @@ draw_tooltip :: proc(
 			background_color = style.background[.Normal],
 			border = {
 				thickness = style.border_width,
-				color = style.border[.Focused],
+				color = style.border[.Hovered],
 			},
 			padding = ui.pad_all(6),
 			corner_radius = ui.corner_radius_all(4),

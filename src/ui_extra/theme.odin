@@ -4,9 +4,9 @@ import "../ui"
 
 Control_State :: enum {
 	Normal,
-	Focused,
+	Hovered,
 	Pressed,
-	Selected,
+	Active,
 	Disabled,
 }
 
@@ -62,23 +62,23 @@ Style_Theme :: struct {
 DEFAULT_CONTROL_STYLE: Control_Style : {
 	border = {
 		.Normal = {195, 208, 200, 255},
-		.Focused = {45, 155, 111, 255},
+		.Hovered = {45, 155, 111, 255},
 		.Pressed = {35, 130, 92, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {220, 225, 222, 255},
 	},
 	background = {
 		.Normal = {255, 255, 255, 255},
-		.Focused = {242, 248, 244, 255},
+		.Hovered = {242, 248, 244, 255},
 		.Pressed = {228, 238, 232, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {240, 242, 240, 255},
 	},
 	text = {
 		.Normal = {35, 42, 38, 255},
-		.Focused = {20, 30, 25, 255},
+		.Hovered = {20, 30, 25, 255},
 		.Pressed = {20, 30, 25, 255},
-		.Selected = {255, 255, 255, 255},
+		.Active = {255, 255, 255, 255},
 		.Disabled = {160, 170, 165, 255},
 	},
 	border_width = 1,
@@ -90,23 +90,23 @@ DEFAULT_CONTROL_STYLE: Control_Style : {
 BUTTON_STYLE: Control_Style : {
 	border = {
 		.Normal = {195, 208, 200, 255},
-		.Focused = {45, 155, 111, 255},
+		.Hovered = {45, 155, 111, 255},
 		.Pressed = {35, 130, 92, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {220, 225, 222, 255},
 	},
 	background = {
 		.Normal = {255, 255, 255, 255},
-		.Focused = {240, 248, 243, 255},
+		.Hovered = {240, 248, 243, 255},
 		.Pressed = {225, 238, 230, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {242, 244, 242, 255},
 	},
 	text = {
 		.Normal = {35, 42, 38, 255},
-		.Focused = {25, 80, 55, 255},
+		.Hovered = {25, 80, 55, 255},
 		.Pressed = {20, 70, 48, 255},
-		.Selected = {255, 255, 255, 255},
+		.Active = {255, 255, 255, 255},
 		.Disabled = {160, 170, 165, 255},
 	},
 	border_width = 1,
@@ -128,16 +128,16 @@ TOGGLE_STYLE: Control_Style : {
 SLIDER_STYLE: Control_Style : {
 	border = {
 		.Normal = {195, 208, 200, 255},
-		.Focused = {45, 155, 111, 255},
+		.Hovered = {45, 155, 111, 255},
 		.Pressed = {35, 130, 92, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {220, 225, 222, 255},
 	},
 	background = {
 		.Normal = {232, 238, 234, 255},
-		.Focused = {225, 235, 228, 255},
+		.Hovered = {225, 235, 228, 255},
 		.Pressed = {215, 228, 220, 255},
-		.Selected = {45, 155, 111, 255},
+		.Active = {45, 155, 111, 255},
 		.Disabled = {240, 242, 240, 255},
 	},
 	text = DEFAULT_CONTROL_STYLE.text,
@@ -150,16 +150,16 @@ SLIDER_STYLE: Control_Style : {
 PANEL_STYLE: Control_Style : {
 	border = {
 		.Normal = {215, 222, 218, 255},
-		.Focused = {215, 222, 218, 255},
+		.Hovered = {215, 222, 218, 255},
 		.Pressed = {215, 222, 218, 255},
-		.Selected = {215, 222, 218, 255},
+		.Active = {215, 222, 218, 255},
 		.Disabled = {225, 230, 227, 255},
 	},
 	background = {
 		.Normal = {246, 248, 246, 255},
-		.Focused = {246, 248, 246, 255},
+		.Hovered = {246, 248, 246, 255},
 		.Pressed = {246, 248, 246, 255},
-		.Selected = {246, 248, 246, 255},
+		.Active = {246, 248, 246, 255},
 		.Disabled = {242, 244, 242, 255},
 	},
 	text = DEFAULT_CONTROL_STYLE.text,
@@ -169,37 +169,35 @@ PANEL_STYLE: Control_Style : {
 	padding = {8, 8, 8, 8},
 }
 
-LABEL_STYLE: Control_Style : {
-	border = {},
-	background = {},
-	text = {
-		.Normal = {40, 48, 44, 255},
-		.Focused = {25, 80, 55, 255},
-		.Pressed = {20, 70, 48, 255},
-		.Selected = {40, 48, 44, 255},
-		.Disabled = {160, 170, 165, 255},
-	},
-	border_width = 0,
-	outline = {},
-	corner_radius = {},
-	padding = {2, 2, 2, 2},
-}
-
 DEFAULT_THEME: Style_Theme : {
 	font_size = 16,
 	font_index = 0,
 	controls = {
 		.Default = DEFAULT_CONTROL_STYLE,
-		.Label = LABEL_STYLE,
+		.Label = {
+			border = {},
+			background = {},
+			text = {
+				.Normal = {40, 48, 44, 255},
+				.Hovered = {25, 80, 55, 255},
+				.Pressed = {20, 70, 48, 255},
+				.Active = {40, 48, 44, 255},
+				.Disabled = {160, 170, 165, 255},
+			},
+			border_width = 0,
+			outline = {},
+			corner_radius = {},
+			padding = {2, 2, 2, 2},
+		},
 		.Button = BUTTON_STYLE,
 		.Label_Button = {
 			border = {},
 			background = {},
 			text = {
 				.Normal = {35, 120, 85, 255},
-				.Focused = {45, 155, 111, 255},
+				.Hovered = {45, 155, 111, 255},
 				.Pressed = {25, 95, 66, 255},
-				.Selected = {45, 155, 111, 255},
+				.Active = {45, 155, 111, 255},
 				.Disabled = {160, 170, 165, 255},
 			},
 			border_width = 0,
@@ -211,7 +209,7 @@ DEFAULT_THEME: Style_Theme : {
 		.Checkbox = {
 			border = BUTTON_STYLE.border,
 			background = BUTTON_STYLE.background,
-			text = LABEL_STYLE.text,
+			text = DEFAULT_CONTROL_STYLE.text,
 			border_width = 1,
 			outline = BUTTON_STYLE.outline,
 			corner_radius = {3, 3, 3, 3},
@@ -261,12 +259,12 @@ set_theme :: proc(theme: Style_Theme) {
 get_control_state :: proc(
 	id: ui.Id,
 	disabled: bool = false,
-	selected: bool = false,
+	active: bool = false,
 ) -> Control_State {
 	if disabled do return .Disabled
 	if ui.is_id_held(id) do return .Pressed
-	if selected do return .Selected
-	if ui.is_id_hovered(id) || ui.is_id_focused(id) do return .Focused
+	if active do return .Active
+	if ui.is_id_hovered(id) do return .Hovered
 	return .Normal
 }
 
