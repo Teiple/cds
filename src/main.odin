@@ -212,7 +212,7 @@ main :: proc() {
 									)
 
 									@(static) slider_val: f32 = 45.0
-									uie.slider().draw(
+									uie.slider_h_f32().draw(
 										&slider_val,
 										0,
 										100,
@@ -262,8 +262,17 @@ main :: proc() {
 
 							case 2:
 								if uie.vbox().draw(gap = 8) {
-									@(static) spin_val: int = 5
-									uie.spinner().draw(&spin_val, 0, 20)
+									@(static) spin_val: i32 = 5
+									uie.spinner_i32().draw(&spin_val, 0, 20)
+
+									@(static) spin_fval: f32 = 1.5
+									uie.spinner_f32().draw(
+										&spin_fval,
+										0,
+										10,
+										step = 0.25,
+										precision = 2,
+									)
 
 									@(static) val_box: int = 42
 									@(static) val_box_edit: bool = false

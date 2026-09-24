@@ -505,7 +505,7 @@ push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
 push_id :: proc(ctx: ^Context, index: Index, id: Id) {
 	_, existed := ctx.ids[id]
 	if existed {
-		panic("Duplicate ids without manualy using dedupe")
+		panic("Duplicate ids without manually using dedupe")
 	}
 	ctx.ids[id] = {
 		base       = id,
@@ -1112,79 +1112,100 @@ get_anchor_offset :: proc(anchor: Anchor_Point) -> [2]f32 {
 	return {0, 0}
 }
 
-calculate_position :: proc(ctx: ^Context, index: Index, axis: Axis) {
+calculate_position :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
 		text_attr := current.attributes.(Text_Attributes)
 
-		if ele_get_size(current, axis) > text_get_preferred(text_attr, axis) {
-			remaining :=
-				ele_get_size(current, axis) -
-				text_get_preferred(text_attr, axis)
+		for axis in Axis {
+			if ele_get_size(current, axis) >
+			   text_get_preferred(text_attr, axis) {
+				remaining :=
+					ele_get_size(current, axis) -
+					text_get_preferred(text_attr, axis)
 
-			align_offset :=
-				remaining * align_get_offset(text_attr.config.alignment, axis)
-			ele_set_pos(
-				current,
-				ele_get_pos(current, axis) + align_offset,
-				axis,
-			)
+				align_offset :=
+					remaining *
+					align_get_offset(text_attr.config.alignment, axis)
+				ele_set_pos(
+					current,
+					ele_get_pos(current, axis) + align_offset,
+					axis,
+				)
+			}
+
+			ele_set_size(current, text_get_bound_size(text_attr, axis), axis)
 		}
-
-		ele_set_size(current, text_get_bound_size(text_attr, axis), axis)
 
 		return
 	}
 
 	scroll_data := ctx.input_event.scrolls[current.id]
-	scroll_offset := axis == .X ? scroll_data.offset.x : scroll_data.offset.y
-	offset :=
-		ele_get_pos(current, axis) +
-		layout_get_pad_at(layout, axis, .Start) +
-		scroll_offset
+	scroll_offsets := [Axis]f32 {
+		.X = scroll_data.offset.x,
+		.Y = scroll_data.offset.y,
+	}
 
-	if layout_is_along(layout, axis) {
-		remaining := ele_get_size(current, axis) - layout_get_pad(layout, axis)
+	offsets: [Axis]f32
+	for axis in Axis {
+		offsets[axis] =
+			ele_get_pos(current, axis) +
+			layout_get_pad_at(layout, axis, .Start) +
+			scroll_offsets[axis]
 
-		child_count := 0
-		for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
-			remaining -= ele_get_size(child, axis)
-			child_count += 1
+		if layout_is_along(layout, axis) {
+			remaining :=
+				ele_get_size(current, axis) - layout_get_pad(layout, axis)
+
+			child_count := 0
+			for it := child_iter_start(ctx, index); child in child_iter_next(&it) {
+				remaining -= ele_get_size(child, axis)
+				child_count += 1
+			}
+
+			if child_count > 0 {
+				remaining -= f32(child_count - 1) * layout.config.child_gap
+			}
+
+			offsets[axis] +=
+				remaining *
+				align_get_offset(layout.config.child_alignment, axis)
 		}
-
-		if child_count > 0 {
-			remaining -= f32(child_count - 1) * layout.config.child_gap
-		}
-
-		offset +=
-			remaining * align_get_offset(layout.config.child_alignment, axis)
 	}
 
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
 		child_layout, is_child_layout := child.attributes.(Layout_Attributes)
-		child_offset :=
-			offset +
-			(is_child_layout ? ((child_layout.config.ignore_scroll ? -scroll_offset : 0) + layout_get_final_offset(child_layout, axis)) : 0)
 
-		ele_set_pos(child, child_offset, axis)
+		for axis in Axis {
+			child_offset :=
+				offsets[axis] +
+				(is_child_layout ? ((child_layout.config.ignore_scroll ? -scroll_offsets[axis] : 0) + layout_get_final_offset(child_layout, axis)) : 0)
 
-		if layout_is_across(layout, axis) {
-			remaining :=
-				ele_get_size(current, axis) -
-				layout_get_pad(layout, axis) -
-				ele_get_size(child, axis)
+			ele_set_pos(child, child_offset, axis)
 
-			align_offset :=
-				remaining *
-				align_get_offset(layout.config.child_alignment, axis)
+			if layout_is_across(layout, axis) {
+				remaining :=
+					ele_get_size(current, axis) -
+					layout_get_pad(layout, axis) -
+					ele_get_size(child, axis)
 
-			ele_set_pos(child, ele_get_pos(child, axis) + align_offset, axis)
-		} else {
-			offset += ele_get_size(child, axis) + layout.config.child_gap
+				align_offset :=
+					remaining *
+					align_get_offset(layout.config.child_alignment, axis)
+
+				ele_set_pos(
+					child,
+					ele_get_pos(child, axis) + align_offset,
+					axis,
+				)
+			} else {
+				offsets[axis] +=
+					ele_get_size(child, axis) + layout.config.child_gap
+			}
 		}
 
-		calculate_position(ctx, child_index, axis)
+		calculate_position(ctx, child_index)
 	}
 }
 
@@ -1286,8 +1307,7 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 	fit_sizing_tree(ctx, 0, .Y)
 	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
-	calculate_position(ctx, 0, .X)
-	calculate_position(ctx, 0, .Y)
+	calculate_position(ctx, 0)
 
 	handle_floats(ctx)
 
@@ -1464,8 +1484,7 @@ handle_floats :: proc(ctx: ^Context) {
 		grow_and_percent_sizing_tree(ctx, float_index, .Y)
 
 		calculate_float_root_position(ctx, float_index)
-		calculate_position(ctx, float_index, .X)
-		calculate_position(ctx, float_index, .Y)
+		calculate_position(ctx, float_index)
 	}
 }
 
@@ -2455,7 +2474,9 @@ auto_id_hash :: proc(
 	path := loc.file_path
 	if g_ui_builder.current_context != nil {
 		entry_dir := g_ui_builder.current_context.entry_dir
-		if len(entry_dir) > 0 && len(path) >= len(entry_dir) && path[:len(entry_dir)] == entry_dir {
+		if len(entry_dir) > 0 &&
+		   len(path) >= len(entry_dir) &&
+		   path[:len(entry_dir)] == entry_dir {
 			path = path[len(entry_dir):]
 		}
 	}
