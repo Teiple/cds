@@ -123,6 +123,7 @@ Input :: struct {
 Input_Event :: struct {
 	pointer_captured:  bool,
 	scroll_captured:   bool,
+	scroll_depth:      int,
 	keyboard_captured: bool,
 	pressed_once:      bool,
 	hovered_elements:  [dynamic]Id,
@@ -1489,6 +1490,7 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 	{
 		ctx.input_event.pointer_captured = false
 		ctx.input_event.scroll_captured = false
+		ctx.input_event.scroll_depth = 0
 		ctx.input_event.pressed_once = false
 
 		clear(&ctx.input_event.hovered_elements)
@@ -1501,7 +1503,7 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 		// detect pointer input on floats first, in reverse z index order
 		#reverse for idx in ctx.floats {
 			detect_pointer(ctx, idx)
-			if ctx.input_event.pointer_captured && ctx.input_event.scroll_captured do break
+			if detect_pointer_should_stop(ctx) do break
 		}
 		// then the normal layout layer
 		detect_pointer(ctx, 0)
@@ -1813,13 +1815,23 @@ generate_commands :: proc(ctx: ^Context, index: Index) {
 	}
 }
 
+detect_pointer_should_stop :: proc(ctx: ^Context) -> bool {
+	scroll_needed := ctx.input.pointer.scroll != {0, 0}
+	scroll_done :=
+		!scroll_needed ||
+		ctx.input_event.scroll_captured ||
+		ctx.input_event.scroll_depth == 0
+	return ctx.input_event.pointer_captured && scroll_done
+}
+
 detect_pointer :: proc(ctx: ^Context, index: Index) {
-	detect_pointer_should_stop :: proc(input_event: Input_Event) -> bool {
-		return input_event.pointer_captured && input_event.scroll_captured
+	if detect_pointer_should_stop(ctx) {
+		return
 	}
 
-	if detect_pointer_should_stop(ctx.input_event) {
-		return
+	defer {
+		clear(&ctx.clip.open_clip_stack)
+		ctx.input_event.scroll_depth = 0
 	}
 
 	travel_tree_reverse(ctx, index, on_down = proc(ctx: ^Context, idx: i32) -> (stop: bool) {
@@ -1836,6 +1848,11 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 				}
 			}
 
+			if layout.config.scroll {
+				ctx.input_event.scroll_depth += 1
+			}
+
+			stop = detect_pointer_should_stop(ctx)
 			return
 		}, on_up = proc(ctx: ^Context, idx: i32) -> (stop: bool) {
 			ele := ctx.elements[idx]
@@ -1845,6 +1862,10 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 
 			defer if layout.config.clip && !is_floating_element(ctx, idx) {
 				pop(&ctx.clip.open_clip_stack)
+			}
+
+			defer if layout.config.scroll {
+				ctx.input_event.scroll_depth -= 1
 			}
 
 			if layout.config.pointer_mode == .Ignore do return
@@ -1913,7 +1934,7 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 				}
 			}
 
-			stop = detect_pointer_should_stop(ctx.input_event)
+			stop = detect_pointer_should_stop(ctx)
 
 			return
 		})

@@ -472,6 +472,7 @@ draw_text_box :: proc(
 	buffer: ^[dynamic]u8,
 	edit_mode: ^bool,
 	max_len: int = 256,
+	blink_rate: int = 120,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
@@ -486,6 +487,7 @@ draw_text_box :: proc(
 		buffer,
 		edit_mode,
 		max_len,
+		blink_rate,
 		width,
 		height,
 		disabled,
@@ -497,6 +499,7 @@ draw_text_box_with_id :: proc(
 	buffer: ^[dynamic]u8,
 	edit_mode: ^bool,
 	max_len: int = 256,
+	blink_rate: int = 120,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
@@ -894,7 +897,7 @@ draw_text_box_with_id :: proc(
 	}
 
 	cursor_visible :=
-		is_editing && ((g_extra.text_box.blink_counter / 120) % 2 == 0)
+		is_editing && ((g_extra.text_box.blink_counter / blink_rate) % 2 == 0)
 
 	if ui.layout(reuse_id = true).draw(
 		width = width,
@@ -1463,6 +1466,7 @@ draw_dropdown_box :: proc(
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
+	z_index: i32 = 500,
 ) -> bool {
 	assert(active_index != nil)
 	assert(edit_mode != nil)
@@ -1476,13 +1480,6 @@ draw_dropdown_box :: proc(
 	style := g_extra.theme.controls[.DropdownBox]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
-
-	popup_id := ui.local_id("popup")
-	if edit_mode^ && !disabled {
-		if ui.is_pressed_away(id, popup_id) {
-			edit_mode^ = false
-		}
-	}
 
 	if !disabled && ui.is_id_pressed(id) {
 		ui.set_focused_id(id)
@@ -1530,6 +1527,19 @@ draw_dropdown_box :: proc(
 		)
 
 		if edit_mode^ && !disabled {
+			mask_id := ui.local_id("mask")
+			if ui.layout(mask_id).draw(
+				width = ui.grow(),
+				height = ui.grow(),
+				float_mode = ui.Float_At_Root{z_index = z_index - 1},
+				pointer_mode = .Passthrough,
+			) {
+				if ui.is_id_pressed(mask_id) {
+					edit_mode^ = false
+				}
+			}
+
+			popup_id := ui.local_id("popup")
 			if ui.layout(popup_id).draw(
 				width = ui.grow(),
 				height = ui.fit(),
@@ -1545,7 +1555,7 @@ draw_dropdown_box :: proc(
 				float_mode = ui.Float_At_Parent {
 					offset = {0, 2},
 					attach_points = {element = .LeftTop, parent = .LeftBottom},
-					z_index = 500,
+					z_index = z_index,
 				},
 			) {
 				for opt, i in options {
@@ -1558,7 +1568,6 @@ draw_dropdown_box :: proc(
 						background_color = style.background[get_this_control_state(active = is_selected)],
 						padding = {6, 6, 2, 2},
 						child_alignment = {.Left, .Center},
-						pointer_mode = .Passthrough,
 					) {
 						ui.text().draw(
 							opt,
@@ -2035,6 +2044,7 @@ draw_tooltip :: proc(
 	target_id: ui.Id,
 	content: string,
 	offset: [2]f32 = {4, 0},
+	z_index: i32 = 1000,
 ) {
 	wrap_id()
 	if ui.is_id_hovered(target_id) {
@@ -2054,7 +2064,7 @@ draw_tooltip :: proc(
 				attach_id = target_id,
 				offset = offset,
 				attach_points = {element = .LeftCenter, parent = .RightCenter},
-				z_index = 1000,
+				z_index = z_index,
 			},
 		) {
 			ui.text().draw(
