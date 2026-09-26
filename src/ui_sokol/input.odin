@@ -39,6 +39,24 @@ handle_event :: proc(
 			return .Right
 		case .DOWN:
 			return .Down
+		case .BACKSPACE:
+			return .Backspace
+		case .DELETE:
+			return .Delete
+		case .HOME:
+			return .Home
+		case .END:
+			return .End
+		case .A:
+			return .A
+		case .C:
+			return .C
+		case .V:
+			return .V
+		case .X:
+			return .X
+		case .Z:
+			return .Z
 		}
 		return .Invalid
 	}
@@ -62,6 +80,10 @@ handle_event :: proc(
 	update_modifiers(input, event.modifiers)
 
 	#partial switch event.type {
+	case .CHAR:
+		if event.char_code >= 32 && event.char_code != 127 {
+			append(&input.keyboard.characters, rune(event.char_code))
+		}
 	case .KEY_DOWN:
 		k := map_key(event.key_code)
 		if k != .Invalid {

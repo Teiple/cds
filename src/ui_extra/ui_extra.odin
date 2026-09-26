@@ -3,6 +3,8 @@ package ui_extra
 import "../ui"
 import "core:fmt"
 import "core:math"
+import "core:strconv"
+import "core:strings"
 
 @(private, deferred_out = end_wrap_id)
 wrap_id :: proc() -> ui.Id {
@@ -28,13 +30,13 @@ draw_label :: proc(
 	alignment: ui.Alignment = {.Left, .Center},
 	color: Maybe([4]u8) = nil,
 ) {
-	c := color.? or_else g_theme.controls[.Label].text[.Normal]
+	c := color.? or_else g_extra.theme.controls[.Label].text[.Normal]
 	ui.text().draw(
 		text,
 		alignment = alignment,
 		color = c,
-		font_size = g_theme.font_size,
-		font_index = g_theme.font_index,
+		font_size = g_extra.theme.font_size,
+		font_index = g_extra.theme.font_index,
 	)
 }
 
@@ -60,7 +62,7 @@ draw_button :: proc(
 	}
 
 	state := get_control_state(id, disabled)
-	style := g_theme.controls[.Button]
+	style := g_extra.theme.controls[.Button]
 
 	clicked := !disabled && ui.is_this_clicked()
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
@@ -79,8 +81,8 @@ draw_button :: proc(
 			label,
 			alignment = {.Center, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 	}
 
@@ -104,7 +106,7 @@ draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 	}
 
 	state := get_control_state(id, disabled)
-	style := g_theme.controls[.Label_Button]
+	style := g_extra.theme.controls[.Label_Button]
 
 	clicked := !disabled && ui.is_this_clicked()
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
@@ -120,8 +122,8 @@ draw_label_button :: proc(text: string, disabled: bool = false) -> bool {
 			text,
 			alignment = {.Left, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 	}
 
@@ -151,7 +153,7 @@ draw_toggle :: proc(
 	}
 
 	state := get_control_state(id, disabled, active^)
-	style := g_theme.controls[.Toggle]
+	style := g_extra.theme.controls[.Toggle]
 	clicked := !disabled && ui.is_this_clicked()
 	if clicked {
 		active^ = !active^
@@ -173,8 +175,8 @@ draw_toggle :: proc(
 			label,
 			alignment = {.Center, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 	}
 
@@ -217,7 +219,7 @@ draw_toggle_group :: proc(
 				ui.register_focusable(btn_id)
 			}
 			state := get_control_state(btn_id, disabled, is_active)
-			style := g_theme.controls[.Toggle]
+			style := g_extra.theme.controls[.Toggle]
 			outline := get_control_outline(
 				style,
 				!disabled && ui.is_id_focused(btn_id),
@@ -251,8 +253,8 @@ draw_toggle_group :: proc(
 					name,
 					alignment = {.Center, .Center},
 					color = style.text[state],
-					font_size = g_theme.font_size,
-					font_index = g_theme.font_index,
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
 				)
 			}
 
@@ -310,7 +312,7 @@ draw_tab_bar :: proc(
 				ui.register_focusable(tab_id)
 			}
 			state := get_control_state(tab_id, disabled, is_active)
-			style := g_theme.controls[.TabBar]
+			style := g_extra.theme.controls[.TabBar]
 			outline := get_control_outline(
 				style,
 				!disabled && ui.is_id_focused(tab_id),
@@ -344,8 +346,8 @@ draw_tab_bar :: proc(
 					name,
 					alignment = {.Center, .Center},
 					color = style.text[state],
-					font_size = g_theme.font_size,
-					font_index = g_theme.font_index,
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
 				)
 			}
 
@@ -388,7 +390,7 @@ draw_checkbox :: proc(
 	}
 
 	state := get_control_state(id, disabled, checked^)
-	style := g_theme.controls[.Checkbox]
+	style := g_extra.theme.controls[.Checkbox]
 
 	clicked := !disabled && ui.is_this_clicked()
 	if clicked {
@@ -435,13 +437,242 @@ draw_checkbox :: proc(
 				label,
 				alignment = {.Left, .Center},
 				color = style.text[state],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
 			)
 		}
 	}
 
 	return clicked
+}
+
+//region: text_box
+text_box :: proc(
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> ui.Element_Draw(type_of(draw_text_box_builder)) {
+	ui.declare_id(id, loc)
+	return {draw_text_box_builder}
+}
+
+draw_text_box_builder :: proc(
+	buffer: ^[dynamic]u8,
+	edit_mode: ^bool,
+	max_len: int = 256,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> (
+	changed: bool,
+	committed: bool,
+) {
+	return draw_text_box(
+		ui.last_id(),
+		buffer,
+		edit_mode,
+		max_len,
+		width,
+		height,
+		disabled,
+	)
+}
+
+draw_text_box :: proc(
+	id: ui.Id,
+	buffer: ^[dynamic]u8,
+	edit_mode: ^bool,
+	max_len: int = 256,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+) -> (
+	changed: bool,
+	committed: bool,
+) {
+	if !disabled {
+		ui.register_this_focusable()
+	}
+
+	is_editing := edit_mode != nil && edit_mode^
+	state := get_control_state(id, disabled, is_editing)
+	style := g_extra.theme.controls[.Text_Box]
+	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
+
+	if !disabled && ui.is_id_clicked(id) {
+		if edit_mode != nil && !edit_mode^ {
+			edit_mode^ = true
+			is_editing = true
+			state = get_control_state(id, disabled, true)
+		}
+	}
+
+	if is_editing {
+		if g_extra.text_box.id != id {
+			g_extra.text_box.id = id
+			g_extra.text_box.cursor_pos = len(buffer^)
+			g_extra.text_box.scroll_offset_x = 0
+			g_extra.text_box.blink_counter = 0
+			clear(&g_extra.text_box.snapshot)
+			append(&g_extra.text_box.snapshot, ..buffer^[:])
+		}
+
+		if g_extra.text_box.cursor_pos > len(buffer^) {
+			g_extra.text_box.cursor_pos = len(buffer^)
+		}
+
+		g_extra.text_box.blink_counter += 1
+
+		if !disabled && ui.is_id_clicked(id) {
+			bounds, ok := ui.rect_by_id(id)
+			if ok {
+				click_local_x :=
+					ui.pointer_position().x -
+					bounds.x -
+					style.padding.left +
+					g_extra.text_box.scroll_offset_x
+				g_extra.text_box.cursor_pos = ui.get_char_index_at_x(
+					string(buffer^[:]),
+					click_local_x,
+					g_extra.theme.font_size,
+					g_extra.theme.font_index,
+				)
+				g_extra.text_box.blink_counter = 0
+			}
+		}
+
+		chars := ui.get_input_characters()
+		for ch in chars {
+			if ch >= 32 && ch < 127 && len(buffer^) < max_len {
+				inject_at(buffer, g_extra.text_box.cursor_pos, u8(ch))
+				g_extra.text_box.cursor_pos += 1
+				changed = true
+				g_extra.text_box.blink_counter = 0
+			}
+		}
+
+		if ui.is_key_pressed(.Left) && g_extra.text_box.cursor_pos > 0 {
+			g_extra.text_box.cursor_pos -= 1
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Right) &&
+		   g_extra.text_box.cursor_pos < len(buffer^) {
+			g_extra.text_box.cursor_pos += 1
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Home) {
+			g_extra.text_box.cursor_pos = 0
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.End) {
+			g_extra.text_box.cursor_pos = len(buffer^)
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Backspace) && g_extra.text_box.cursor_pos > 0 {
+			ordered_remove(buffer, g_extra.text_box.cursor_pos - 1)
+			g_extra.text_box.cursor_pos -= 1
+			changed = true
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Delete) &&
+		   g_extra.text_box.cursor_pos < len(buffer^) {
+			ordered_remove(buffer, g_extra.text_box.cursor_pos)
+			changed = true
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Enter) {
+			if edit_mode != nil do edit_mode^ = false
+			committed = true
+		}
+		if ui.is_key_pressed(.Escape) {
+			clear(buffer)
+			append(buffer, ..g_extra.text_box.snapshot[:])
+			if edit_mode != nil do edit_mode^ = false
+			changed = true
+		}
+
+		if ui.pointer_state() == .Pressed && !ui.is_id_hovered(id) {
+			if edit_mode != nil do edit_mode^ = false
+			committed = true
+		}
+	}
+
+	bounds, has_bounds := ui.rect_by_id(id)
+	usable_w :=
+		has_bounds ? bounds.width - style.padding.left - style.padding.right : 0
+	cursor_x := ui.measure_text(
+		string(buffer^[:g_extra.text_box.cursor_pos]),
+		g_extra.theme.font_size,
+		g_extra.theme.font_index,
+	)
+
+	if is_editing && usable_w > 0 {
+		if cursor_x - g_extra.text_box.scroll_offset_x > usable_w - 6 {
+			g_extra.text_box.scroll_offset_x = cursor_x - usable_w + 6
+		} else if cursor_x - g_extra.text_box.scroll_offset_x < 6 {
+			g_extra.text_box.scroll_offset_x = max(0, cursor_x - 6)
+		}
+	} else {
+		g_extra.text_box.scroll_offset_x = 0
+	}
+
+	cursor_visible :=
+		is_editing && ((g_extra.text_box.blink_counter / 30) % 2 == 0)
+
+	if ui.layout(reuse_id = true).draw(
+		width = width,
+		height = height,
+		background_color = style.background[state],
+		padding = style.padding,
+		clip = true,
+		child_alignment = {.Left, .Center},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+	) {
+		text_str := string(buffer^[:])
+		if is_editing {
+			if ui.layout(ui.local_id("text_inner")).draw(
+				offset = {-g_extra.text_box.scroll_offset_x, 0},
+				layout_direction = .Left_To_Right,
+				child_alignment = {.Left, .Center},
+				pointer_mode = .Passthrough,
+			) {
+				ui.text().draw(
+					text_str,
+					alignment = {.Left, .Center},
+					color = style.text[state],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+
+				if cursor_visible {
+					if ui.layout(ui.local_id("cursor")).draw(
+						width = ui.fixed(2),
+						height = ui.fixed(g_extra.theme.font_size * 1.2),
+						background_color = style.text[state],
+						float_mode = ui.Float_At_Parent {
+							attach_points = {
+								element = .LeftCenter,
+								parent = .LeftCenter,
+							},
+							offset = {cursor_x, 0},
+						},
+						pointer_mode = .Ignore,
+					) {}
+				}
+			}
+		} else {
+			ui.text().draw(
+				text_str,
+				alignment = {.Left, .Center},
+				color = style.text[state],
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
+			)
+		}
+	}
+
+	return changed, committed
 }
 
 //region: spinner
@@ -459,6 +690,7 @@ draw_spinner_i32 :: proc(
 	max_val: i32,
 	step: i32 = 1,
 	drag_speed: f32 = 1.0,
+	edit_mode: ^bool = nil,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
@@ -469,11 +701,11 @@ draw_spinner_i32 :: proc(
 		ui.register_this_focusable()
 	}
 
-	style := g_theme.controls[.Spinner]
+	style := g_extra.theme.controls[.Spinner]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
-	if !disabled && ui.is_id_focused(id) {
+	if !disabled && ui.is_id_focused(id) && (edit_mode == nil || !edit_mode^) {
 		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
 			if value^ > min_val {
 				value^ = max(value^ - step, min_val)
@@ -508,42 +740,82 @@ draw_spinner_i32 :: proc(
 		}
 
 		box_id := ui.local_id("val")
-		if !disabled && ui.is_id_held(box_id) {
-			delta := ui.pointer_delta().x
-			if delta != 0 {
-				new_val := clamp(
-					value^ + i32(delta * drag_speed),
-					min_val,
-					max_val,
-				)
-				if new_val != value^ {
-					value^ = new_val
-					changed = true
-				}
+		is_editing := edit_mode != nil && edit_mode^
+
+		if !disabled && !is_editing && ui.is_id_clicked(box_id) {
+			if edit_mode != nil {
+				edit_mode^ = true
+				is_editing = true
+				g_extra.value_box.id = box_id
+				clear(&g_extra.value_box.buffer)
+				b := fmt.tprintf("%d", value^)
+				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
 			}
 		}
 
-		box_state := get_control_state(box_id, disabled)
-		if ui.layout(box_id).draw(
-			width = ui.grow(),
-			height = ui.grow(),
-			background_color = style.background[box_state],
-			border = {
-				thickness = style.border_width,
-				color = style.border[box_state],
-			},
-			corner_radius = style.corner_radius,
-			padding = {4, 4, 2, 2},
-			child_alignment = {.Center, .Center},
-		) {
-			text_str := fmt.tprintf("%d", value^)
-			ui.text().draw(
-				text_str,
-				alignment = {.Center, .Center},
-				color = style.text[box_state],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+		if is_editing {
+			if g_extra.value_box.id != box_id {
+				g_extra.value_box.id = box_id
+				clear(&g_extra.value_box.buffer)
+				b := fmt.tprintf("%d", value^)
+				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+			}
+			_, committed := draw_text_box(
+				box_id,
+				&g_extra.value_box.buffer,
+				edit_mode,
+				max_len = 16,
+				width = ui.grow(),
+				height = ui.grow(),
+				disabled = disabled,
 			)
+			if committed {
+				val, ok := strconv.parse_int(
+					string(g_extra.value_box.buffer[:]),
+				)
+				if ok {
+					value^ = clamp(i32(val), min_val, max_val)
+					changed = true
+				}
+			}
+		} else {
+			if !disabled && ui.is_id_held(box_id) {
+				delta := ui.pointer_delta().x
+				if delta != 0 {
+					new_val := clamp(
+						value^ + i32(delta * drag_speed),
+						min_val,
+						max_val,
+					)
+					if new_val != value^ {
+						value^ = new_val
+						changed = true
+					}
+				}
+			}
+
+			box_state := get_control_state(box_id, disabled)
+			if ui.layout(box_id).draw(
+				width = ui.grow(),
+				height = ui.grow(),
+				background_color = style.background[box_state],
+				border = {
+					thickness = style.border_width,
+					color = style.border[box_state],
+				},
+				corner_radius = style.corner_radius,
+				padding = {4, 4, 2, 2},
+				child_alignment = {.Center, .Center},
+			) {
+				text_str := fmt.tprintf("%d", value^)
+				ui.text().draw(
+					text_str,
+					alignment = {.Center, .Center},
+					color = style.text[box_state],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+			}
 		}
 
 		btn_right := ui.local_id("inc")
@@ -576,6 +848,7 @@ draw_spinner_f32 :: proc(
 	step: f32 = 0.1,
 	precision: int = 2,
 	drag_speed: f32 = 0.05,
+	edit_mode: ^bool = nil,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
@@ -586,11 +859,11 @@ draw_spinner_f32 :: proc(
 		ui.register_this_focusable()
 	}
 
-	style := g_theme.controls[.Spinner]
+	style := g_extra.theme.controls[.Spinner]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
-	if !disabled && ui.is_id_focused(id) {
+	if !disabled && ui.is_id_focused(id) && (edit_mode == nil || !edit_mode^) {
 		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
 			if value^ > min_val {
 				value^ = max(value^ - step, min_val)
@@ -625,38 +898,82 @@ draw_spinner_f32 :: proc(
 		}
 
 		box_id := ui.local_id("val")
-		if !disabled && ui.is_id_held(box_id) {
-			delta := ui.pointer_delta().x
-			if delta != 0 {
-				new_val := clamp(value^ + delta * drag_speed, min_val, max_val)
-				if new_val != value^ {
-					value^ = new_val
-					changed = true
-				}
+		is_editing := edit_mode != nil && edit_mode^
+
+		if !disabled && !is_editing && ui.is_id_clicked(box_id) {
+			if edit_mode != nil {
+				edit_mode^ = true
+				is_editing = true
+				g_extra.value_box.id = box_id
+				clear(&g_extra.value_box.buffer)
+				b := fmt.tprintf("%.*f", precision, value^)
+				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
 			}
 		}
 
-		box_state := get_control_state(box_id, disabled)
-		if ui.layout(box_id).draw(
-			width = ui.grow(),
-			height = ui.grow(),
-			background_color = style.background[box_state],
-			border = {
-				thickness = style.border_width,
-				color = style.border[box_state],
-			},
-			corner_radius = style.corner_radius,
-			padding = {4, 4, 2, 2},
-			child_alignment = {.Center, .Center},
-		) {
-			text_str := fmt.tprintf("%.*f", precision, value^)
-			ui.text().draw(
-				text_str,
-				alignment = {.Center, .Center},
-				color = style.text[box_state],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+		if is_editing {
+			if g_extra.value_box.id != box_id {
+				g_extra.value_box.id = box_id
+				clear(&g_extra.value_box.buffer)
+				b := fmt.tprintf("%.*f", precision, value^)
+				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+			}
+			_, committed := draw_text_box(
+				box_id,
+				&g_extra.value_box.buffer,
+				edit_mode,
+				max_len = 16,
+				width = ui.grow(),
+				height = ui.grow(),
+				disabled = disabled,
 			)
+			if committed {
+				val, ok := strconv.parse_f32(
+					string(g_extra.value_box.buffer[:]),
+				)
+				if ok {
+					value^ = clamp(val, min_val, max_val)
+					changed = true
+				}
+			}
+		} else {
+			if !disabled && ui.is_id_held(box_id) {
+				delta := ui.pointer_delta().x
+				if delta != 0 {
+					new_val := clamp(
+						value^ + delta * drag_speed,
+						min_val,
+						max_val,
+					)
+					if new_val != value^ {
+						value^ = new_val
+						changed = true
+					}
+				}
+			}
+
+			box_state := get_control_state(box_id, disabled)
+			if ui.layout(box_id).draw(
+				width = ui.grow(),
+				height = ui.grow(),
+				background_color = style.background[box_state],
+				border = {
+					thickness = style.border_width,
+					color = style.border[box_state],
+				},
+				corner_radius = style.corner_radius,
+				padding = {4, 4, 2, 2},
+				child_alignment = {.Center, .Center},
+			) {
+				text_str := fmt.tprintf("%.*f", precision, value^)
+				ui.text().draw(
+					text_str,
+					alignment = {.Center, .Center},
+					color = style.text[box_state],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+			}
 		}
 
 		btn_right := ui.local_id("inc")
@@ -700,14 +1017,45 @@ draw_value_box :: proc(
 
 	is_editing := edit_mode != nil && edit_mode^
 	state := get_control_state(id, disabled, is_editing)
-	style := g_theme.controls[.Value_Box]
+	style := g_extra.theme.controls[.Value_Box]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
-	if !disabled && ui.is_this_clicked() {
+	if !disabled && !is_editing && ui.is_this_clicked() {
 		if edit_mode != nil {
-			edit_mode^ = !edit_mode^
+			edit_mode^ = true
+			is_editing = true
+			g_extra.value_box.id = id
+			clear(&g_extra.value_box.buffer)
+			b := fmt.tprintf("%d", value^)
+			append(&g_extra.value_box.buffer, ..transmute([]u8)b)
 		}
+	}
+
+	if is_editing {
+		if g_extra.value_box.id != id {
+			g_extra.value_box.id = id
+			clear(&g_extra.value_box.buffer)
+			b := fmt.tprintf("%d", value^)
+			append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+		}
+		_, committed := draw_text_box(
+			id,
+			&g_extra.value_box.buffer,
+			edit_mode,
+			max_len = 16,
+			width = width,
+			height = height,
+			disabled = disabled,
+		)
+		if committed {
+			val, ok := strconv.parse_int(string(g_extra.value_box.buffer[:]))
+			if ok {
+				value^ = clamp(val, min_val, max_val)
+				changed = true
+			}
+		}
+		return changed
 	}
 
 	if !disabled && ui.is_id_focused(id) {
@@ -721,13 +1069,6 @@ draw_value_box :: proc(
 			if value^ < max_val {
 				value^ += 1
 				changed = true
-			}
-		}
-		if ui.is_key_pressed(.Enter) ||
-		   ui.is_key_pressed(.Space) ||
-		   ui.is_key_pressed(.Escape) {
-			if edit_mode != nil {
-				edit_mode^ = false
 			}
 		}
 	}
@@ -747,8 +1088,8 @@ draw_value_box :: proc(
 			text_str,
 			alignment = {.Center, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 	}
 
@@ -778,7 +1119,7 @@ draw_combo_box :: proc(
 	}
 
 	state := get_control_state(id, disabled)
-	style := g_theme.controls[.ComboBox]
+	style := g_extra.theme.controls[.ComboBox]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
@@ -815,8 +1156,8 @@ draw_combo_box :: proc(
 			label,
 			alignment = {.Left, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 	}
 
@@ -847,7 +1188,7 @@ draw_dropdown_box :: proc(
 	}
 
 	state := get_control_state(id, disabled, edit_mode^)
-	style := g_theme.controls[.DropdownBox]
+	style := g_extra.theme.controls[.DropdownBox]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
@@ -891,8 +1232,8 @@ draw_dropdown_box :: proc(
 			label,
 			alignment = {.Left, .Center},
 			color = style.text[state],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 
 		if edit_mode^ && !disabled {
@@ -902,7 +1243,7 @@ draw_dropdown_box :: proc(
 				layout_direction = .Top_To_Bottom,
 				padding = {2, 2, 2, 2},
 				child_gap = 1,
-				background_color = g_theme.controls[.Panel].background[.Normal],
+				background_color = g_extra.theme.controls[.Panel].background[.Normal],
 				border = {
 					thickness = style.border_width,
 					color = style.border[.Hovered],
@@ -929,8 +1270,8 @@ draw_dropdown_box :: proc(
 							opt,
 							alignment = {.Left, .Center},
 							color = style.text[opt_state],
-							font_size = g_theme.font_size,
-							font_index = g_theme.font_index,
+							font_size = g_extra.theme.font_size,
+							font_index = g_extra.theme.font_index,
 						)
 					}
 					if ui.is_id_clicked(opt_id) {
@@ -972,7 +1313,7 @@ draw_slider_h_f32 :: proc(
 
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
-	style := g_theme.controls[.Slider]
+	style := g_extra.theme.controls[.Slider]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(track_id),
@@ -1067,7 +1408,7 @@ draw_slider_v_f32 :: proc(
 
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
-	style := g_theme.controls[.Slider]
+	style := g_extra.theme.controls[.Slider]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(track_id),
@@ -1163,7 +1504,7 @@ draw_slider_h_i32 :: proc(
 
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
-	style := g_theme.controls[.Slider]
+	style := g_extra.theme.controls[.Slider]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(track_id),
@@ -1262,7 +1603,7 @@ draw_slider_v_i32 :: proc(
 
 	track_id := ui.last_id()
 	state := get_control_state(track_id, disabled)
-	style := g_theme.controls[.Slider]
+	style := g_extra.theme.controls[.Slider]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(track_id),
@@ -1356,7 +1697,7 @@ draw_progress_bar :: proc(
 ) {
 	wrap_id()
 
-	style := g_theme.controls[.Slider]
+	style := g_extra.theme.controls[.Slider]
 	normalized :=
 		max_val > min_val ? clamp((value - min_val) / (max_val - min_val), 0, 1) : 0
 
@@ -1398,7 +1739,7 @@ draw_tooltip :: proc(
 ) {
 	wrap_id()
 	if ui.is_id_hovered(target_id) {
-		style := g_theme.controls[.Panel]
+		style := g_extra.theme.controls[.Panel]
 		if ui.layout(reuse_id = true).draw(
 			width = ui.fit(),
 			height = ui.fit(),
@@ -1420,8 +1761,8 @@ draw_tooltip :: proc(
 			ui.text().draw(
 				content,
 				color = style.text[.Normal],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
 			)
 		}
 	}

@@ -76,7 +76,7 @@ draw_panel :: proc(
 	padding: Maybe(ui.Padding) = nil,
 ) -> bool {
 	wrap_id()
-	style := g_theme.controls[.Panel]
+	style := g_extra.theme.controls[.Panel]
 	pad := padding.? or_else style.padding
 	return ui.draw_layout(
 		width = width,
@@ -111,7 +111,7 @@ draw_group_box :: proc(
 	padding: ui.Padding = {8, 8, 8, 8},
 ) -> bool {
 	wrap_id()
-	style := g_theme.controls[.Panel]
+	style := g_extra.theme.controls[.Panel]
 
 	if ui.draw_layout(
 		width = width,
@@ -129,8 +129,8 @@ draw_group_box :: proc(
 		ui.text().draw(
 			title,
 			color = style.text[.Normal],
-			font_size = g_theme.font_size,
-			font_index = g_theme.font_index,
+			font_size = g_extra.theme.font_size,
+			font_index = g_extra.theme.font_index,
 		)
 		if ui.begin_layout().draw(
 			width = ui.grow(),
@@ -162,7 +162,7 @@ draw_window_box :: proc(
 	padding: ui.Padding = {8, 8, 8, 8},
 ) -> bool {
 	wrap_id()
-	panel_style := g_theme.controls[.Panel]
+	panel_style := g_extra.theme.controls[.Panel]
 
 	if ui.draw_layout(
 		width = width,
@@ -177,7 +177,7 @@ draw_window_box :: proc(
 		},
 		corner_radius = panel_style.corner_radius,
 	) {
-		window_box_style := g_theme.controls[.WindowBox]
+		window_box_style := g_extra.theme.controls[.WindowBox]
 
 		if ui.layout(ui.local_id("title_bar")).draw(
 			width = ui.grow(),
@@ -191,8 +191,8 @@ draw_window_box :: proc(
 			ui.text().draw(
 				title,
 				color = window_box_style.text[.Normal],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
 				alignment = {.Left, .Center},
 			)
 			if closed != nil {
@@ -244,7 +244,7 @@ draw_line :: proc(
 	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
 	color: Maybe([4]u8) = nil,
 ) {
-	c := color.? or_else g_theme.controls[.Default].border[.Normal]
+	c := color.? or_else g_extra.theme.controls[.Default].border[.Normal]
 	if len(text) == 0 {
 		if ui.layout(reuse_id = true).draw(
 			width = width,
@@ -263,9 +263,9 @@ draw_line :: proc(
 		) {
 			ui.text().draw(
 				text,
-				color = g_theme.controls[.Label].text[.Normal],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+				color = g_extra.theme.controls[.Label].text[.Normal],
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
 			)
 			if ui.layout().draw(
 				width = ui.grow(),
@@ -292,7 +292,7 @@ draw_status_bar :: proc(
 	padding: ui.Padding = {6, 6, 2, 2},
 ) {
 	wrap_id()
-	style := g_theme.controls[.StatusBar]
+	style := g_extra.theme.controls[.StatusBar]
 	if ui.layout(reuse_id = true).draw(
 		width = width,
 		height = height,
@@ -310,8 +310,8 @@ draw_status_bar :: proc(
 			ui.text().draw(
 				text,
 				color = style.text[.Normal],
-				font_size = g_theme.font_size,
-				font_index = g_theme.font_index,
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
 				alignment = {.Left, .Center},
 			)
 		}

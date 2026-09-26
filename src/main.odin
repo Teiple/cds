@@ -262,16 +262,42 @@ main :: proc() {
 
 							case 2:
 								if uie.vbox().draw(gap = 8) {
+									@(static) text_buf: [dynamic]u8
+									@(static) text_buf_inited: bool = false
+									@(static) text_edit: bool = false
+									if !text_buf_inited {
+										text_buf = make([dynamic]u8, 0, 64)
+										init_str := "Hello Sokol UI"
+										append(
+											&text_buf,
+											..transmute([]u8)init_str,
+										)
+										text_buf_inited = true
+									}
+									uie.text_box().draw(
+										&text_buf,
+										&text_edit,
+										width = ui.fixed(200),
+									)
+
 									@(static) spin_val: i32 = 5
-									uie.spinner_i32().draw(&spin_val, 0, 20)
+									@(static) spin_edit: bool = false
+									uie.spinner_i32().draw(
+										&spin_val,
+										0,
+										20,
+										edit_mode = &spin_edit,
+									)
 
 									@(static) spin_fval: f32 = 1.5
+									@(static) spin_fedit: bool = false
 									uie.spinner_f32().draw(
 										&spin_fval,
 										0,
 										10,
 										step = 0.25,
 										precision = 2,
+										edit_mode = &spin_fedit,
 									)
 
 									@(static) val_box: int = 42

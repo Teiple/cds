@@ -89,6 +89,15 @@ Key :: enum {
 	Up,
 	Right,
 	Down,
+	Backspace,
+	Delete,
+	Home,
+	End,
+	A,
+	C,
+	V,
+	X,
+	Z,
 }
 
 Keyboard_Modifier :: enum {
@@ -101,8 +110,9 @@ Keyboard_Modifier :: enum {
 Keyboard_Modifiers :: bit_set[Keyboard_Modifier]
 
 Keyboard :: struct {
-	keys:      [Key]Key_State,
-	modifiers: Keyboard_Modifiers,
+	keys:       [Key]Key_State,
+	modifiers:  Keyboard_Modifiers,
+	characters: [dynamic]rune,
 }
 
 Input :: struct {
@@ -1253,6 +1263,7 @@ make_context :: proc(
 		wrapped_text_lines = make([dynamic]string, 0, 5),
 		pointer = {config = pointer},
 		fonts = fonts_copy,
+		input = {keyboard = {characters = make([dynamic]rune, 0, 16)}},
 		input_event = {
 			pointer_captured = false,
 			hovered_elements = make([dynamic]Id, 0, 4),
@@ -1282,6 +1293,7 @@ delete_context :: proc(ctx: Context) {
 	delete(ctx.growable_buffer)
 	delete(ctx.wrapped_text_lines)
 	delete(ctx.fonts)
+	delete(ctx.input.keyboard.characters)
 
 	delete(ctx.input_event.hovered_elements)
 	delete(ctx.input_event.selected_elements)
@@ -2280,12 +2292,13 @@ input_end_frame :: proc(input: ^Input) {
 			state = .None
 		}
 	}
+
+	clear(&input.keyboard.characters)
 }
 
-rect_by_id :: proc(id: Id) -> Rect {
+rect_by_id :: proc(id: Id) -> (Rect, bool) #optional_ok {
 	rect, ok := g_ui_builder.current_context.bounds[id]
-	assert(ok)
-	return rect
+	return rect, ok
 }
 
 is_id_selected :: proc(id: Id) -> bool {
@@ -2394,6 +2407,58 @@ is_key_down :: proc(k: Key) -> bool {
 
 is_key_released :: proc(k: Key) -> bool {
 	return g_ui_builder.current_context.input.keyboard.keys[k] == .Released
+}
+
+has_modifier :: proc(mod: Keyboard_Modifier) -> bool {
+	return mod in g_ui_builder.current_context.input.keyboard.modifiers
+}
+
+get_input_characters :: proc() -> []rune {
+	return g_ui_builder.current_context.input.keyboard.characters[:]
+}
+
+measure_text :: proc(
+	content: string,
+	font_size: f32 = 16,
+	font_index: Font_Index = 0,
+) -> f32 {
+	if int(font_index) < len(g_ui_builder.current_context.fonts) {
+		return measure_text_width(
+			{
+				content = content,
+				font_size = font_size,
+				font_index = font_index,
+			},
+			g_ui_builder.current_context.fonts[font_index],
+		)
+	}
+	return 0
+}
+
+get_char_index_at_x :: proc(
+	content: string,
+	target_x: f32,
+	font_size: f32 = 16,
+	font_index: Font_Index = 0,
+) -> int {
+	if int(font_index) >= len(g_ui_builder.current_context.fonts) do return len(content)
+	font_info := g_ui_builder.current_context.fonts[font_index]
+	scale := font_info.base_size > 0 ? (font_size / font_info.base_size) : 1.0
+	cur_x: f32 = 0
+	for i in 0 ..< len(content) {
+		ch := content[i]
+		adv: f32 = 0
+		if ch >= 32 && ch < 128 {
+			adv =
+				font_info.glyphs[ch - 32].xadvance * scale +
+				font_info.spacing * scale
+		}
+		if target_x < cur_x + adv * 0.5 {
+			return i
+		}
+		cur_x += adv
+	}
+	return len(content)
 }
 
 current_scroll_data :: proc() -> Scroll_Data {

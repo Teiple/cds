@@ -247,15 +247,36 @@ DEFAULT_THEME: Style_Theme : {
 	},
 }
 
+Text_Box_State :: struct {
+	id:              ui.Id,
+	cursor_pos:      int,
+	scroll_offset_x: f32,
+	blink_counter:   int,
+	snapshot:        [dynamic]u8,
+}
+
+Value_Box_State :: struct {
+	id:     ui.Id,
+	buffer: [dynamic]u8,
+}
+
+UI_Extra_State :: struct {
+	theme:     Style_Theme,
+	text_box:  Text_Box_State,
+	value_box: Value_Box_State,
+}
+
 @(private)
-g_theme: Style_Theme = DEFAULT_THEME
+g_extra: UI_Extra_State = {
+	theme = DEFAULT_THEME,
+}
 
 get_theme :: proc "contextless" () -> ^Style_Theme {
-	return &g_theme
+	return &g_extra.theme
 }
 
 set_theme :: proc(theme: Style_Theme) {
-	g_theme = theme
+	g_extra.theme = theme
 }
 
 get_control_state :: proc(
