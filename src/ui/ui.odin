@@ -123,6 +123,7 @@ Input :: struct {
 Input_Event :: struct {
 	pointer_captured:  bool,
 	scroll_captured:   bool,
+	keyboard_captured: bool,
 	selected_once:     bool,
 	hovered_elements:  [dynamic]Id,
 	selected_elements: [dynamic]Id,
@@ -217,14 +218,13 @@ Rect_Command :: struct #all_or_none {
 }
 
 Text_Command :: struct #all_or_none {
-	font:          Font_Index,
-	rect:          Rect,
-	wrapped_lines: []string,
-	content:       string,
-	font_size:     f32,
-	spacing:       f32,
-	line_spacing:  f32,
-	color:         [4]u8,
+	font:         Font_Index,
+	rect:         Rect,
+	lines:        []string,
+	font_size:    f32,
+	spacing:      f32,
+	line_spacing: f32,
+	color:        [4]u8,
 }
 
 Push_Clip_Command :: struct {
@@ -273,22 +273,28 @@ Context_Events :: struct {
 	on_end:    [dynamic; CTX_MAX_EVENT_LISTENERS]proc(),
 }
 
+Clipboard_Get_Proc :: #type proc(user_data: rawptr) -> string
+Clipboard_Set_Proc :: #type proc(text: string, user_data: rawptr)
+
 Context :: struct {
-	canvas_size:        [2]f32,
-	elements:           [dynamic]Element,
-	open_layout_stack:  [dynamic]Index,
-	growable_buffer:    [dynamic]Index,
-	wrapped_text_lines: [dynamic]string,
-	render_commands:    [dynamic]Render_Command,
-	pointer:            Pointer_Attributes,
-	fonts:              []Font,
-	input:              Input,
-	input_event:        Input_Event,
-	clip:               ClipData,
-	ids:                map[Id]Id_Info,
-	floats:             [dynamic]Index,
-	bounds:             map[Id]Rect,
-	entry_dir:          string,
+	canvas_size:         [2]f32,
+	elements:            [dynamic]Element,
+	open_layout_stack:   [dynamic]Index,
+	growable_buffer:     [dynamic]Index,
+	wrapped_text_lines:  [dynamic]string,
+	render_commands:     [dynamic]Render_Command,
+	pointer:             Pointer_Attributes,
+	fonts:               []Font,
+	input:               Input,
+	input_event:         Input_Event,
+	clip:                ClipData,
+	ids:                 map[Id]Id_Info,
+	floats:              [dynamic]Index,
+	bounds:              map[Id]Rect,
+	entry_dir:           string,
+	get_clipboard:       Clipboard_Get_Proc,
+	set_clipboard:       Clipboard_Set_Proc,
+	clipboard_user_data: rawptr,
 }
 
 
@@ -993,9 +999,6 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 		content := text_attr.config.content
 		config := text_attr.config
 
-		line_start := 0
-		line_width := f32(0)
-
 		wrapped_start := len(ctx.wrapped_text_lines)
 		wrapped_count := 0
 
@@ -1003,7 +1006,7 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 			text_attr.wrapped_text_lines_start = i32(wrapped_start)
 			text_attr.wrapped_text_lines_count = i32(wrapped_count)
 
-			if wrapped_count > 0 {
+			if wrapped_count > 1 {
 				ele.size.y =
 					config.font_size * f32(wrapped_count) +
 					f32(wrapped_count - 1) * config.line_spacing
@@ -1014,14 +1017,6 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 			}
 			ele.limits.y.min = ele.size.y
 			text_attr.bound_size.y = ele.size.y
-		}
-
-		has_newlines := false
-		for ch in content {
-			if ch == '\n' {
-				has_newlines = true
-				break
-			}
 		}
 
 		raw_line_start := 0
@@ -1040,10 +1035,6 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 
 			config.content = raw_line
 			line_w := measure_text_width(config, ctx.fonts[config.font_index])
-
-			if line_w <= ele.size.x && !has_newlines {
-				continue
-			}
 
 			if line_w <= ele.size.x {
 				append(&ctx.wrapped_text_lines, raw_line)
@@ -1247,6 +1238,9 @@ make_context :: proc(
 	pointer: Pointer_Config = {texture_id = 0, size = 16, offset = {0, 0}},
 	fonts: []Font = {},
 	entry_dir: string = "",
+	get_clipboard: Clipboard_Get_Proc = nil,
+	set_clipboard: Clipboard_Set_Proc = nil,
+	clipboard_user_data: rawptr = nil,
 ) -> Context {
 	for event in g_ui_builder.context_events.on_make {
 		event()
@@ -1279,6 +1273,9 @@ make_context :: proc(
 		floats = make([dynamic]Index, 0, 4),
 		bounds = make(map[Id]Rect, 50),
 		entry_dir = entry_dir,
+		get_clipboard = get_clipboard,
+		set_clipboard = set_clipboard,
+		clipboard_user_data = clipboard_user_data,
 	}
 }
 
@@ -1319,6 +1316,7 @@ begin :: proc(ctx: ^Context, canvas_size: [2]f32) -> bool {
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
 	clear(&ctx.input_event.focusables)
+	ctx.input_event.keyboard_captured = false
 
 	append(&ctx.elements, root_layout(canvas_size))
 	append(&ctx.open_layout_stack, 0)
@@ -1386,30 +1384,35 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 		ctx.input_event.focused_id = ctx.input_event.clicked_elements[0]
 	}
 
-	if ctx.input.keyboard.keys[.Tab] == .Pressed {
-		if .Shift in ctx.input.keyboard.modifiers {
-			focus_previous_in_ctx(ctx)
-		} else {
-			focus_next_in_ctx(ctx)
+	if !ctx.input_event.keyboard_captured {
+		if ctx.input.keyboard.keys[.Tab] == .Pressed {
+			if .Shift in ctx.input.keyboard.modifiers {
+				focus_previous_in_ctx(ctx)
+			} else {
+				focus_next_in_ctx(ctx)
+			}
 		}
-	}
 
-	if ctx.input.keyboard.keys[.Enter] == .Pressed ||
-	   ctx.input.keyboard.keys[.Space] == .Pressed {
-		if ctx.input_event.focused_id != 0 {
-			append(&ctx.input_event.held_elements, ctx.input_event.focused_id)
+		if ctx.input.keyboard.keys[.Enter] == .Pressed ||
+		   ctx.input.keyboard.keys[.Space] == .Pressed {
+			if ctx.input_event.focused_id != 0 {
+				append(
+					&ctx.input_event.held_elements,
+					ctx.input_event.focused_id,
+				)
+			}
 		}
-	}
 
-	if ctx.input.keyboard.keys[.Enter] == .Released ||
-	   ctx.input.keyboard.keys[.Space] == .Released {
-		if ctx.input_event.focused_id != 0 &&
-		   is_id_held(ctx.input_event.focused_id) {
-			append(
-				&ctx.input_event.clicked_elements,
-				ctx.input_event.focused_id,
-			)
-			clear(&ctx.input_event.held_elements)
+		if ctx.input.keyboard.keys[.Enter] == .Released ||
+		   ctx.input.keyboard.keys[.Space] == .Released {
+			if ctx.input_event.focused_id != 0 &&
+			   is_id_held(ctx.input_event.focused_id) {
+				append(
+					&ctx.input_event.clicked_elements,
+					ctx.input_event.focused_id,
+				)
+				clear(&ctx.input_event.held_elements)
+			}
 		}
 	}
 
@@ -1623,13 +1626,12 @@ generate_commands :: proc(ctx: ^Context, index: Index) {
 		append(
 			&ctx.render_commands,
 			Text_Command{
-				content = attr.config.content,
 				font = attr.config.font_index,
 				font_size = attr.config.font_size,
 				spacing = ctx.fonts[attr.config.font_index].spacing,
 				line_spacing = attr.config.line_spacing,
 				color = attr.config.color,
-				wrapped_lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
+				lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
 				rect = {
 					ele.position.x,
 					ele.position.y,
@@ -2459,6 +2461,34 @@ get_char_index_at_x :: proc(
 		cur_x += adv
 	}
 	return len(content)
+}
+
+set_clipboard :: proc(text: string) {
+	ctx := g_ui_builder.current_context
+	if ctx != nil && ctx.set_clipboard != nil {
+		ctx.set_clipboard(text, ctx.clipboard_user_data)
+	}
+}
+
+get_clipboard :: proc() -> string {
+	ctx := g_ui_builder.current_context
+	if ctx != nil && ctx.get_clipboard != nil {
+		return ctx.get_clipboard(ctx.clipboard_user_data)
+	}
+	return ""
+}
+
+capture_keyboard :: proc() {
+	if g_ui_builder.current_context != nil {
+		g_ui_builder.current_context.input_event.keyboard_captured = true
+	}
+}
+
+is_keyboard_captured :: proc() -> bool {
+	if g_ui_builder.current_context != nil {
+		return g_ui_builder.current_context.input_event.keyboard_captured
+	}
+	return false
 }
 
 current_scroll_data :: proc() -> Scroll_Data {

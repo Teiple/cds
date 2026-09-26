@@ -178,7 +178,7 @@ PANEL_STYLE: Control_Style : {
 		.Active = {246, 248, 246, 255},
 		.Disabled = {242, 244, 242, 255},
 	},
-	text = DEFAULT_CONTROL_STYLE.text,
+	text = {.Normal ..= .Disabled = LABEL_STYLE.text[.Normal]},
 	border_width = 1,
 	outline = {},
 	corner_radius = {6, 6, 6, 6},
@@ -222,7 +222,16 @@ DEFAULT_THEME: Style_Theme : {
 		.Slider ..= .Slider_Bar = SLIDER_STYLE,
 		.Progress_Bar = SLIDER_STYLE,
 		.Spinner ..= .Value_Box = BUTTON_STYLE,
-		.Text_Box ..= .ListView = DEFAULT_CONTROL_STYLE,
+		.Text_Box = {
+			border = PANEL_STYLE.border,
+			background = PANEL_STYLE.background,
+			text = PANEL_STYLE.text,
+			border_width = 1,
+			outline = PANEL_STYLE.outline,
+			corner_radius = {},
+			padding = {4, 4, 2, 2},
+		},
+		.ListView = DEFAULT_CONTROL_STYLE,
 		.ScrollBar = SLIDER_STYLE,
 		.StatusBar = {
 			border = {.Normal ..= .Disabled = {215, 222, 218, 255}},
@@ -245,55 +254,4 @@ DEFAULT_THEME: Style_Theme : {
 			padding = {8, 4, 4, 4},
 		},
 	},
-}
-
-Text_Box_State :: struct {
-	id:              ui.Id,
-	cursor_pos:      int,
-	scroll_offset_x: f32,
-	blink_counter:   int,
-	snapshot:        [dynamic]u8,
-}
-
-Value_Box_State :: struct {
-	id:     ui.Id,
-	buffer: [dynamic]u8,
-}
-
-UI_Extra_State :: struct {
-	theme:     Style_Theme,
-	text_box:  Text_Box_State,
-	value_box: Value_Box_State,
-}
-
-@(private)
-g_extra: UI_Extra_State = {
-	theme = DEFAULT_THEME,
-}
-
-get_theme :: proc "contextless" () -> ^Style_Theme {
-	return &g_extra.theme
-}
-
-set_theme :: proc(theme: Style_Theme) {
-	g_extra.theme = theme
-}
-
-get_control_state :: proc(
-	id: ui.Id,
-	disabled: bool = false,
-	active: bool = false,
-) -> Control_State {
-	if disabled do return .Disabled
-	if ui.is_id_held(id) do return .Pressed
-	if active do return .Active
-	if ui.is_id_hovered(id) do return .Hovered
-	return .Normal
-}
-
-get_control_outline :: proc(
-	style: Control_Style,
-	is_focused: bool,
-) -> ui.Outline_Config {
-	return is_focused ? style.outline : {}
 }

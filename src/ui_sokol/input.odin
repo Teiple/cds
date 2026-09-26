@@ -2,7 +2,7 @@ package ui_sokol
 
 import sapp "../sokol/app"
 import "../ui"
-import "core:fmt"
+import "core:strings"
 
 handle_event :: proc(
 	input: ^ui.Input,
@@ -138,4 +138,15 @@ handle_event :: proc(
 		input.pointer.kind = .Touch
 		input.pointer.state = .Released
 	}
+}
+
+sokol_set_clipboard :: proc(text: string, user_data: rawptr) {
+	c_str := strings.clone_to_cstring(text, context.temp_allocator)
+	sapp.set_clipboard_string(c_str)
+}
+
+sokol_get_clipboard :: proc(user_data: rawptr) -> string {
+	c_str := sapp.get_clipboard_string()
+	if c_str == nil do return ""
+	return string(c_str)
 }

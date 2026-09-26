@@ -1065,39 +1065,25 @@ render :: proc(
 				pen_x := c.rect.x
 				pen_y := c.rect.y + c.font_size * 0.78
 
-				lines := c.wrapped_lines
-				if len(lines) == 0 {
-					draw_text_line(
-						r,
-						font_obj,
-						c.content,
-						pen_x,
-						pen_y,
-						scale_font,
-						c.spacing,
-						c.color,
-					)
-				} else {
-					line_y := pen_y
-					for line in lines {
-						line_screen_y0 :=
-							dest_rect.y + (line_y - c.font_size * 0.78) * scale
-						line_screen_y1 := line_screen_y0 + c.font_size * scale
-						if line_screen_y1 >= cur.y &&
-						   line_screen_y0 <= cur.y + cur.height {
-							draw_text_line(
-								r,
-								font_obj,
-								line,
-								pen_x,
-								line_y,
-								scale_font,
-								c.spacing,
-								c.color,
-							)
-						}
-						line_y += c.font_size + c.line_spacing
+				line_y := pen_y
+				for line in c.lines {
+					line_screen_y0 :=
+						dest_rect.y + (line_y - c.font_size * 0.78) * scale
+					line_screen_y1 := line_screen_y0 + c.font_size * scale
+					if line_screen_y1 >= cur.y &&
+					   line_screen_y0 <= cur.y + cur.height {
+						draw_text_line(
+							r,
+							font_obj,
+							line,
+							pen_x,
+							line_y,
+							scale_font,
+							c.spacing,
+							c.color,
+						)
 					}
+					line_y += c.font_size + c.line_spacing
 				}
 			}
 		}

@@ -35,6 +35,8 @@ main :: proc() {
 		width = 960,
 		height = 540,
 		disable_vsync = true,
+		enable_clipboard = true,
+		clipboard_size = 65536,
 		init_cb = proc "c" () {
 			context = g_odin_ctx
 
@@ -65,6 +67,8 @@ main :: proc() {
 			g_state.ui.ctx = ui.make_context(
 				fonts = fonts,
 				entry_dir = os.dir(ENTRY_POINT.file_path),
+				get_clipboard = ui_sokol.sokol_get_clipboard,
+				set_clipboard = ui_sokol.sokol_set_clipboard,
 			)
 			g_state.camera = {
 				fovy_degrees = 60,
@@ -286,7 +290,7 @@ main :: proc() {
 										&spin_val,
 										0,
 										20,
-										edit_mode = &spin_edit,
+										&spin_edit,
 									)
 
 									@(static) spin_fval: f32 = 1.5
@@ -295,9 +299,9 @@ main :: proc() {
 										&spin_fval,
 										0,
 										10,
+										&spin_fedit,
 										step = 0.25,
 										precision = 2,
-										edit_mode = &spin_fedit,
 									)
 
 									@(static) val_box: int = 42
