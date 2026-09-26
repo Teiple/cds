@@ -147,6 +147,22 @@ SLIDER_STYLE: Control_Style : {
 	padding = {2, 2, 2, 2},
 }
 
+LABEL_STYLE: Control_Style : {
+	border = {},
+	background = {},
+	text = {
+		.Normal = {40, 48, 44, 255},
+		.Hovered = {25, 80, 55, 255},
+		.Pressed = {20, 70, 48, 255},
+		.Active = {40, 48, 44, 255},
+		.Disabled = {160, 170, 165, 255},
+	},
+	border_width = 0,
+	outline = {},
+	corner_radius = {},
+	padding = {2, 2, 2, 2},
+}
+
 PANEL_STYLE: Control_Style : {
 	border = {
 		.Normal = {215, 222, 218, 255},
@@ -174,21 +190,7 @@ DEFAULT_THEME: Style_Theme : {
 	font_index = 0,
 	controls = {
 		.Default = DEFAULT_CONTROL_STYLE,
-		.Label = {
-			border = {},
-			background = {},
-			text = {
-				.Normal = {40, 48, 44, 255},
-				.Hovered = {25, 80, 55, 255},
-				.Pressed = {20, 70, 48, 255},
-				.Active = {40, 48, 44, 255},
-				.Disabled = {160, 170, 165, 255},
-			},
-			border_width = 0,
-			outline = {},
-			corner_radius = {},
-			padding = {2, 2, 2, 2},
-		},
+		.Label = LABEL_STYLE,
 		.Button = BUTTON_STYLE,
 		.Label_Button = {
 			border = {},
@@ -209,7 +211,7 @@ DEFAULT_THEME: Style_Theme : {
 		.Checkbox = {
 			border = BUTTON_STYLE.border,
 			background = BUTTON_STYLE.background,
-			text = DEFAULT_CONTROL_STYLE.text,
+			text = LABEL_STYLE.text,
 			border_width = 1,
 			outline = BUTTON_STYLE.outline,
 			corner_radius = {3, 3, 3, 3},

@@ -162,7 +162,7 @@ draw_window_box :: proc(
 	padding: ui.Padding = {8, 8, 8, 8},
 ) -> bool {
 	wrap_id()
-	style := g_theme.controls[.Panel]
+	panel_style := g_theme.controls[.Panel]
 
 	if ui.draw_layout(
 		width = width,
@@ -170,25 +170,27 @@ draw_window_box :: proc(
 		layout_direction = .Top_To_Bottom,
 		child_gap = 0,
 		padding = {},
-		background_color = style.background[.Normal],
+		background_color = panel_style.background[.Normal],
 		border = {
-			thickness = style.border_width,
-			color = style.border[.Normal],
+			thickness = panel_style.border_width,
+			color = panel_style.border[.Normal],
 		},
-		corner_radius = style.corner_radius,
+		corner_radius = panel_style.corner_radius,
 	) {
-		if ui.begin_layout(ui.local_id("title_bar")).draw(
+		window_box_style := g_theme.controls[.WindowBox]
+
+		if ui.layout(ui.local_id("title_bar")).draw(
 			width = ui.grow(),
 			height = ui.fixed(28),
 			layout_direction = .Left_To_Right,
 			padding = {8, 4, 4, 4},
 			child_alignment = {.Left, .Center},
-			background_color = g_theme.controls[.WindowBox].background[.Normal],
+			background_color = window_box_style.background[.Normal],
 			corner_radius = {2, 2, 0, 0},
 		) {
 			ui.text().draw(
 				title,
-				color = g_theme.controls[.WindowBox].text[.Normal],
+				color = window_box_style.text[.Normal],
 				font_size = g_theme.font_size,
 				font_index = g_theme.font_index,
 				alignment = {.Left, .Center},
@@ -202,7 +204,6 @@ draw_window_box :: proc(
 					closed^ = true
 				}
 			}
-			ui.end_layout()
 		}
 
 		content_id := ui.local_id("content")
