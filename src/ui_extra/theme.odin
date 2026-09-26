@@ -51,6 +51,7 @@ Control_Style :: struct #all_or_none {
 	outline:       ui.Outline_Config,
 	corner_radius: ui.Corner_Radius,
 	padding:       ui.Padding,
+	overlay_color: [4]u8, // used for text's edit selection color
 }
 
 Style_Theme :: struct {
@@ -85,6 +86,7 @@ DEFAULT_CONTROL_STYLE: Control_Style : {
 	outline = {thickness = 2, offset = 0, color = {61, 206, 148, 255}},
 	corner_radius = {4, 4, 4, 4},
 	padding = {8, 8, 4, 4},
+	overlay_color = {61, 206, 148, 80},
 }
 
 BUTTON_STYLE: Control_Style : {
@@ -113,6 +115,7 @@ BUTTON_STYLE: Control_Style : {
 	outline = {thickness = 2, offset = 2, color = {61, 206, 148, 255}},
 	corner_radius = {4, 4, 4, 4},
 	padding = {12, 12, 6, 6},
+	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 }
 
 TOGGLE_STYLE: Control_Style : {
@@ -123,6 +126,7 @@ TOGGLE_STYLE: Control_Style : {
 	outline = BUTTON_STYLE.outline,
 	corner_radius = {4, 4, 4, 4},
 	padding = {12, 12, 6, 6},
+	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 }
 
 SLIDER_STYLE: Control_Style : {
@@ -145,6 +149,7 @@ SLIDER_STYLE: Control_Style : {
 	outline = BUTTON_STYLE.outline,
 	corner_radius = {4, 4, 4, 4},
 	padding = {2, 2, 2, 2},
+	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 }
 
 LABEL_STYLE: Control_Style : {
@@ -161,6 +166,7 @@ LABEL_STYLE: Control_Style : {
 	outline = {},
 	corner_radius = {},
 	padding = {2, 2, 2, 2},
+	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 }
 
 PANEL_STYLE: Control_Style : {
@@ -183,6 +189,7 @@ PANEL_STYLE: Control_Style : {
 	outline = {},
 	corner_radius = {6, 6, 6, 6},
 	padding = {8, 8, 8, 8},
+	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 }
 
 DEFAULT_THEME: Style_Theme : {
@@ -206,6 +213,7 @@ DEFAULT_THEME: Style_Theme : {
 			outline = BUTTON_STYLE.outline,
 			corner_radius = {},
 			padding = {4, 4, 2, 2},
+			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
 		.Toggle ..= .Toggle_Slider = TOGGLE_STYLE,
 		.Checkbox = {
@@ -216,6 +224,7 @@ DEFAULT_THEME: Style_Theme : {
 			outline = BUTTON_STYLE.outline,
 			corner_radius = {3, 3, 3, 3},
 			padding = {2, 2, 2, 2},
+			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
 		.ComboBox ..= .DropdownBox = TOGGLE_STYLE,
 		.TabBar = BUTTON_STYLE,
@@ -230,6 +239,7 @@ DEFAULT_THEME: Style_Theme : {
 			outline = PANEL_STYLE.outline,
 			corner_radius = {3, 3, 3, 3},
 			padding = {4, 4, 2, 2},
+			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
 		.ListView = DEFAULT_CONTROL_STYLE,
 		.ScrollBar = SLIDER_STYLE,
@@ -241,6 +251,7 @@ DEFAULT_THEME: Style_Theme : {
 			outline = {},
 			corner_radius = {},
 			padding = {8, 8, 4, 4},
+			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
 		.Panel = PANEL_STYLE,
 		.GroupBox = PANEL_STYLE,
@@ -252,6 +263,7 @@ DEFAULT_THEME: Style_Theme : {
 			outline = {},
 			corner_radius = {4, 4, 0, 0},
 			padding = {8, 4, 4, 4},
+			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
 	},
 }

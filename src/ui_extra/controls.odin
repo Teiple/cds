@@ -571,7 +571,7 @@ draw_text_box_with_id :: proc(
 					g_extra.theme.font_size,
 					g_extra.theme.font_index,
 				)
-				if ui.is_id_clicked(id) {
+				if ui.is_id_pressed(id) {
 					g_extra.text_box.cursor_pos = char_idx
 					g_extra.text_box.select_start = char_idx
 					g_extra.text_box.select_length = 0

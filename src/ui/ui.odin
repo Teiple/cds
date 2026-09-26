@@ -124,9 +124,9 @@ Input_Event :: struct {
 	pointer_captured:  bool,
 	scroll_captured:   bool,
 	keyboard_captured: bool,
-	selected_once:     bool,
+	pressed_once:      bool,
 	hovered_elements:  [dynamic]Id,
-	selected_elements: [dynamic]Id,
+	pressed_elements:  [dynamic]Id,
 	held_elements:     [dynamic]Id,
 	clicked_elements:  [dynamic]Id,
 	scrolls:           map[Id]Scroll_Data,
@@ -1383,7 +1383,7 @@ make_context :: proc(
 		input_event = {
 			pointer_captured = false,
 			hovered_elements = make([dynamic]Id, 0, 4),
-			selected_elements = make([dynamic]Id, 0, 4),
+			pressed_elements = make([dynamic]Id, 0, 4),
 			held_elements = make([dynamic]Id, 0, 4),
 			clicked_elements = make([dynamic]Id, 0, 4),
 			scrolls = make(map[Id]Scroll_Data, 4),
@@ -1415,7 +1415,7 @@ delete_context :: proc(ctx: Context) {
 	delete(ctx.input.keyboard.characters)
 
 	delete(ctx.input_event.hovered_elements)
-	delete(ctx.input_event.selected_elements)
+	delete(ctx.input_event.pressed_elements)
 	delete(ctx.input_event.held_elements)
 	delete(ctx.input_event.clicked_elements)
 	delete(ctx.input_event.scrolls)
@@ -1483,9 +1483,10 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 	{
 		ctx.input_event.pointer_captured = false
 		ctx.input_event.scroll_captured = false
-		ctx.input_event.selected_once = false
+		ctx.input_event.pressed_once = false
 
 		clear(&ctx.input_event.hovered_elements)
+		clear(&ctx.input_event.pressed_elements)
 		clear(&ctx.input_event.clicked_elements)
 		clear(&ctx.clip.open_clip_stack)
 
@@ -1847,12 +1848,12 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 				if rect_contains(ctx.input.pointer.position, clipped_rect) {
 					switch ctx.input.pointer.state {
 					case .Pressed:
-						if !ctx.input_event.selected_once {
-							clear(&ctx.input_event.selected_elements)
+						if !ctx.input_event.pressed_once {
+							clear(&ctx.input_event.pressed_elements)
 							clear(&ctx.input_event.held_elements)
-							ctx.input_event.selected_once = true
+							ctx.input_event.pressed_once = true
 						}
-						append(&ctx.input_event.selected_elements, ele.id)
+						append(&ctx.input_event.pressed_elements, ele.id)
 						append(&ctx.input_event.held_elements, ele.id)
 					case .Released:
 						if is_id_held(ele.id) {
@@ -2491,18 +2492,18 @@ rect_by_id :: proc(id: Id) -> (Rect, bool) #optional_ok {
 	return rect, ok
 }
 
-is_id_selected :: proc(id: Id) -> bool {
-	for ele_id in g_ui_builder.current_context.input_event.selected_elements {
+is_id_pressed :: proc(id: Id) -> bool {
+	for ele_id in g_ui_builder.current_context.input_event.pressed_elements {
 		if ele_id == id do return true
 	}
 	return false
 }
 
-is_this_selected :: proc() -> bool {
-	return is_id_selected(g_ui_builder.last_id)
+is_this_pressed :: proc() -> bool {
+	return is_id_pressed(g_ui_builder.last_id)
 }
 
-is_selected :: is_this_selected
+is_pressed :: is_this_pressed
 
 is_id_held :: proc(id: Id) -> bool {
 	for ele_id in g_ui_builder.current_context.input_event.held_elements {
