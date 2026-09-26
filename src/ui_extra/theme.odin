@@ -43,7 +43,7 @@ Control_Result :: enum {
 	Closed  = 4,
 }
 
-Control_Style :: struct {
+Control_Style :: struct #all_or_none {
 	border:        [Control_State][4]u8,
 	background:    [Control_State][4]u8,
 	text:          [Control_State][4]u8,
@@ -228,7 +228,7 @@ DEFAULT_THEME: Style_Theme : {
 			text = PANEL_STYLE.text,
 			border_width = 1,
 			outline = PANEL_STYLE.outline,
-			corner_radius = {},
+			corner_radius = {3, 3, 3, 3},
 			padding = {4, 4, 2, 2},
 		},
 		.ListView = DEFAULT_CONTROL_STYLE,

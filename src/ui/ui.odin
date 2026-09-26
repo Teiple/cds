@@ -487,6 +487,8 @@ Text_Edit_Config :: struct {
 	cursor_visible:  bool,
 	cursor_color:    [4]u8,
 	scroll_offset:   [2]f32,
+	multiline:       bool,
+	wrap:            bool,
 }
 
 Element :: struct {
@@ -699,6 +701,7 @@ calculate_text_width :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
 	config: Text_Config
 	preferred_size: ^[2]f32
+	multiline := true
 	#partial switch &attr in current.attributes {
 	case Text_Attributes:
 		config = attr.config
@@ -706,6 +709,7 @@ calculate_text_width :: proc(ctx: ^Context, index: Index) {
 	case Text_Edit_Attributes:
 		config = attr.config.text
 		preferred_size = &attr.preferred_size
+		multiline = attr.config.multiline
 	case:
 		return
 	}
@@ -714,20 +718,32 @@ calculate_text_width :: proc(ctx: ^Context, index: Index) {
 	max_line_width := f32(0)
 	largest_word_width := f32(0)
 
-	line_start := 0
-	for byte_index := 0; byte_index <= len(content); byte_index += 1 {
-		is_newline := byte_index == len(content) || content[byte_index] == '\n'
-		if is_newline {
-			line_end := byte_index
-			if line_end > line_start && content[line_end - 1] == '\r' {
-				line_end -= 1
+	if !multiline {
+		config.content = content
+		max_line_width = measure_text_width(
+			config,
+			ctx.fonts[config.font_index],
+		)
+	} else {
+		line_start := 0
+		for byte_index := 0; byte_index <= len(content); byte_index += 1 {
+			is_newline :=
+				byte_index == len(content) || content[byte_index] == '\n'
+			if is_newline {
+				line_end := byte_index
+				if line_end > line_start && content[line_end - 1] == '\r' {
+					line_end -= 1
+				}
+				config.content = content[line_start:line_end]
+				line_w := measure_text_width(
+					config,
+					ctx.fonts[config.font_index],
+				)
+				if line_w > max_line_width {
+					max_line_width = line_w
+				}
+				line_start = byte_index + 1
 			}
-			config.content = content[line_start:line_end]
-			line_w := measure_text_width(config, ctx.fonts[config.font_index])
-			if line_w > max_line_width {
-				max_line_width = line_w
-			}
-			line_start = byte_index + 1
 		}
 	}
 
@@ -1059,6 +1075,8 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 		bound_size: ^[2]f32
 		wrapped_text_lines_start: ^i32
 		wrapped_text_lines_count: ^i32
+		multiline := true
+		wrap := true
 
 		#partial switch &attr in ele.attributes {
 		case Text_Attributes:
@@ -1073,6 +1091,8 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 			bound_size = &attr.bound_size
 			wrapped_text_lines_start = &attr.wrapped_text_lines_start
 			wrapped_text_lines_count = &attr.wrapped_text_lines_count
+			multiline = attr.config.multiline
+			wrap = attr.config.wrap
 		case:
 			wrap_texts(ctx, child_index)
 			continue
@@ -1091,13 +1111,19 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 				ele.size.y =
 					config.font_size * f32(wrapped_count) +
 					f32(wrapped_count - 1) * config.line_spacing
-				bound_size.x = ele.size.x
+				bound_size.x = wrap ? ele.size.x : preferred_size.x
 			} else {
 				ele.size.y = config.font_size
 				bound_size.x = preferred_size.x
 			}
 			ele.limits.y.min = ele.size.y
 			bound_size.y = ele.size.y
+		}
+
+		if !multiline {
+			append(&ctx.wrapped_text_lines, content)
+			wrapped_count += 1
+			continue
 		}
 
 		raw_line_start := 0
@@ -1113,6 +1139,12 @@ wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 
 			raw_line := content[raw_line_start:raw_line_end]
 			raw_line_start = raw_index + 1
+
+			if !wrap {
+				append(&ctx.wrapped_text_lines, raw_line)
+				wrapped_count += 1
+				continue
+			}
 
 			config.content = raw_line
 			line_w := measure_text_width(config, ctx.fonts[config.font_index])
@@ -2331,6 +2363,8 @@ draw_text_edit :: proc(
 	cursor_visible: bool = false,
 	cursor_color: [4]u8 = {0, 0, 0, 0},
 	scroll_offset: [2]f32 = {0, 0},
+	multiline: bool = false,
+	wrap: bool = false,
 	loc := #caller_location,
 ) -> bool {
 	open_text_edit(
@@ -2349,6 +2383,8 @@ draw_text_edit :: proc(
 			cursor_visible = cursor_visible,
 			cursor_color = cursor_color,
 			scroll_offset = scroll_offset,
+			multiline = multiline,
+			wrap = wrap,
 		},
 	)
 	return true

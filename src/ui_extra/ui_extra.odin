@@ -2,9 +2,8 @@ package ui_extra
 import "../ui"
 
 UI_Extra_State :: struct {
-	theme:     Style_Theme,
-	text_box:  Text_Box_State,
-	value_box: Value_Box_State,
+	theme:    Style_Theme,
+	text_box: Text_Box_State,
 }
 
 @(private)
@@ -40,6 +39,5 @@ get_control_outline :: proc(
 }
 
 destroy :: proc() {
-	delete(g_extra.text_box.snapshot)
-	delete(g_extra.value_box.buffer)
+	delete(g_extra.text_box.buffer)
 }

@@ -457,7 +457,7 @@ Text_Box_State :: struct {
 	select_length:   int,
 	scroll_offset_x: f32,
 	blink_counter:   int,
-	snapshot:        [dynamic]u8,
+	buffer:          [dynamic]u8,
 }
 
 text_box :: proc(
@@ -523,13 +523,15 @@ draw_text_box_with_id :: proc(
 			is_editing = true
 			state = get_control_state(id, disabled, true)
 			g_extra.text_box.id = id
-			g_extra.text_box.cursor_pos = len(buffer^)
+			if buffer != &g_extra.text_box.buffer {
+				clear(&g_extra.text_box.buffer)
+				append(&g_extra.text_box.buffer, ..buffer^[:])
+			}
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
 			g_extra.text_box.select_start = g_extra.text_box.cursor_pos
 			g_extra.text_box.select_length = 0
 			g_extra.text_box.scroll_offset_x = 0
 			g_extra.text_box.blink_counter = 0
-			clear(&g_extra.text_box.snapshot)
-			append(&g_extra.text_box.snapshot, ..buffer^[:])
 		}
 	}
 
@@ -537,19 +539,21 @@ draw_text_box_with_id :: proc(
 		ui.capture_keyboard()
 		if g_extra.text_box.id != id {
 			g_extra.text_box.id = id
-			g_extra.text_box.cursor_pos = len(buffer^)
+			if buffer != &g_extra.text_box.buffer {
+				clear(&g_extra.text_box.buffer)
+				append(&g_extra.text_box.buffer, ..buffer^[:])
+			}
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
 			g_extra.text_box.select_start = g_extra.text_box.cursor_pos
 			g_extra.text_box.select_length = 0
 			g_extra.text_box.scroll_offset_x = 0
 			g_extra.text_box.blink_counter = 0
-			clear(&g_extra.text_box.snapshot)
-			append(&g_extra.text_box.snapshot, ..buffer^[:])
 		}
 
 		g_extra.text_box.cursor_pos = clamp(
 			g_extra.text_box.cursor_pos,
 			0,
-			len(buffer^),
+			len(g_extra.text_box.buffer),
 		)
 		g_extra.text_box.blink_counter += 1
 
@@ -562,7 +566,7 @@ draw_text_box_with_id :: proc(
 					style.padding.left +
 					g_extra.text_box.scroll_offset_x
 				char_idx := ui.get_char_index_at_x(
-					string(buffer^[:]),
+					string(g_extra.text_box.buffer[:]),
 					click_local_x,
 					g_extra.theme.font_size,
 					g_extra.theme.font_index,
@@ -586,8 +590,8 @@ draw_text_box_with_id :: proc(
 
 		if ctrl_down && ui.is_key_pressed(.A) {
 			g_extra.text_box.select_start = 0
-			g_extra.text_box.select_length = len(buffer^)
-			g_extra.text_box.cursor_pos = len(buffer^)
+			g_extra.text_box.select_length = len(g_extra.text_box.buffer)
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
 			g_extra.text_box.blink_counter = 0
 		} else if ctrl_down && ui.is_key_pressed(.C) {
 			if g_extra.text_box.select_length != 0 {
@@ -601,10 +605,12 @@ draw_text_box_with_id :: proc(
 					g_extra.text_box.select_start +
 					g_extra.text_box.select_length,
 				)
-				s_start = clamp(s_start, 0, len(buffer^))
-				s_end = clamp(s_end, 0, len(buffer^))
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
 				if s_start < s_end {
-					ui.set_clipboard(string(buffer^[s_start:s_end]))
+					ui.set_clipboard(
+						string(g_extra.text_box.buffer[s_start:s_end]),
+					)
 				}
 			}
 		} else if ctrl_down && ui.is_key_pressed(.X) {
@@ -619,11 +625,13 @@ draw_text_box_with_id :: proc(
 					g_extra.text_box.select_start +
 					g_extra.text_box.select_length,
 				)
-				s_start = clamp(s_start, 0, len(buffer^))
-				s_end = clamp(s_end, 0, len(buffer^))
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
 				if s_start < s_end {
-					ui.set_clipboard(string(buffer^[s_start:s_end]))
-					remove_range(buffer, s_start, s_end)
+					ui.set_clipboard(
+						string(g_extra.text_box.buffer[s_start:s_end]),
+					)
+					remove_range(&g_extra.text_box.buffer, s_start, s_end)
 					g_extra.text_box.cursor_pos = s_start
 					g_extra.text_box.select_start = s_start
 					g_extra.text_box.select_length = 0
@@ -645,15 +653,21 @@ draw_text_box_with_id :: proc(
 						g_extra.text_box.select_start +
 						g_extra.text_box.select_length,
 					)
-					s_start = clamp(s_start, 0, len(buffer^))
-					s_end = clamp(s_end, 0, len(buffer^))
-					remove_range(buffer, s_start, s_end)
+					s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+					s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+					remove_range(&g_extra.text_box.buffer, s_start, s_end)
 					g_extra.text_box.cursor_pos = s_start
 					g_extra.text_box.select_length = 0
 				}
 				for ch in clip {
-					if ch >= 32 && ch < 127 && len(buffer^) < max_len {
-						inject_at(buffer, g_extra.text_box.cursor_pos, u8(ch))
+					if ch >= 32 &&
+					   ch < 127 &&
+					   len(g_extra.text_box.buffer) < max_len {
+						inject_at(
+							&g_extra.text_box.buffer,
+							g_extra.text_box.cursor_pos,
+							u8(ch),
+						)
 						g_extra.text_box.cursor_pos += 1
 						changed = true
 					}
@@ -664,7 +678,9 @@ draw_text_box_with_id :: proc(
 		} else if !ctrl_down {
 			chars := ui.get_input_characters()
 			for ch in chars {
-				if ch >= 32 && ch < 127 && len(buffer^) < max_len {
+				if ch >= 32 &&
+				   ch < 127 &&
+				   len(g_extra.text_box.buffer) < max_len {
 					if g_extra.text_box.select_length != 0 {
 						s_start := min(
 							g_extra.text_box.select_start,
@@ -676,13 +692,21 @@ draw_text_box_with_id :: proc(
 							g_extra.text_box.select_start +
 							g_extra.text_box.select_length,
 						)
-						s_start = clamp(s_start, 0, len(buffer^))
-						s_end = clamp(s_end, 0, len(buffer^))
-						remove_range(buffer, s_start, s_end)
+						s_start = clamp(
+							s_start,
+							0,
+							len(g_extra.text_box.buffer),
+						)
+						s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+						remove_range(&g_extra.text_box.buffer, s_start, s_end)
 						g_extra.text_box.cursor_pos = s_start
 						g_extra.text_box.select_length = 0
 					}
-					inject_at(buffer, g_extra.text_box.cursor_pos, u8(ch))
+					inject_at(
+						&g_extra.text_box.buffer,
+						g_extra.text_box.cursor_pos,
+						u8(ch),
+					)
 					g_extra.text_box.cursor_pos += 1
 					g_extra.text_box.select_start = g_extra.text_box.cursor_pos
 					changed = true
@@ -703,7 +727,7 @@ draw_text_box_with_id :: proc(
 			g_extra.text_box.blink_counter = 0
 		}
 		if ui.is_key_pressed(.Right) &&
-		   g_extra.text_box.cursor_pos < len(buffer^) {
+		   g_extra.text_box.cursor_pos < len(g_extra.text_box.buffer) {
 			g_extra.text_box.cursor_pos += 1
 			if shift_down {
 				g_extra.text_box.select_length =
@@ -726,7 +750,7 @@ draw_text_box_with_id :: proc(
 			g_extra.text_box.blink_counter = 0
 		}
 		if ui.is_key_pressed(.End) {
-			g_extra.text_box.cursor_pos = len(buffer^)
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
 			if shift_down {
 				g_extra.text_box.select_length =
 					g_extra.text_box.cursor_pos - g_extra.text_box.select_start
@@ -748,16 +772,19 @@ draw_text_box_with_id :: proc(
 					g_extra.text_box.select_start +
 					g_extra.text_box.select_length,
 				)
-				s_start = clamp(s_start, 0, len(buffer^))
-				s_end = clamp(s_end, 0, len(buffer^))
-				remove_range(buffer, s_start, s_end)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				remove_range(&g_extra.text_box.buffer, s_start, s_end)
 				g_extra.text_box.cursor_pos = s_start
 				g_extra.text_box.select_start = s_start
 				g_extra.text_box.select_length = 0
 				changed = true
 				g_extra.text_box.blink_counter = 0
 			} else if g_extra.text_box.cursor_pos > 0 {
-				ordered_remove(buffer, g_extra.text_box.cursor_pos - 1)
+				ordered_remove(
+					&g_extra.text_box.buffer,
+					g_extra.text_box.cursor_pos - 1,
+				)
 				g_extra.text_box.cursor_pos -= 1
 				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
 				changed = true
@@ -776,32 +803,62 @@ draw_text_box_with_id :: proc(
 					g_extra.text_box.select_start +
 					g_extra.text_box.select_length,
 				)
-				s_start = clamp(s_start, 0, len(buffer^))
-				s_end = clamp(s_end, 0, len(buffer^))
-				remove_range(buffer, s_start, s_end)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				remove_range(&g_extra.text_box.buffer, s_start, s_end)
 				g_extra.text_box.cursor_pos = s_start
 				g_extra.text_box.select_start = s_start
 				g_extra.text_box.select_length = 0
 				changed = true
 				g_extra.text_box.blink_counter = 0
-			} else if g_extra.text_box.cursor_pos < len(buffer^) {
-				ordered_remove(buffer, g_extra.text_box.cursor_pos)
+			} else if g_extra.text_box.cursor_pos <
+			   len(g_extra.text_box.buffer) {
+				ordered_remove(
+					&g_extra.text_box.buffer,
+					g_extra.text_box.cursor_pos,
+				)
 				changed = true
 				g_extra.text_box.blink_counter = 0
 			}
 		}
 		if ui.is_key_pressed(.Enter) {
+			if buffer != &g_extra.text_box.buffer {
+				clear(buffer)
+				append(buffer, ..g_extra.text_box.buffer[:])
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			}
 			edit_mode^ = false
 			committed = true
 		}
 		if ui.is_key_pressed(.Escape) {
-			clear(buffer)
-			append(buffer, ..g_extra.text_box.snapshot[:])
+			clear(&g_extra.text_box.buffer)
+			g_extra.text_box.id = 0
 			edit_mode^ = false
-			changed = true
+		}
+		if ui.is_key_pressed(.Tab) {
+			if buffer != &g_extra.text_box.buffer {
+				clear(buffer)
+				append(buffer, ..g_extra.text_box.buffer[:])
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			}
+			edit_mode^ = false
+			committed = true
+			if shift_down {
+				ui.focus_previous()
+			} else {
+				ui.focus_next()
+			}
 		}
 
 		if ui.pointer_state() == .Pressed && !ui.is_id_hovered(id) {
+			if buffer != &g_extra.text_box.buffer {
+				clear(buffer)
+				append(buffer, ..g_extra.text_box.buffer[:])
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			}
 			edit_mode^ = false
 			committed = true
 		}
@@ -816,10 +873,10 @@ draw_text_box_with_id :: proc(
 	if is_editing && g_extra.text_box.id == id {
 		assert(
 			g_extra.text_box.cursor_pos >= 0 &&
-			g_extra.text_box.cursor_pos <= len(buffer^),
+			g_extra.text_box.cursor_pos <= len(g_extra.text_box.buffer),
 		)
 		cursor_x = ui.measure_text(
-			string(buffer^[:g_extra.text_box.cursor_pos]),
+			string(g_extra.text_box.buffer[:g_extra.text_box.cursor_pos]),
 			g_extra.theme.font_size,
 			g_extra.theme.font_index,
 		)
@@ -849,7 +906,8 @@ draw_text_box_with_id :: proc(
 		outline = outline,
 		corner_radius = style.corner_radius,
 	) {
-		text_str := string(buffer^[:])
+		text_str :=
+			is_editing ? string(g_extra.text_box.buffer[:]) : string(buffer^[:])
 		if is_editing {
 			sel_range := [2]int {
 				g_extra.text_box.select_start,
@@ -954,22 +1012,22 @@ draw_spinner_i32 :: proc(
 		if !disabled && !is_editing && ui.is_id_clicked(box_id) {
 			edit_mode^ = true
 			is_editing = true
-			g_extra.value_box.id = box_id
-			clear(&g_extra.value_box.buffer)
+			g_extra.text_box.id = box_id
+			clear(&g_extra.text_box.buffer)
 			b := fmt.tprintf("%d", value^)
-			append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 		}
 
 		if is_editing {
-			if g_extra.value_box.id != box_id {
-				g_extra.value_box.id = box_id
-				clear(&g_extra.value_box.buffer)
+			if g_extra.text_box.id != box_id {
+				g_extra.text_box.id = box_id
+				clear(&g_extra.text_box.buffer)
 				b := fmt.tprintf("%d", value^)
-				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+				append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 			}
 			_, committed := draw_text_box_with_id(
 				box_id,
-				&g_extra.value_box.buffer,
+				&g_extra.text_box.buffer,
 				edit_mode,
 				max_len = 16,
 				width = ui.grow(),
@@ -978,12 +1036,17 @@ draw_spinner_i32 :: proc(
 			)
 			if committed {
 				val, ok := strconv.parse_int(
-					string(g_extra.value_box.buffer[:]),
+					string(g_extra.text_box.buffer[:]),
 				)
 				if ok {
 					value^ = clamp(i32(val), min_val, max_val)
 					changed = true
 				}
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			} else if !edit_mode^ {
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
 			}
 		} else {
 			if !disabled && ui.is_id_held(box_id) {
@@ -1062,6 +1125,7 @@ draw_spinner_f32 :: proc(
 ) -> bool {
 	assert(value != nil)
 	assert(edit_mode != nil)
+
 	wrap_id()
 	id := ui.last_id()
 	if !disabled {
@@ -1112,22 +1176,22 @@ draw_spinner_f32 :: proc(
 		if !disabled && !is_editing && ui.is_id_clicked(box_id) {
 			edit_mode^ = true
 			is_editing = true
-			g_extra.value_box.id = box_id
-			clear(&g_extra.value_box.buffer)
+			g_extra.text_box.id = box_id
+			clear(&g_extra.text_box.buffer)
 			b := fmt.tprintf("%.*f", precision, value^)
-			append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 		}
 
 		if is_editing {
-			if g_extra.value_box.id != box_id {
-				g_extra.value_box.id = box_id
-				clear(&g_extra.value_box.buffer)
+			if g_extra.text_box.id != box_id {
+				g_extra.text_box.id = box_id
+				clear(&g_extra.text_box.buffer)
 				b := fmt.tprintf("%.*f", precision, value^)
-				append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+				append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 			}
 			_, committed := draw_text_box_with_id(
 				box_id,
-				&g_extra.value_box.buffer,
+				&g_extra.text_box.buffer,
 				edit_mode,
 				max_len = 16,
 				width = ui.grow(),
@@ -1136,12 +1200,17 @@ draw_spinner_f32 :: proc(
 			)
 			if committed {
 				val, ok := strconv.parse_f32(
-					string(g_extra.value_box.buffer[:]),
+					string(g_extra.text_box.buffer[:]),
 				)
 				if ok {
 					value^ = clamp(val, min_val, max_val)
 					changed = true
 				}
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			} else if !edit_mode^ {
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
 			}
 		} else {
 			if !disabled && ui.is_id_held(box_id) {
@@ -1199,11 +1268,6 @@ draw_spinner_f32 :: proc(
 }
 
 //region: value_box
-Value_Box_State :: struct {
-	id:     ui.Id,
-	buffer: [dynamic]u8,
-}
-
 value_box :: proc(
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
@@ -1238,22 +1302,22 @@ draw_value_box :: proc(
 	if !disabled && !is_editing && ui.is_this_clicked() {
 		edit_mode^ = true
 		is_editing = true
-		g_extra.value_box.id = id
-		clear(&g_extra.value_box.buffer)
+		g_extra.text_box.id = id
+		clear(&g_extra.text_box.buffer)
 		b := fmt.tprintf("%d", value^)
-		append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+		append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 	}
 
 	if is_editing {
-		if g_extra.value_box.id != id {
-			g_extra.value_box.id = id
-			clear(&g_extra.value_box.buffer)
+		if g_extra.text_box.id != id {
+			g_extra.text_box.id = id
+			clear(&g_extra.text_box.buffer)
 			b := fmt.tprintf("%d", value^)
-			append(&g_extra.value_box.buffer, ..transmute([]u8)b)
+			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 		}
 		_, committed := draw_text_box_with_id(
 			id,
-			&g_extra.value_box.buffer,
+			&g_extra.text_box.buffer,
 			edit_mode,
 			max_len = 16,
 			width = width,
@@ -1261,11 +1325,16 @@ draw_value_box :: proc(
 			disabled = disabled,
 		)
 		if committed {
-			val, ok := strconv.parse_int(string(g_extra.value_box.buffer[:]))
+			val, ok := strconv.parse_int(string(g_extra.text_box.buffer[:]))
 			if ok {
 				value^ = clamp(val, min_val, max_val)
 				changed = true
 			}
+			clear(&g_extra.text_box.buffer)
+			g_extra.text_box.id = 0
+		} else if !edit_mode^ {
+			clear(&g_extra.text_box.buffer)
+			g_extra.text_box.id = 0
 		}
 		return changed
 	}
