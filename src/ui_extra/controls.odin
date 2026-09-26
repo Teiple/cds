@@ -63,7 +63,7 @@ draw_button :: proc(
 	state := get_control_state(id, disabled)
 	style := g_extra.theme.controls[.Button]
 
-	clicked := !disabled && ui.is_this_clicked()
+	clicked := !disabled && ui.is_id_clicked(id)
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
 	if ui.layout(reuse_id = true).draw(
@@ -517,7 +517,8 @@ draw_text_box_with_id :: proc(
 	style := g_extra.theme.controls[.Text_Box]
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 
-	if !disabled && ui.is_id_clicked(id) {
+	if !disabled && ui.is_id_pressed(id) {
+		ui.set_focused_id(id)
 		if !edit_mode^ {
 			edit_mode^ = true
 			is_editing = true
@@ -852,7 +853,7 @@ draw_text_box_with_id :: proc(
 			}
 		}
 
-		if ui.pointer_state() == .Pressed && !ui.is_id_hovered(id) {
+		if ui.is_id_pressed_away(id) {
 			if buffer != &g_extra.text_box.buffer {
 				clear(buffer)
 				append(buffer, ..g_extra.text_box.buffer[:])
@@ -1476,7 +1477,15 @@ draw_dropdown_box :: proc(
 	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
 	changed := false
 
-	if !disabled && ui.is_this_clicked() {
+	popup_id := ui.local_id("popup")
+	if edit_mode^ && !disabled {
+		if ui.is_pressed_away(id, popup_id) {
+			edit_mode^ = false
+		}
+	}
+
+	if !disabled && ui.is_id_pressed(id) {
+		ui.set_focused_id(id)
 		edit_mode^ = !edit_mode^
 	}
 
@@ -1521,7 +1530,7 @@ draw_dropdown_box :: proc(
 		)
 
 		if edit_mode^ && !disabled {
-			if ui.layout().draw(
+			if ui.layout(popup_id).draw(
 				width = ui.grow(),
 				height = ui.fit(),
 				layout_direction = .Top_To_Bottom,
@@ -1546,9 +1555,10 @@ draw_dropdown_box :: proc(
 					if ui.layout(opt_id).draw(
 						width = ui.grow(),
 						height = ui.fit(),
-						background_color = is_selected ? style.background[.Active] : (ui.is_id_hovered(opt_id) ? style.background[.Hovered] : {0, 0, 0, 0}),
+						background_color = style.background[get_this_control_state(active = is_selected)],
 						padding = {6, 6, 2, 2},
 						child_alignment = {.Left, .Center},
+						pointer_mode = .Passthrough,
 					) {
 						ui.text().draw(
 							opt,
@@ -1558,7 +1568,8 @@ draw_dropdown_box :: proc(
 							font_index = g_extra.theme.font_index,
 						)
 					}
-					if ui.is_id_clicked(opt_id) {
+					if ui.is_id_clicked(opt_id) ||
+					   (ui.was_id_held(id) && ui.is_id_released(opt_id)) {
 						active_index^ = i
 						edit_mode^ = false
 						changed = true

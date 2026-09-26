@@ -31,6 +31,18 @@ get_control_state :: proc(
 	return .Normal
 }
 
+get_this_control_state :: proc(
+	disabled: bool = false,
+	active: bool = false,
+) -> Control_State {
+	id := ui.last_id()
+	if disabled do return .Disabled
+	if ui.is_id_held(id) do return .Pressed
+	if active do return .Active
+	if ui.is_id_hovered(id) do return .Hovered
+	return .Normal
+}
+
 get_control_outline :: proc(
 	style: Control_Style,
 	is_focused: bool,
