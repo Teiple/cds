@@ -965,6 +965,15 @@ render :: proc(
 	dest_rect: ui.Rect,
 	scale: f32,
 ) {
+	to_screen_rect :: proc(rec: ui.Rect, dest: ui.Rect, s: f32) -> ui.Rect {
+		return {
+			x = dest.x + rec.x * s,
+			y = dest.y + rec.y * s,
+			width = rec.width * s,
+			height = rec.height * s,
+		}
+	}
+
 	clear(&r.vertices)
 	clear(&r.indices)
 	clear(&r.batches)
@@ -979,12 +988,7 @@ render :: proc(
 		switch c in cmd {
 		case ui.Push_Clip_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			screen_clip := ui.Rect {
-				x      = dest_rect.x + c.rect.x * scale,
-				y      = dest_rect.y + c.rect.y * scale,
-				width  = c.rect.width * scale,
-				height = c.rect.height * scale,
-			}
+			screen_clip := to_screen_rect(c.rect, dest_rect, scale)
 			intersected, ok := ui.intersect_rect(cur, screen_clip)
 			if !ok do intersected = ui.Rect{}
 			append(&r.scissor_stack, intersected)
@@ -1003,6 +1007,7 @@ render :: proc(
 
 		case ui.Rect_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
+			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_filled(r, c.rect, c.color, c.corner_radius)
 			if c.border.thickness > 0 {
@@ -1017,6 +1022,7 @@ render :: proc(
 
 		case ui.Gradient_Rect_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
+			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_gradient(
 				r,
@@ -1036,6 +1042,7 @@ render :: proc(
 
 		case ui.Image_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
+			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.dest, dest_rect, scale)); !ok do break
 			view := r.white_view
 			if c.texture != 0 {
 				view = sg.View {
@@ -1047,6 +1054,8 @@ render :: proc(
 
 		case ui.Text_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
+			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
+
 			font_idx := int(c.font)
 			if font_idx < len(r.fonts) {
 				font_obj := &r.fonts[font_idx]
@@ -1071,16 +1080,22 @@ render :: proc(
 				} else {
 					line_y := pen_y
 					for line in lines {
-						draw_text_line(
-							r,
-							font_obj,
-							line,
-							pen_x,
-							line_y,
-							scale_font,
-							c.spacing,
-							c.color,
-						)
+						line_screen_y0 :=
+							dest_rect.y + (line_y - c.font_size * 0.78) * scale
+						line_screen_y1 := line_screen_y0 + c.font_size * scale
+						if line_screen_y1 >= cur.y &&
+						   line_screen_y0 <= cur.y + cur.height {
+							draw_text_line(
+								r,
+								font_obj,
+								line,
+								pen_x,
+								line_y,
+								scale_font,
+								c.spacing,
+								c.color,
+							)
+						}
 						line_y += c.font_size + c.line_spacing
 					}
 				}
