@@ -206,6 +206,7 @@ Render_Command :: union {
 	Gradient_Rect_Command,
 	Image_Command,
 	Text_Command,
+	Text_Edit_Command,
 	Push_Clip_Command,
 	Pop_Clip_Command,
 }
@@ -225,6 +226,16 @@ Text_Command :: struct #all_or_none {
 	spacing:      f32,
 	line_spacing: f32,
 	color:        [4]u8,
+}
+
+Text_Edit_Command :: struct #all_or_none {
+	using text:      Text_Command,
+	selection_range: [2]int,
+	selection_color: [4]u8,
+	cursor_index:    int,
+	cursor_visible:  bool,
+	cursor_color:    [4]u8,
+	scroll_offset:   [2]f32,
 }
 
 Push_Clip_Command :: struct {
@@ -468,6 +479,16 @@ Text_Config :: struct {
 	alignment:    [2]f32,
 }
 
+Text_Edit_Config :: struct {
+	using text:      Text_Config,
+	selection_range: [2]int,
+	selection_color: [4]u8,
+	cursor_index:    int,
+	cursor_visible:  bool,
+	cursor_color:    [4]u8,
+	scroll_offset:   [2]f32,
+}
+
 Element :: struct {
 	position:   [2]f32,
 	size:       [2]f32,
@@ -477,6 +498,7 @@ Element :: struct {
 	attributes: union {
 		Layout_Attributes,
 		Text_Attributes,
+		Text_Edit_Attributes,
 	},
 }
 
@@ -501,6 +523,14 @@ Layout_Attributes :: struct {
 
 Text_Attributes :: struct {
 	config:                   Text_Config,
+	preferred_size:           [2]f32,
+	bound_size:               [2]f32,
+	wrapped_text_lines_start: i32,
+	wrapped_text_lines_count: i32,
+}
+
+Text_Edit_Attributes :: struct {
+	config:                   Text_Edit_Config,
 	preferred_size:           [2]f32,
 	bound_size:               [2]f32,
 	wrapped_text_lines_start: i32,
@@ -622,6 +652,31 @@ open_text :: proc(ctx: ^Context, id: Id, config: Text_Config) {
 	calculate_text_width(ctx, index)
 }
 
+open_text_edit :: proc(ctx: ^Context, id: Id, config: Text_Edit_Config) {
+	parent_idx := back(ctx.open_layout_stack)
+	index := Index(len(ctx.elements))
+
+	ui_ele := Element {
+		id = id,
+		attributes = Text_Edit_Attributes{config = config},
+		limits = {},
+	}
+
+	ui_ele.link = {
+		parent = parent_idx,
+		last   = nil,
+		next   = nil,
+		prev   = ctx.elements[parent_idx].link.last,
+	}
+	if last, ok := ctx.elements[parent_idx].link.last.?; ok {
+		ctx.elements[last].link.next = index
+	}
+	ctx.elements[parent_idx].link.last = index
+
+	append(&ctx.elements, ui_ele)
+	calculate_text_width(ctx, index)
+}
+
 close_layout :: proc(ctx: ^Context, loc := #caller_location) {
 	index := pop(&ctx.open_layout_stack)
 	ele := &ctx.elements[index]
@@ -642,11 +697,20 @@ measure_text_width :: proc(input: Text_Config, font_info: Font) -> f32 {
 
 calculate_text_width :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
-	text_attr, ok := &current.attributes.(Text_Attributes)
-	if !ok do return
+	config: Text_Config
+	preferred_size: ^[2]f32
+	#partial switch &attr in current.attributes {
+	case Text_Attributes:
+		config = attr.config
+		preferred_size = &attr.preferred_size
+	case Text_Edit_Attributes:
+		config = attr.config.text
+		preferred_size = &attr.preferred_size
+	case:
+		return
+	}
 
-	content := text_attr.config.content
-	config := text_attr.config
+	content := config.content
 	max_line_width := f32(0)
 	largest_word_width := f32(0)
 
@@ -667,9 +731,9 @@ calculate_text_width :: proc(ctx: ^Context, index: Index) {
 		}
 	}
 
-	text_attr.preferred_size.x = max_line_width
-	text_attr.preferred_size.y = text_attr.config.font_size
-	current.size.x = text_attr.preferred_size.x
+	preferred_size.x = max_line_width
+	preferred_size.y = config.font_size
+	current.size.x = preferred_size.x
 
 	{
 		word_start := 0
@@ -990,33 +1054,50 @@ is_separator :: #force_inline proc(r: rune) -> bool {
 
 wrap_texts :: proc(ctx: ^Context, index: Index = 0) {
 	for it := child_iter_start(ctx, index); ele, child_index in child_iter_next(&it) {
-		text_attr, ok := (&ele.attributes.(Text_Attributes))
-		if !ok { 	// layout
+		config: Text_Config
+		preferred_size: [2]f32
+		bound_size: ^[2]f32
+		wrapped_text_lines_start: ^i32
+		wrapped_text_lines_count: ^i32
+
+		#partial switch &attr in ele.attributes {
+		case Text_Attributes:
+			config = attr.config
+			preferred_size = attr.preferred_size
+			bound_size = &attr.bound_size
+			wrapped_text_lines_start = &attr.wrapped_text_lines_start
+			wrapped_text_lines_count = &attr.wrapped_text_lines_count
+		case Text_Edit_Attributes:
+			config = attr.config.text
+			preferred_size = attr.preferred_size
+			bound_size = &attr.bound_size
+			wrapped_text_lines_start = &attr.wrapped_text_lines_start
+			wrapped_text_lines_count = &attr.wrapped_text_lines_count
+		case:
 			wrap_texts(ctx, child_index)
 			continue
 		}
 
-		content := text_attr.config.content
-		config := text_attr.config
+		content := config.content
 
 		wrapped_start := len(ctx.wrapped_text_lines)
 		wrapped_count := 0
 
 		defer {
-			text_attr.wrapped_text_lines_start = i32(wrapped_start)
-			text_attr.wrapped_text_lines_count = i32(wrapped_count)
+			wrapped_text_lines_start^ = i32(wrapped_start)
+			wrapped_text_lines_count^ = i32(wrapped_count)
 
 			if wrapped_count > 1 {
 				ele.size.y =
 					config.font_size * f32(wrapped_count) +
 					f32(wrapped_count - 1) * config.line_spacing
-				text_attr.bound_size.x = ele.size.x
+				bound_size.x = ele.size.x
 			} else {
 				ele.size.y = config.font_size
-				text_attr.bound_size.x = text_attr.preferred_size.x
+				bound_size.x = preferred_size.x
 			}
 			ele.limits.y.min = ele.size.y
-			text_attr.bound_size.y = ele.size.y
+			bound_size.y = ele.size.y
 		}
 
 		raw_line_start := 0
@@ -1141,18 +1222,27 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
-		text_attr := current.attributes.(Text_Attributes)
+		config_alignment: [2]f32
+		preferred_size: [2]f32
+		bound_size: [2]f32
+		#partial switch attr in current.attributes {
+		case Text_Attributes:
+			config_alignment = attr.config.alignment
+			preferred_size = attr.preferred_size
+			bound_size = attr.bound_size
+		case Text_Edit_Attributes:
+			config_alignment = attr.config.alignment
+			preferred_size = attr.preferred_size
+			bound_size = attr.bound_size
+		}
 
 		for axis in Axis {
-			if ele_get_size(current, axis) >
-			   text_get_preferred(text_attr, axis) {
-				remaining :=
-					ele_get_size(current, axis) -
-					text_get_preferred(text_attr, axis)
-
+			pref := axis == .X ? preferred_size.x : preferred_size.y
+			bound := axis == .X ? bound_size.x : bound_size.y
+			if ele_get_size(current, axis) > pref {
+				remaining := ele_get_size(current, axis) - pref
 				align_offset :=
-					remaining *
-					align_get_offset(text_attr.config.alignment, axis)
+					remaining * align_get_offset(config_alignment, axis)
 				ele_set_pos(
 					current,
 					ele_get_pos(current, axis) + align_offset,
@@ -1160,7 +1250,7 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 				)
 			}
 
-			ele_set_size(current, text_get_bound_size(text_attr, axis), axis)
+			ele_set_size(current, bound, axis)
 		}
 
 		return
@@ -1640,6 +1730,32 @@ generate_commands :: proc(ctx: ^Context, index: Index) {
 				},
 			},
 		)
+	case Text_Edit_Attributes:
+		append(
+			&ctx.render_commands,
+			Text_Edit_Command{
+				text = {
+					font = attr.config.font_index,
+					font_size = attr.config.font_size,
+					spacing = ctx.fonts[attr.config.font_index].spacing,
+					line_spacing = attr.config.line_spacing,
+					color = attr.config.color,
+					lines = ctx.wrapped_text_lines[attr.wrapped_text_lines_start:][:attr.wrapped_text_lines_count],
+					rect = {
+						ele.position.x,
+						ele.position.y,
+						attr.bound_size.x,
+						attr.bound_size.y,
+					},
+				},
+				selection_range = attr.config.selection_range,
+				selection_color = attr.config.selection_color,
+				cursor_index = attr.config.cursor_index,
+				cursor_visible = attr.config.cursor_visible,
+				cursor_color = attr.config.cursor_color,
+				scroll_offset = attr.config.scroll_offset,
+			},
+		)
 	}
 
 	for it := child_iter_start(ctx, index); child, child_index in child_iter_next(&it) {
@@ -1909,7 +2025,7 @@ get_float_target :: proc(
 
 is_grow_layout_or_text :: proc(ele: Element, axis: Axis) -> bool {
 	switch attr in ele.attributes {
-	case Text_Attributes:
+	case Text_Attributes, Text_Edit_Attributes:
 		{
 			return true
 		}
@@ -2202,6 +2318,42 @@ draw_text :: proc(
 	return true
 }
 
+draw_text_edit :: proc(
+	content: string,
+	font_index: Font_Index = 0,
+	font_size: f32 = 16,
+	color: [4]u8 = {0, 0, 0, 255},
+	line_spacing: f32 = 8,
+	alignment: Alignment = {x = .Left, y = .Top},
+	selection_range: [2]int = {0, 0},
+	selection_color: [4]u8 = {0, 0, 0, 0},
+	cursor_index: int = -1,
+	cursor_visible: bool = false,
+	cursor_color: [4]u8 = {0, 0, 0, 0},
+	scroll_offset: [2]f32 = {0, 0},
+	loc := #caller_location,
+) -> bool {
+	open_text_edit(
+		g_ui_builder.current_context,
+		g_ui_builder.last_id,
+		{
+			content = content,
+			font_index = font_index,
+			font_size = font_size,
+			color = color,
+			line_spacing = line_spacing,
+			alignment = get_alignment_offset(alignment),
+			selection_range = selection_range,
+			selection_color = selection_color,
+			cursor_index = cursor_index,
+			cursor_visible = cursor_visible,
+			cursor_color = cursor_color,
+			scroll_offset = scroll_offset,
+		},
+	)
+	return true
+}
+
 grow :: #force_inline proc(
 	min: Maybe(f32) = nil,
 	max: Maybe(f32) = nil,
@@ -2424,17 +2576,12 @@ measure_text :: proc(
 	font_size: f32 = 16,
 	font_index: Font_Index = 0,
 ) -> f32 {
-	if int(font_index) < len(g_ui_builder.current_context.fonts) {
-		return measure_text_width(
-			{
-				content = content,
-				font_size = font_size,
-				font_index = font_index,
-			},
-			g_ui_builder.current_context.fonts[font_index],
-		)
-	}
-	return 0
+	assert(g_ui_builder.current_context != nil)
+	assert(int(font_index) < len(g_ui_builder.current_context.fonts))
+	return measure_text_width(
+		{content = content, font_size = font_size, font_index = font_index},
+		g_ui_builder.current_context.fonts[font_index],
+	)
 }
 
 get_char_index_at_x :: proc(
@@ -2443,7 +2590,8 @@ get_char_index_at_x :: proc(
 	font_size: f32 = 16,
 	font_index: Font_Index = 0,
 ) -> int {
-	if int(font_index) >= len(g_ui_builder.current_context.fonts) do return len(content)
+	assert(g_ui_builder.current_context != nil)
+	assert(int(font_index) < len(g_ui_builder.current_context.fonts))
 	font_info := g_ui_builder.current_context.fonts[font_index]
 	scale := font_info.base_size > 0 ? (font_size / font_info.base_size) : 1.0
 	cur_x: f32 = 0
@@ -2465,30 +2613,26 @@ get_char_index_at_x :: proc(
 
 set_clipboard :: proc(text: string) {
 	ctx := g_ui_builder.current_context
-	if ctx != nil && ctx.set_clipboard != nil {
-		ctx.set_clipboard(text, ctx.clipboard_user_data)
-	}
+	assert(ctx != nil)
+	assert(ctx.set_clipboard != nil)
+	ctx.set_clipboard(text, ctx.clipboard_user_data)
 }
 
 get_clipboard :: proc() -> string {
 	ctx := g_ui_builder.current_context
-	if ctx != nil && ctx.get_clipboard != nil {
-		return ctx.get_clipboard(ctx.clipboard_user_data)
-	}
-	return ""
+	assert(ctx != nil)
+	assert(ctx.get_clipboard != nil)
+	return ctx.get_clipboard(ctx.clipboard_user_data)
 }
 
 capture_keyboard :: proc() {
-	if g_ui_builder.current_context != nil {
-		g_ui_builder.current_context.input_event.keyboard_captured = true
-	}
+	assert(g_ui_builder.current_context != nil)
+	g_ui_builder.current_context.input_event.keyboard_captured = true
 }
 
 is_keyboard_captured :: proc() -> bool {
-	if g_ui_builder.current_context != nil {
-		return g_ui_builder.current_context.input_event.keyboard_captured
-	}
-	return false
+	assert(g_ui_builder.current_context != nil)
+	return g_ui_builder.current_context.input_event.keyboard_captured
 }
 
 current_scroll_data :: proc() -> Scroll_Data {
@@ -2703,6 +2847,14 @@ text :: proc(
 ) -> Element_Draw(type_of(draw_text)) {
 	declare_id(id, loc)
 	return {draw_text}
+}
+
+text_edit :: proc(
+	id: Maybe(Id) = nil,
+	loc := #caller_location,
+) -> Element_Draw(type_of(draw_text_edit)) {
+	declare_id(id, loc)
+	return {draw_text_edit}
 }
 
 

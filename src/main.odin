@@ -359,6 +359,7 @@ main :: proc() {
 
 			ui_sokol.destroy(&g_state.ui.renderer)
 			ui.delete_context(g_state.ui.ctx)
+			uie.destroy()
 
 			sg.shutdown()
 		},

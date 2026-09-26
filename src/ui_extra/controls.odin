@@ -812,42 +812,17 @@ draw_text_box_with_id :: proc(
 		has_bounds ? bounds.width - style.padding.left - style.padding.right : 0
 
 	cursor_x: f32 = 0
-	has_selection := false
-	sel_x0: f32 = 0
-	sel_x1: f32 = 0
 
 	if is_editing && g_extra.text_box.id == id {
-		safe_cursor := clamp(g_extra.text_box.cursor_pos, 0, len(buffer^))
+		assert(
+			g_extra.text_box.cursor_pos >= 0 &&
+			g_extra.text_box.cursor_pos <= len(buffer^),
+		)
 		cursor_x = ui.measure_text(
-			string(buffer^[:safe_cursor]),
+			string(buffer^[:g_extra.text_box.cursor_pos]),
 			g_extra.theme.font_size,
 			g_extra.theme.font_index,
 		)
-		if g_extra.text_box.select_length != 0 {
-			s_start := min(
-				g_extra.text_box.select_start,
-				g_extra.text_box.select_start + g_extra.text_box.select_length,
-			)
-			s_end := max(
-				g_extra.text_box.select_start,
-				g_extra.text_box.select_start + g_extra.text_box.select_length,
-			)
-			s_start = clamp(s_start, 0, len(buffer^))
-			s_end = clamp(s_end, 0, len(buffer^))
-			if s_start < s_end {
-				has_selection = true
-				sel_x0 = ui.measure_text(
-					string(buffer^[:s_start]),
-					g_extra.theme.font_size,
-					g_extra.theme.font_index,
-				)
-				sel_x1 = ui.measure_text(
-					string(buffer^[:s_end]),
-					g_extra.theme.font_size,
-					g_extra.theme.font_index,
-				)
-			}
-		}
 
 		if usable_w > 0 {
 			if cursor_x - g_extra.text_box.scroll_offset_x > usable_w - 6 {
@@ -876,52 +851,23 @@ draw_text_box_with_id :: proc(
 	) {
 		text_str := string(buffer^[:])
 		if is_editing {
-			if ui.layout(ui.local_id("text_inner")).draw(
-				offset = {-g_extra.text_box.scroll_offset_x, 0},
-				layout_direction = .Left_To_Right,
-				child_alignment = {.Left, .Center},
-				pointer_mode = .Passthrough,
-			) {
-				if has_selection {
-					if ui.layout(ui.local_id("selection")).draw(
-						width = ui.fixed(sel_x1 - sel_x0),
-						height = ui.fixed(g_extra.theme.font_size * 1.2),
-						background_color = {61, 206, 148, 80},
-						float_mode = ui.Float_At_Parent {
-							attach_points = {
-								element = .LeftCenter,
-								parent = .LeftCenter,
-							},
-							offset = {sel_x0, 0},
-						},
-						pointer_mode = .Ignore,
-					) {}
-				}
-
-				ui.text().draw(
-					text_str,
-					alignment = {.Left, .Center},
-					color = style.text[state],
-					font_size = g_extra.theme.font_size,
-					font_index = g_extra.theme.font_index,
-				)
-
-				if cursor_visible {
-					if ui.layout(ui.local_id("cursor")).draw(
-						width = ui.fixed(2),
-						height = ui.fixed(g_extra.theme.font_size * 1.2),
-						background_color = style.text[state],
-						float_mode = ui.Float_At_Parent {
-							attach_points = {
-								element = .LeftCenter,
-								parent = .LeftCenter,
-							},
-							offset = {cursor_x, 0},
-						},
-						pointer_mode = .Ignore,
-					) {}
-				}
+			sel_range := [2]int {
+				g_extra.text_box.select_start,
+				g_extra.text_box.select_start + g_extra.text_box.select_length,
 			}
+			ui.text_edit().draw(
+				content = text_str,
+				font_index = g_extra.theme.font_index,
+				font_size = g_extra.theme.font_size,
+				color = style.text[state],
+				alignment = {.Left, .Center},
+				selection_range = sel_range,
+				selection_color = {61, 206, 148, 80},
+				cursor_index = g_extra.text_box.cursor_pos,
+				cursor_visible = cursor_visible,
+				cursor_color = style.text[state],
+				scroll_offset = {g_extra.text_box.scroll_offset_x, 0},
+			)
 		} else {
 			ui.text().draw(
 				text_str,

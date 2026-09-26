@@ -38,3 +38,8 @@ get_control_outline :: proc(
 ) -> ui.Outline_Config {
 	return is_focused ? style.outline : {}
 }
+
+destroy :: proc() {
+	delete(g_extra.text_box.snapshot)
+	delete(g_extra.value_box.buffer)
+}
