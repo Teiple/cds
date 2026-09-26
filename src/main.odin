@@ -308,6 +308,72 @@ main :: proc() {
 										&drop_edit,
 										width = ui.fixed(180),
 									)
+
+									if ui.layout().draw(
+										width = ui.fixed(200),
+										height = ui.fit(),
+										padding = {8, 8, 8, 8},
+										corner_radius = {6, 6, 6, 6},
+										border = {
+											thickness = 1,
+											color = {60, 60, 60, 255},
+										},
+										background_gradient = ui.Gradient {
+											direction = .Vertical,
+											stops = []ui.Gradient_Stop {
+												{
+													color = {
+														154,
+														209,
+														252,
+														255,
+													},
+													position = 0.00,
+												},
+												{
+													color = {
+														128,
+														196,
+														241,
+														255,
+													},
+													position = 0.15,
+												},
+												{
+													color = {
+														22,
+														155,
+														243,
+														255,
+													},
+													position = 0.50,
+												},
+												{
+													color = {
+														18,
+														134,
+														211,
+														255,
+													},
+													position = 0.90,
+												},
+												{
+													color = {
+														20,
+														136,
+														214,
+														255,
+													},
+													position = 1.00,
+												},
+											},
+										},
+									) {
+										ui.text().draw(
+											"Glossy Dark Panel",
+											color = {255, 255, 255, 255},
+										)
+									}
 								}
 
 							}

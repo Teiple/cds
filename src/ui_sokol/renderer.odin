@@ -608,6 +608,264 @@ render_rounded_rect_filled :: proc(
 }
 
 @(private = "file")
+push_quad_colors :: proc(
+	r: ^Renderer,
+	p0, p1, p2, p3: [2]f32,
+	uv0, uv1, uv2, uv3: [2]f32,
+	c0, c1, c2, c3: [4]u8,
+) {
+	base_idx := u16(len(r.vertices))
+
+	append(
+		&r.vertices,
+		Vertex{p0, uv0, c0},
+		Vertex{p1, uv1, c1},
+		Vertex{p2, uv2, c2},
+		Vertex{p3, uv3, c3},
+	)
+
+	append(
+		&r.indices,
+		base_idx + 0,
+		base_idx + 1,
+		base_idx + 2,
+		base_idx + 0,
+		base_idx + 2,
+		base_idx + 3,
+	)
+
+	if len(r.batches) > 0 {
+		r.batches[len(r.batches) - 1].num_elements += 6
+	}
+}
+
+@(private = "file")
+sample_gradient_color :: proc(
+	grad: ui.Gradient,
+	full_rect: ui.Rect,
+	p: [2]f32,
+) -> [4]u8 {
+	if len(grad.stops) == 0 do return {255, 255, 255, 255}
+	if len(grad.stops) == 1 do return grad.stops[0].color
+
+	t: f32 = 0
+	if grad.direction == .Horizontal {
+		if full_rect.width > 0 {
+			t = (p.x - full_rect.x) / full_rect.width
+		}
+	} else {
+		if full_rect.height > 0 {
+			t = (p.y - full_rect.y) / full_rect.height
+		}
+	}
+	t = clamp(t, 0.0, 1.0)
+
+	if t <= grad.stops[0].position {
+		return grad.stops[0].color
+	}
+	last_idx := len(grad.stops) - 1
+	if t >= grad.stops[last_idx].position {
+		return grad.stops[last_idx].color
+	}
+
+	for i in 0 ..< last_idx {
+		s0 := grad.stops[i]
+		s1 := grad.stops[i + 1]
+		if t >= s0.position && t <= s1.position {
+			span := s1.position - s0.position
+			local_t: f32 = span > 0 ? (t - s0.position) / span : 0
+			r := u8(
+				clamp(
+					f32(s0.color.r) +
+					f32(i16(s1.color.r) - i16(s0.color.r)) * local_t,
+					0,
+					255,
+				),
+			)
+			g := u8(
+				clamp(
+					f32(s0.color.g) +
+					f32(i16(s1.color.g) - i16(s0.color.g)) * local_t,
+					0,
+					255,
+				),
+			)
+			b := u8(
+				clamp(
+					f32(s0.color.b) +
+					f32(i16(s1.color.b) - i16(s0.color.b)) * local_t,
+					0,
+					255,
+				),
+			)
+			a := u8(
+				clamp(
+					f32(s0.color.a) +
+					f32(i16(s1.color.a) - i16(s0.color.a)) * local_t,
+					0,
+					255,
+				),
+			)
+			return {r, g, b, a}
+		}
+	}
+	return grad.stops[last_idx].color
+}
+
+@(private = "file")
+push_rect_gradient :: proc(
+	r: ^Renderer,
+	full_rect: ui.Rect,
+	sub_rect: ui.Rect,
+	grad: ui.Gradient,
+) {
+	if sub_rect.width <= 0 || sub_rect.height <= 0 do return
+	uv: [2]f32 = {0.5, 0.5}
+
+	if len(grad.stops) <= 2 {
+		p0 := [2]f32{sub_rect.x, sub_rect.y}
+		p1 := [2]f32{sub_rect.x + sub_rect.width, sub_rect.y}
+		p2 := [2]f32{sub_rect.x + sub_rect.width, sub_rect.y + sub_rect.height}
+		p3 := [2]f32{sub_rect.x, sub_rect.y + sub_rect.height}
+		c0 := sample_gradient_color(grad, full_rect, p0)
+		c1 := sample_gradient_color(grad, full_rect, p1)
+		c2 := sample_gradient_color(grad, full_rect, p2)
+		c3 := sample_gradient_color(grad, full_rect, p3)
+		push_quad_colors(r, p0, p1, p2, p3, uv, uv, uv, uv, c0, c1, c2, c3)
+		return
+	}
+
+	if grad.direction == .Horizontal {
+		for i in 0 ..< len(grad.stops) - 1 {
+			s0 := grad.stops[i]
+			s1 := grad.stops[i + 1]
+			seg_x0 := full_rect.x + s0.position * full_rect.width
+			seg_x1 := full_rect.x + s1.position * full_rect.width
+			x0 := clamp(seg_x0, sub_rect.x, sub_rect.x + sub_rect.width)
+			x1 := clamp(seg_x1, sub_rect.x, sub_rect.x + sub_rect.width)
+			if x1 <= x0 do continue
+			p0 := [2]f32{x0, sub_rect.y}
+			p1 := [2]f32{x1, sub_rect.y}
+			p2 := [2]f32{x1, sub_rect.y + sub_rect.height}
+			p3 := [2]f32{x0, sub_rect.y + sub_rect.height}
+			c0 := sample_gradient_color(grad, full_rect, p0)
+			c1 := sample_gradient_color(grad, full_rect, p1)
+			c2 := sample_gradient_color(grad, full_rect, p2)
+			c3 := sample_gradient_color(grad, full_rect, p3)
+			push_quad_colors(r, p0, p1, p2, p3, uv, uv, uv, uv, c0, c1, c2, c3)
+		}
+	} else {
+		for i in 0 ..< len(grad.stops) - 1 {
+			s0 := grad.stops[i]
+			s1 := grad.stops[i + 1]
+			seg_y0 := full_rect.y + s0.position * full_rect.height
+			seg_y1 := full_rect.y + s1.position * full_rect.height
+			y0 := clamp(seg_y0, sub_rect.y, sub_rect.y + sub_rect.height)
+			y1 := clamp(seg_y1, sub_rect.y, sub_rect.y + sub_rect.height)
+			if y1 <= y0 do continue
+			p0 := [2]f32{sub_rect.x, y0}
+			p1 := [2]f32{sub_rect.x + sub_rect.width, y0}
+			p2 := [2]f32{sub_rect.x + sub_rect.width, y1}
+			p3 := [2]f32{sub_rect.x, y1}
+			c0 := sample_gradient_color(grad, full_rect, p0)
+			c1 := sample_gradient_color(grad, full_rect, p1)
+			c2 := sample_gradient_color(grad, full_rect, p2)
+			c3 := sample_gradient_color(grad, full_rect, p3)
+			push_quad_colors(r, p0, p1, p2, p3, uv, uv, uv, uv, c0, c1, c2, c3)
+		}
+	}
+}
+
+@(private = "file")
+push_circle_sector_gradient :: proc(
+	r: ^Renderer,
+	full_rect: ui.Rect,
+	grad: ui.Gradient,
+	center: [2]f32,
+	radius: f32,
+	start_angle_deg, end_angle_deg: f32,
+) {
+	if radius <= 0 do return
+	uv: [2]f32 = {0.5, 0.5}
+	step := (end_angle_deg - start_angle_deg) / f32(ARC_SEGMENTS)
+	center_idx := u16(len(r.vertices))
+	center_col := sample_gradient_color(grad, full_rect, center)
+	append(&r.vertices, Vertex{center, uv, center_col})
+
+	for i in 0 ..= ARC_SEGMENTS {
+		angle := math.to_radians_f32(start_angle_deg + f32(i) * step)
+		pos :=
+			center + [2]f32{math.cos(angle) * radius, math.sin(angle) * radius}
+		col := sample_gradient_color(grad, full_rect, pos)
+		append(&r.vertices, Vertex{pos, uv, col})
+	}
+
+	for i in 0 ..< ARC_SEGMENTS {
+		append(
+			&r.indices,
+			center_idx,
+			center_idx + 1 + u16(i),
+			center_idx + 2 + u16(i),
+		)
+		if len(r.batches) > 0 {
+			r.batches[len(r.batches) - 1].num_elements += 3
+		}
+	}
+}
+
+@(private = "file")
+render_rounded_rect_gradient :: proc(
+	r: ^Renderer,
+	rect: ui.Rect,
+	grad: ui.Gradient,
+	rad: ui.Corner_Radius,
+) {
+	w, h := rect.width, rect.height
+	r_tl := clamp(rad.top_left, 0, min(w / 2, h / 2))
+	r_tr := clamp(rad.top_right, 0, min(w / 2, h / 2))
+	r_br := clamp(rad.bottom_right, 0, min(w / 2, h / 2))
+	r_bl := clamp(rad.bottom_left, 0, min(w / 2, h / 2))
+
+	if max(r_tl, r_tr, r_br, r_bl) == 0 {
+		push_rect_gradient(r, rect, rect, grad)
+		return
+	}
+
+	top_h := max(r_tl, r_tr)
+	bot_h := max(r_bl, r_br)
+	mid_h := h - top_h - bot_h
+
+	if mid_h > 0 {
+		push_rect_gradient(r, rect, {rect.x, rect.y + top_h, w, mid_h}, grad)
+	}
+
+	top_w := w - r_tl - r_tr
+	if top_h > 0 && top_w > 0 {
+		push_rect_gradient(
+			r,
+			rect,
+			{rect.x + r_tl, rect.y, top_w, top_h},
+			grad,
+		)
+	}
+
+	bot_w := w - r_bl - r_br
+	if bot_h > 0 && bot_w > 0 {
+		push_rect_gradient(
+			r,
+			rect,
+			{rect.x + r_bl, rect.y + h - bot_h, bot_w, bot_h},
+			grad,
+		)
+	}
+
+	if r_tl > 0 do push_circle_sector_gradient(r, rect, grad, {rect.x + r_tl, rect.y + r_tl}, r_tl, 180, 270)
+	if r_tr > 0 do push_circle_sector_gradient(r, rect, grad, {rect.x + w - r_tr, rect.y + r_tr}, r_tr, 270, 360)
+	if r_br > 0 do push_circle_sector_gradient(r, rect, grad, {rect.x + w - r_br, rect.y + h - r_br}, r_br, 0, 90)
+	if r_bl > 0 do push_circle_sector_gradient(r, rect, grad, {rect.x + r_bl, rect.y + h - r_bl}, r_bl, 90, 180)
+}
+
+@(private = "file")
 render_rounded_rect_border :: proc(
 	r: ^Renderer,
 	rect: ui.Rect,
@@ -747,6 +1005,25 @@ render :: proc(
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_filled(r, c.rect, c.color, c.corner_radius)
+			if c.border.thickness > 0 {
+				render_rounded_rect_border(
+					r,
+					c.rect,
+					c.border.color,
+					c.corner_radius,
+					c.border.thickness,
+				)
+			}
+
+		case ui.Gradient_Rect_Command:
+			cur := r.scissor_stack[len(r.scissor_stack) - 1]
+			set_active_batch(r, r.white_view, cur)
+			render_rounded_rect_gradient(
+				r,
+				c.rect,
+				c.gradient,
+				c.corner_radius,
+			)
 			if c.border.thickness > 0 {
 				render_rounded_rect_border(
 					r,

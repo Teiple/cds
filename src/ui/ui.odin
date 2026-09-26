@@ -168,8 +168,31 @@ Image_Command :: struct #all_or_none {
 	fit:     Image_Fit,
 }
 
+Gradient_Direction :: enum {
+	Horizontal,
+	Vertical,
+}
+
+Gradient_Stop :: struct {
+	color:    [4]u8,
+	position: f32,
+}
+
+Gradient :: struct {
+	direction: Gradient_Direction,
+	stops:     []Gradient_Stop,
+}
+
+Gradient_Rect_Command :: struct #all_or_none {
+	rect:          Rect,
+	corner_radius: Corner_Radius,
+	border:        Border_Config,
+	gradient:      Gradient,
+}
+
 Render_Command :: union {
 	Rect_Command,
+	Gradient_Rect_Command,
 	Image_Command,
 	Text_Command,
 	Push_Clip_Command,
@@ -357,23 +380,24 @@ Element_Link :: struct {
 }
 
 Layout_Config :: struct {
-	width:            Size_Mode,
-	height:           Size_Mode,
-	padding:          Padding,
-	child_gap:        f32,
-	layout_direction: Layout_Direction,
-	child_alignment:  [2]f32,
-	background_color: [4]u8,
-	background_image: Maybe(Image),
-	corner_radius:    Corner_Radius,
-	border:           Border_Config,
-	outline:          Outline_Config,
-	pointer_mode:     Pointer_Mode,
-	clip:             bool,
-	scroll:           bool,
-	ignore_scroll:    bool,
-	float_mode:       Float_Mode,
-	offset:           [2]f32,
+	width:               Size_Mode,
+	height:              Size_Mode,
+	padding:             Padding,
+	child_gap:           f32,
+	layout_direction:    Layout_Direction,
+	child_alignment:     [2]f32,
+	background_color:    [4]u8,
+	background_gradient: Maybe(Gradient),
+	background_image:    Maybe(Image),
+	corner_radius:       Corner_Radius,
+	border:              Border_Config,
+	outline:             Outline_Config,
+	pointer_mode:        Pointer_Mode,
+	clip:                bool,
+	scroll:              bool,
+	ignore_scroll:       bool,
+	float_mode:          Float_Mode,
+	offset:              [2]f32,
 }
 
 
@@ -1494,7 +1518,22 @@ generate_commands :: proc(ctx: ^Context, index: Index) {
 
 	switch attr in ele.attributes {
 	case Layout_Attributes:
-		if attr.config.background_color.a > 0 ||
+		if bg_grad, ok := attr.config.background_gradient.?; ok {
+			append(
+				&ctx.render_commands,
+				Gradient_Rect_Command{
+					rect = {
+						ele.position.x,
+						ele.position.y,
+						ele.size.x,
+						ele.size.y,
+					},
+					gradient = bg_grad,
+					corner_radius = attr.config.corner_radius,
+					border = attr.config.border,
+				},
+			)
+		} else if attr.config.background_color.a > 0 ||
 		   attr.config.border.thickness > 0 {
 			append(
 				&ctx.render_commands,
@@ -2083,6 +2122,7 @@ draw_layout :: proc(
 	layout_direction: Layout_Direction = .Left_To_Right,
 	child_alignment: Alignment = {x = .Left, y = .Top},
 	background_color: [4]u8 = {},
+	background_gradient: Maybe(Gradient) = nil,
 	background_image: Maybe(Image) = nil,
 	corner_radius: Corner_Radius = {4, 4, 4, 4},
 	border: Border_Config = BORDER_DEFAULT,
@@ -2105,6 +2145,7 @@ draw_layout :: proc(
 			layout_direction = layout_direction,
 			child_alignment = get_alignment_offset(child_alignment),
 			background_color = background_color,
+			background_gradient = background_gradient,
 			background_image = background_image,
 			corner_radius = corner_radius,
 			pointer_mode = pointer_mode,
