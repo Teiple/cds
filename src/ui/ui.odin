@@ -15,7 +15,12 @@ Rect :: struct {
 
 Texture_Id :: distinct u64
 Font_Id :: distinct u32
-Id :: u64
+Id :: distinct u64
+
+Id_Declare :: struct {
+	id:      Id,
+	is_auto: bool,
+}
 
 NPatch_Layout :: enum {
 	NINE_PATCH,
@@ -559,16 +564,16 @@ push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
 		loop_tag := "loop"
 		loop_tail := transmute([4]u8)id_entry.loop_count
 
-		new_id := hash.fnv64a(transmute([]u8)loop_tag, id)
+		new_id := hash.fnv64a(transmute([]u8)loop_tag, u64(id))
 		new_id = hash.fnv64a(loop_tail[:], new_id)
 
-		ctx.ids[new_id] = {
+		ctx.ids[Id(new_id)] = {
 			base       = id,
 			index      = index,
 			loop_count = 1,
 		}
 
-		return new_id
+		return Id(new_id)
 	} else {
 		ctx.ids[id] = {
 			base       = id,
@@ -2324,8 +2329,8 @@ get_float_z_index :: proc(float: Float_Mode) -> i32 {
 
 BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
 
-@(require_results)
-draw_layout :: proc(
+@(require_results, deferred_none = end_layout)
+layout :: proc(
 	width: Sizing_Axis = {mode = Fit_Size{}},
 	height: Sizing_Axis = {mode = Fit_Size{}},
 	padding: Padding = {2, 2, 2, 2},
@@ -2344,10 +2349,59 @@ draw_layout :: proc(
 	ignore_scroll: bool = false,
 	float_mode: Float_Mode = Float_None{},
 	offset: [2]f32 = {},
+	id: Maybe(Id_Declare) = nil,
+	loc := #caller_location,
 ) -> bool {
+	return begin_layout(
+		width = width,
+		height = height,
+		padding = padding,
+		child_gap = child_gap,
+		layout_direction = layout_direction,
+		child_alignment = child_alignment,
+		background_color = background_color,
+		background_gradient = background_gradient,
+		background_image = background_image,
+		corner_radius = corner_radius,
+		border = border,
+		outline = outline,
+		pointer_mode = pointer_mode,
+		clip = clip,
+		scroll = scroll,
+		ignore_scroll = ignore_scroll,
+		float_mode = float_mode,
+		offset = offset,
+		id = id,
+		loc = loc,
+	)
+}
+
+begin_layout :: proc(
+	width: Sizing_Axis = {mode = Fit_Size{}},
+	height: Sizing_Axis = {mode = Fit_Size{}},
+	padding: Padding = {2, 2, 2, 2},
+	child_gap: f32 = 2,
+	layout_direction: Layout_Direction = .Left_To_Right,
+	child_alignment: Alignment = {x = .Left, y = .Top},
+	background_color: [4]u8 = {},
+	background_gradient: Maybe(Gradient) = nil,
+	background_image: Maybe(Image) = nil,
+	corner_radius: Corner_Radius = {4, 4, 4, 4},
+	border: Border_Config = BORDER_DEFAULT,
+	outline: Outline_Config = {},
+	pointer_mode: Pointer_Mode = .Capture,
+	clip: bool = false,
+	scroll: bool = false,
+	ignore_scroll: bool = false,
+	float_mode: Float_Mode = Float_None{},
+	offset: [2]f32 = {},
+	id: Maybe(Id_Declare) = nil,
+	loc := #caller_location,
+) -> bool {
+	actual_id := register_id(id, loc)
 	return open_layout(
 		g_ui_builder.current_context,
-		g_ui_builder.last_id,
+		actual_id,
 		{
 			width = width.mode,
 			height = height.mode,
@@ -2375,18 +2429,20 @@ draw_layout :: proc(
 	)
 }
 
-draw_text :: proc(
+text :: proc(
 	content: string,
 	font_index: Font_Index = 0,
 	font_size: f32 = 16,
 	color: [4]u8 = {0, 0, 0, 255},
 	line_spacing: f32 = 8,
 	alignment: Alignment = {x = .Left, y = .Top},
+	id: Maybe(Id_Declare) = nil,
 	loc := #caller_location,
 ) -> bool {
+	actual_id := register_id(id, loc)
 	open_text(
 		g_ui_builder.current_context,
-		g_ui_builder.last_id,
+		actual_id,
 		{
 			content = content,
 			font_index = font_index,
@@ -2399,7 +2455,7 @@ draw_text :: proc(
 	return true
 }
 
-draw_text_edit :: proc(
+text_edit :: proc(
 	content: string,
 	font_index: Font_Index = 0,
 	font_size: f32 = 16,
@@ -2414,11 +2470,13 @@ draw_text_edit :: proc(
 	scroll_offset: [2]f32 = {0, 0},
 	multiline: bool = false,
 	wrap: bool = false,
+	id: Maybe(Id_Declare) = nil,
 	loc := #caller_location,
 ) -> bool {
+	actual_id := register_id(id, loc)
 	open_text_edit(
 		g_ui_builder.current_context,
-		g_ui_builder.last_id,
+		actual_id,
 		{
 			content = content,
 			font_index = font_index,
@@ -2620,7 +2678,10 @@ is_float_pressed_away :: proc(float_id: Id) -> bool {
 	if len(g_ui_builder.current_context.input_event.pressed_elements) == 0 {
 		return false
 	}
-	return g_ui_builder.current_context.input_event.pressed_float_id != float_id
+	return(
+		g_ui_builder.current_context.input_event.pressed_float_id !=
+		float_id \
+	)
 }
 
 is_this_float_pressed_away :: proc() -> bool {
@@ -2628,7 +2689,10 @@ is_this_float_pressed_away :: proc() -> bool {
 }
 
 is_float_hovered :: proc(float_id: Id) -> bool {
-	return g_ui_builder.current_context.input_event.hovered_float_id == float_id
+	return(
+		g_ui_builder.current_context.input_event.hovered_float_id ==
+		float_id \
+	)
 }
 
 is_this_float_hovered :: proc() -> bool {
@@ -2919,76 +2983,66 @@ auto_id_hash :: proc(
 			path = path[len(entry_dir):]
 		}
 	}
-	h: u64 = parent_hash
+	h: u64 = u64(parent_hash)
 	h = hash.fnv64a(transmute([]u8)path, h)
 	h = hash.fnv64a(line[:], h)
 	h = hash.fnv64a(column[:], h)
-	return h
+	return Id(h)
 }
 
-@(require_results)
-global_id :: proc(id: string) -> Id {
-	return hash.fnv64a(transmute([]u8)id)
-}
-
-@(require_results)
-local_id :: proc(id: string) -> Id {
+auto_id :: proc(loc := #caller_location) -> Id_Declare {
 	parent_hash :=
 		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	return hash.fnv64a(transmute([]u8)id, parent_hash)
+	return {id = auto_id_hash(parent_hash, loc), is_auto = true}
 }
 
 @(require_results)
-family_id :: proc(id: string, owner: string) -> Id {
-	parent_hash :=
-		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	return hash.fnv64a(transmute([]u8)id, parent_hash)
+global_id :: proc(id: string) -> Id_Declare {
+	return {id = Id(hash.fnv64a(transmute([]u8)id)), is_auto = false}
 }
 
-declare_id :: proc(id: Maybe(Id), loc: runtime.Source_Code_Location) {
+@(require_results)
+local_id :: proc(id: string) -> Id_Declare {
+	parent_hash :=
+		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
+	return {
+		id = Id(hash.fnv64a(transmute([]u8)id, u64(parent_hash))),
+		is_auto = false,
+	}
+}
+
+@(require_results)
+family_id :: proc(id: string, owner: string) -> Id_Declare {
+	parent_hash :=
+		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
+	return {
+		id = Id(hash.fnv64a(transmute([]u8)id, u64(parent_hash))),
+		is_auto = false,
+	}
+}
+
+register_id :: proc(
+	id: Maybe(Id_Declare),
+	loc: runtime.Source_Code_Location,
+) -> Id {
 	index := i32(len(g_ui_builder.current_context.elements))
 
-	new_id: Id
-	if id == nil {
-		parent_hash :=
-			g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-		new_id = auto_id_hash(parent_hash, loc)
-		new_id = push_and_dedupe_id(
+	decl := id.? or_else auto_id(loc)
+
+	actual_id: Id
+	if decl.is_auto {
+		actual_id = push_and_dedupe_id(
 			g_ui_builder.current_context,
 			index,
-			new_id,
+			decl.id,
 		)
-
 	} else {
-		new_id = id.?
-		push_id(g_ui_builder.current_context, index, new_id)
+		push_id(g_ui_builder.current_context, index, decl.id)
+		actual_id = decl.id
 	}
 
-	g_ui_builder.last_id = new_id
-}
-
-Element_Draw :: struct($T: typeid) {
-	draw: T,
-}
-
-@(deferred_none = end_layout)
-layout :: proc(
-	id: Maybe(Id) = nil,
-	loc := #caller_location,
-	reuse_id: bool = false,
-) -> Element_Draw(type_of(draw_layout)) {
-	return begin_layout(id, loc, reuse_id)
-}
-
-begin_layout :: proc(
-	id: Maybe(Id) = nil,
-	loc := #caller_location,
-	reuse_id: bool = false,
-) -> Element_Draw(type_of(draw_layout)) {
-	if !reuse_id {
-		declare_id(id, loc)
-	}
-	return {draw_layout}
+	g_ui_builder.last_id = actual_id
+	return actual_id
 }
 
 end_layout :: proc() {
@@ -2998,22 +3052,6 @@ end_layout :: proc() {
 @(deferred_none = end_layout)
 defer_end_layout :: proc() -> bool {
 	return true
-}
-
-text :: proc(
-	id: Maybe(Id) = nil,
-	loc := #caller_location,
-) -> Element_Draw(type_of(draw_text)) {
-	declare_id(id, loc)
-	return {draw_text}
-}
-
-text_edit :: proc(
-	id: Maybe(Id) = nil,
-	loc := #caller_location,
-) -> Element_Draw(type_of(draw_text_edit)) {
-	declare_id(id, loc)
-	return {draw_text_edit}
 }
 
 

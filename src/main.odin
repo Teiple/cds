@@ -119,7 +119,7 @@ main :: proc() {
 						@(static) tab_idx: int = 0
 						tabs := []string{"Controls", "Containers", "Pickers"}
 
-						if ui.layout().draw(
+						if ui.layout(
 							width = ui.fit(),
 							height = ui.fit(),
 							padding = {8, 8, 4, 4},
@@ -143,7 +143,7 @@ main :: proc() {
 								g_state.frame_time.average_fps,
 								dt * 1000.0,
 							)
-							ui.text().draw(
+							ui.text(
 								fps_text,
 								color = {100, 240, 120, 255},
 								font_size = 14,
@@ -151,13 +151,13 @@ main :: proc() {
 							)
 						}
 
-						if uie.panel().draw(
+						if uie.panel(
 							width = ui.grow(),
 							height = ui.grow(),
 							padding = ui.pad_all(12),
 							gap = 10,
 						) {
-							uie.tab_bar().draw(
+							uie.tab_bar(
 								tabs,
 								&tab_idx,
 								width = ui.grow(),
@@ -166,32 +166,31 @@ main :: proc() {
 
 							switch tab_idx {
 							case 0:
-								if uie.vbox().draw(gap = 8) {
+								if uie.vbox(gap = 8) {
 									@(static) btn_click_count: int = 0
 									btn_id := ui.local_id("demo_btn")
 									btn_text := fmt.tprintf(
 										"Clicked %d times",
 										btn_click_count,
 									)
-									if uie.button(btn_id).draw(
+									if uie.button(
 										btn_text,
+										id = btn_id,
 										width = ui.fixed(160),
 									) {
 										btn_click_count += 1
 									}
-									uie.tooltip().draw(
-										btn_id,
+									uie.tooltip(
+										btn_id.id,
 										"Click me to increment counter",
 									)
 
-									if uie.label_button().draw(
-										"Label Button",
-									) {
+									if uie.label_button("Label Button") {
 										btn_click_count = 0
 									}
 
 									@(static) toggle_val: bool = false
-									uie.toggle().draw(
+									uie.toggle(
 										"Toggle",
 										&toggle_val,
 										width = ui.fixed(140),
@@ -203,27 +202,24 @@ main :: proc() {
 										"Normal",
 										"Hard",
 									}
-									uie.toggle_group().draw(
+									uie.toggle_group(
 										diff_options,
 										&group_val,
 										width = ui.fixed(240),
 									)
 
 									@(static) check_val: bool = true
-									uie.checkbox().draw(
-										"Enable Shadows",
-										&check_val,
-									)
+									uie.checkbox("Enable Shadows", &check_val)
 
 									@(static) slider_val: f32 = 45.0
-									uie.slider_h_f32().draw(
+									uie.slider_h_f32(
 										&slider_val,
 										0,
 										100,
 										width = ui.fixed(240),
 									)
 
-									uie.progress_bar().draw(
+									uie.progress_bar(
 										slider_val,
 										0,
 										100,
@@ -231,41 +227,37 @@ main :: proc() {
 									)
 								}
 							case 1:
-								if uie.vbox().draw(gap = 8) {
-									if uie.group_box().draw(
+								if uie.vbox(gap = 8) {
+									if uie.group_box(
 										"Audio Settings",
 										width = ui.fixed(320),
 									) {
-										uie.label().draw("Master Volume")
-										uie.line().draw()
-										uie.label().draw("Sound Effects")
+										uie.label("Master Volume")
+										uie.line()
+										uie.label("Sound Effects")
 									}
 
 									@(static) win_closed: bool = false
 									if !win_closed {
-										if uie.window_box().draw(
+										if uie.window_box(
 											"Window Dialog",
 											&win_closed,
 											width = ui.fixed(320),
 										) {
-											uie.label().draw(
-												"Window content area",
-											)
-											uie.line().draw("Section Divider")
-											uie.label().draw(
-												"More content below",
-											)
+											uie.label("Window content area")
+											uie.line("Section Divider")
+											uie.label("More content below")
 										}
 									}
 
-									uie.status_bar().draw(
+									uie.status_bar(
 										"Ready - Sokol Odin UI Showcase",
 									)
 								}
 
 
 							case 2:
-								if uie.vbox().draw(gap = 8) {
+								if uie.vbox(gap = 8) {
 									@(static) text_buf: [dynamic]u8
 									@(static) text_buf_inited: bool = false
 									@(static) text_edit: bool = false
@@ -278,7 +270,7 @@ main :: proc() {
 										)
 										text_buf_inited = true
 									}
-									uie.text_box().draw(
+									uie.text_box(
 										&text_buf,
 										&text_edit,
 										width = ui.fixed(200),
@@ -286,7 +278,7 @@ main :: proc() {
 
 									@(static) spin_val: i32 = 5
 									@(static) spin_edit: bool = false
-									uie.spinner_i32().draw(
+									uie.spinner_i32(
 										&spin_val,
 										0,
 										20,
@@ -295,7 +287,7 @@ main :: proc() {
 
 									@(static) spin_fval: f32 = 1.5
 									@(static) spin_fedit: bool = false
-									uie.spinner_f32().draw(
+									uie.spinner_f32(
 										&spin_fval,
 										0,
 										10,
@@ -306,7 +298,7 @@ main :: proc() {
 
 									@(static) val_box: int = 42
 									@(static) val_box_edit: bool = false
-									uie.value_box().draw(
+									uie.value_box(
 										&val_box,
 										0,
 										100,
@@ -319,7 +311,7 @@ main :: proc() {
 										"Option B",
 										"Option C",
 									}
-									uie.combo_box().draw(
+									uie.combo_box(
 										combo_opts,
 										&combo_idx,
 										width = ui.fixed(180),
@@ -334,7 +326,7 @@ main :: proc() {
 										Low    = 0,
 									}
 
-									uie.dropdown_box(Drop_Option{}).draw(
+									uie.dropdown_box(
 										#sparse[Drop_Option]string{
 											.High = "High Quality",
 											.Medium = "Medium Quality",
