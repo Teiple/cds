@@ -212,10 +212,11 @@ main :: proc() {
 									uie.checkbox("Enable Shadows", &check_val)
 
 									@(static) slider_val: f32 = 45.0
-									uie.slider_h_f32(
+									uie.slider_h(
 										&slider_val,
 										0,
 										100,
+										0.01,
 										width = ui.fixed(240),
 									)
 

@@ -2,6 +2,7 @@ package ui_extra
 
 import "../ui"
 import "base:intrinsics"
+import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:strconv"
@@ -1560,113 +1561,24 @@ dropdown_box :: proc(
 }
 
 //region: slider
-slider_h_f32 :: proc(
-	value: ^f32,
-	min_val: f32,
-	max_val: f32,
-	step: f32 = 0,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
-	assert(value != nil)
-
-	root_id := ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	if !disabled {
-		ui.register_focusable(root_id)
-	}
-
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.Slider]
-	outline := get_control_outline(
-		style,
-		!disabled && ui.is_id_focused(root_id),
-	)
-
-	changed := false
-
-	if !disabled && ui.is_id_focused(root_id) {
-		kstep := step > 0 ? step : (max_val - min_val) * 0.05
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
-			value^ = clamp(value^ - kstep, min_val, max_val)
-			changed = true
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
-			value^ = clamp(value^ + kstep, min_val, max_val)
-			changed = true
-		}
-	}
-
-	normalized :=
-		max_val > min_val ? clamp((value^ - min_val) / (max_val - min_val), 0, 1) : 0
-
-	thumb_w: f32 = 12
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		padding = {2, 2, 2, 2},
-		child_alignment = {normalized, .Center},
-		reuse_id = true,
-	) {
-		thumb_id := ui.local_id("thumb")
-
-		if !disabled && ui.is_id_held(thumb_id) {
-			track_rect := ui.rect_by_id(root_id)
-			travel := track_rect.width - 4 - thumb_w
-			if travel > 0 {
-				mouse_pos := ui.pointer_position()
-				new_normalized := clamp(
-					(mouse_pos.x - track_rect.x - 2 - thumb_w * 0.5) / travel,
-					0,
-					1,
-				)
-				new_val := min_val + new_normalized * (max_val - min_val)
-				if step > 0 {
-					new_val =
-						min_val + math.round((new_val - min_val) / step) * step
-					new_val = clamp(new_val, min_val, max_val)
-				}
-				if new_val != value^ {
-					value^ = new_val
-					changed = true
-				}
-			}
-		}
-
-		if ui.layout(
-			width = ui.fixed(thumb_w),
-			height = ui.grow(),
-			background_color = style.background[.Active],
-			corner_radius = {2, 2, 2, 2},
-			id = thumb_id,
-		) {}
-	}
-
-	return changed
+Slider_Direction :: enum {
+	Horizontal,
+	Vertical,
 }
 
-slider_v_f32 :: proc(
-	value: ^f32,
-	min_val: f32,
-	max_val: f32,
-	step: f32 = 0,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
+slider_impl :: proc(
+	value: ^$T,
+	min_val: T,
+	max_val: T,
+	step: T,
+	dir: Slider_Direction,
+	width: ui.Sizing_Axis,
+	height: ui.Sizing_Axis,
+	disabled: bool,
+	id: Maybe(ui.Id),
+	loc: runtime.Source_Code_Location,
+) -> bool where intrinsics.type_is_numeric(T) {
 	assert(value != nil)
-
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -1680,122 +1592,41 @@ slider_v_f32 :: proc(
 		style,
 		!disabled && ui.is_id_focused(root_id),
 	)
-
-	changed := false
-
-	if !disabled && ui.is_id_focused(root_id) {
-		kstep := step > 0 ? step : (max_val - min_val) * 0.05
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
-			value^ = clamp(value^ - kstep, min_val, max_val)
-			changed = true
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
-			value^ = clamp(value^ + kstep, min_val, max_val)
-			changed = true
-		}
-	}
-
-	normalized :=
-		max_val > min_val ? clamp((value^ - min_val) / (max_val - min_val), 0, 1) : 0
-
-	thumb_h: f32 = 12
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		padding = {2, 2, 2, 2},
-		child_alignment = {.Center, 1.0 - normalized},
-		reuse_id = true,
-	) {
-		thumb_id := ui.local_id("thumb")
-
-		if !disabled && ui.is_id_held(thumb_id) {
-			track_rect := ui.rect_by_id(root_id)
-			travel := track_rect.height - 4 - thumb_h
-			if travel > 0 {
-				mouse_pos := ui.pointer_position()
-				new_normalized := clamp(
-					1.0 -
-					(mouse_pos.y - track_rect.y - 2 - thumb_h * 0.5) / travel,
-					0,
-					1,
-				)
-				new_val := min_val + new_normalized * (max_val - min_val)
-				if step > 0 {
-					new_val =
-						min_val + math.round((new_val - min_val) / step) * step
-					new_val = clamp(new_val, min_val, max_val)
-				}
-				if new_val != value^ {
-					value^ = new_val
-					changed = true
-				}
-			}
-		}
-
-		if ui.layout(
-			width = ui.grow(),
-			height = ui.fixed(thumb_h),
-			background_color = style.background[.Active],
-			corner_radius = {2, 2, 2, 2},
-			id = thumb_id,
-		) {}
-	}
-
-	return changed
-}
-
-slider_h_i32 :: proc(
-	value: ^i32,
-	min_val: i32,
-	max_val: i32,
-	step: i32 = 1,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
-	assert(value != nil)
-
-	root_id := ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	if !disabled {
-		ui.register_focusable(root_id)
-	}
-
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.Slider]
-	outline := get_control_outline(
-		style,
-		!disabled && ui.is_id_focused(root_id),
-	)
-
-	changed := false
-
-	if !disabled && ui.is_id_focused(root_id) {
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
-			value^ = max(value^ - step, min_val)
-			changed = true
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
-			value^ = min(value^ + step, max_val)
-			changed = true
-		}
-	}
 
 	f_min := f32(min_val)
 	f_max := f32(max_val)
 	f_val := f32(value^)
-	normalized :=
-		f_max > f_min ? clamp((f_val - f_min) / (f_max - f_min), 0, 1) : 0
+	f_step := f32(step)
+	changed := false
 
-	thumb_w: f32 = 12
+	if !disabled && ui.is_id_focused(root_id) {
+		kstep := f_step > 0 ? f_step : (f_max - f_min) * 0.05
+		when intrinsics.type_is_integer(T) {
+			if kstep < 1 do kstep = 1
+		}
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
+			f_val = clamp(f_val - kstep, f_min, f_max)
+			changed = true
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
+			f_val = clamp(f_val + kstep, f_min, f_max)
+			changed = true
+		}
+		if changed {
+			when intrinsics.type_is_integer(T) {
+				value^ = T(math.round(f_val))
+			} else {
+				value^ = T(f_val)
+			}
+		}
+	}
+
+	normalized :=
+		f_max > f_min ? clamp((f32(value^) - f_min) / (f_max - f_min), 0, 1) : 0
+	thumb_size: f32 = 12
+
+	child_align :=
+		dir == .Horizontal ? ui.Alignment{normalized, .Center} : ui.Alignment{.Center, 1.0 - normalized}
 
 	if ui.layout(
 		width = width,
@@ -1805,145 +1636,122 @@ slider_h_i32 :: proc(
 		outline = outline,
 		corner_radius = style.corner_radius,
 		padding = {2, 2, 2, 2},
-		child_alignment = {normalized, .Center},
+		child_alignment = child_align,
 		reuse_id = true,
 	) {
 		thumb_id := ui.local_id("thumb")
 
 		if !disabled && ui.is_id_held(thumb_id) {
 			track_rect := ui.rect_by_id(root_id)
-			travel := track_rect.width - 4 - thumb_w
+			travel :=
+				(dir == .Horizontal ? track_rect.width : track_rect.height) -
+				4 -
+				thumb_size
 			if travel > 0 {
 				mouse_pos := ui.pointer_position()
-				new_normalized := clamp(
-					(mouse_pos.x - track_rect.x - 2 - thumb_w * 0.5) / travel,
-					0,
-					1,
-				)
-				new_fval := f_min + new_normalized * (f_max - f_min)
-				f_step := f32(step)
+				new_norm: f32
+				if dir == .Horizontal {
+					new_norm = clamp(
+						(mouse_pos.x - track_rect.x - 2 - thumb_size * 0.5) /
+						travel,
+						0,
+						1,
+					)
+				} else {
+					new_norm = clamp(
+						1.0 -
+						(mouse_pos.y - track_rect.y - 2 - thumb_size * 0.5) /
+							travel,
+						0,
+						1,
+					)
+				}
+
+				new_fval := f_min + new_norm * (f_max - f_min)
 				if f_step > 0 {
 					new_fval =
 						f_min +
 						math.round((new_fval - f_min) / f_step) * f_step
 				}
-				new_val := clamp(i32(math.round(new_fval)), min_val, max_val)
-				if new_val != value^ {
-					value^ = new_val
+				new_fval = clamp(new_fval, f_min, f_max)
+
+				var_val: T
+				when intrinsics.type_is_integer(T) {
+					var_val = T(math.round(new_fval))
+				} else {
+					var_val = T(new_fval)
+				}
+				if var_val != value^ {
+					value^ = var_val
 					changed = true
 				}
 			}
 		}
 
+		thumb_w := dir == .Horizontal ? ui.fixed(thumb_size) : ui.grow()
+		thumb_h := dir == .Horizontal ? ui.grow() : ui.fixed(thumb_size)
+
 		if ui.layout(
-			width = ui.fixed(thumb_w),
-			height = ui.grow(),
+			width = thumb_w,
+			height = thumb_h,
 			background_color = style.background[.Active],
 			corner_radius = {2, 2, 2, 2},
 			id = thumb_id,
+			pointer_mode = .Passthrough,
 		) {}
 	}
 
 	return changed
 }
 
-slider_v_i32 :: proc(
-	value: ^i32,
-	min_val: i32,
-	max_val: i32,
-	step: i32 = 1,
+slider_h :: proc(
+	value: ^$T,
+	min_val: T,
+	max_val: T,
+	step: T,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> bool where intrinsics.type_is_numeric(T) {
+	return slider_impl(
+		value,
+		min_val,
+		max_val,
+		step,
+		.Horizontal,
+		width,
+		height,
+		disabled,
+		id,
+		loc,
+	)
+}
+
+slider_v :: proc(
+	value: ^$T,
+	min_val: T,
+	max_val: T,
+	step: T,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
 	disabled: bool = false,
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
-) -> bool {
-	assert(value != nil)
-
-	root_id := ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	if !disabled {
-		ui.register_focusable(root_id)
-	}
-
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.Slider]
-	outline := get_control_outline(
-		style,
-		!disabled && ui.is_id_focused(root_id),
+) -> bool where intrinsics.type_is_numeric(T) {
+	return slider_impl(
+		value,
+		min_val,
+		max_val,
+		step,
+		.Vertical,
+		width,
+		height,
+		disabled,
+		id,
+		loc,
 	)
-
-	changed := false
-
-	if !disabled && ui.is_id_focused(root_id) {
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
-			value^ = max(value^ - step, min_val)
-			changed = true
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
-			value^ = min(value^ + step, max_val)
-			changed = true
-		}
-	}
-
-	f_min := f32(min_val)
-	f_max := f32(max_val)
-	f_val := f32(value^)
-	normalized :=
-		f_max > f_min ? clamp((f_val - f_min) / (f_max - f_min), 0, 1) : 0
-
-	thumb_h: f32 = 12
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		padding = {2, 2, 2, 2},
-		child_alignment = {.Center, 1.0 - normalized},
-		reuse_id = true,
-	) {
-		thumb_id := ui.local_id("thumb")
-
-		if !disabled && ui.is_id_held(thumb_id) {
-			track_rect := ui.rect_by_id(root_id)
-			travel := track_rect.height - 4 - thumb_h
-			if travel > 0 {
-				mouse_pos := ui.pointer_position()
-				new_normalized := clamp(
-					1.0 -
-					(mouse_pos.y - track_rect.y - 2 - thumb_h * 0.5) / travel,
-					0,
-					1,
-				)
-				new_fval := f_min + new_normalized * (f_max - f_min)
-				f_step := f32(step)
-				if f_step > 0 {
-					new_fval =
-						f_min +
-						math.round((new_fval - f_min) / f_step) * f_step
-				}
-				new_val := clamp(i32(math.round(new_fval)), min_val, max_val)
-				if new_val != value^ {
-					value^ = new_val
-					changed = true
-				}
-			}
-		}
-
-		if ui.layout(
-			width = ui.grow(),
-			height = ui.fixed(thumb_h),
-			background_color = style.background[.Active],
-			corner_radius = {2, 2, 2, 2},
-			id = thumb_id,
-		) {}
-	}
-
-	return changed
 }
 
 //region: progress_bar
