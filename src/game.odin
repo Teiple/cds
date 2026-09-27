@@ -4,7 +4,6 @@ import "base:runtime"
 import "core:math"
 import linalg "core:math/linalg"
 import sapp "sokol/app"
-import sg "sokol/gfx"
 import ui "ui"
 import ui_sokol "ui_sokol"
 

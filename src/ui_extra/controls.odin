@@ -173,19 +173,20 @@ toggle :: proc(
 
 //region: toggle_group
 toggle_group :: proc(
-	options: []string,
-	active_index: ^int,
+	options: $O/[$E]string,
+	active_option: ^E,
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
-) -> bool {
-	assert(active_index != nil)
+) -> bool where intrinsics.type_is_enum(E) &&
+	len(E) > 0 {
+	assert(active_option != nil)
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
-	next_active := active_index^
+	next_active := active_option^
 	next_focus: ui.Id = 0
 	changed := false
 
@@ -197,12 +198,14 @@ toggle_group :: proc(
 		padding = {},
 		reuse_id = true,
 	) {
-		for name, i in options {
-			is_active := (active_index^ == i)
-			btn_id := ui.local_id(name)
+		for iter := enum_iter_start(E); opt in enum_iter_next(&iter) {
+			is_active := (active_option^ == opt)
+			btn_id := ui.local_id(opt)
+
 			if !disabled {
 				ui.register_focusable(btn_id)
 			}
+
 			state := get_control_state(btn_id, disabled, is_active)
 			style := g_extra.theme.controls[.Toggle]
 			outline := get_control_outline(
@@ -212,12 +215,12 @@ toggle_group :: proc(
 
 			if !disabled && ui.is_id_focused(btn_id) {
 				if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
-					next_active = (i - 1 + len(options)) % len(options)
-					next_focus = ui.local_id(options[next_active])
+					next_active = enum_prev(active_option^)
+					next_focus = ui.local_id(opt)
 				}
 				if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
-					next_active = (i + 1) % len(options)
-					next_focus = ui.local_id(options[next_active])
+					next_active = enum_next(active_option^)
+					next_focus = ui.local_id(opt)
 				}
 			}
 
@@ -236,7 +239,7 @@ toggle_group :: proc(
 				id = btn_id,
 			) {
 				ui.text(
-					name,
+					options[opt],
 					alignment = {.Center, .Center},
 					color = style.text[state],
 					font_size = g_extra.theme.font_size,
@@ -245,7 +248,7 @@ toggle_group :: proc(
 			}
 
 			if !disabled && ui.is_id_clicked(btn_id) {
-				next_active = i
+				next_active = opt
 			}
 		}
 	}
@@ -254,8 +257,8 @@ toggle_group :: proc(
 		ui.set_focused_id(next_focus)
 	}
 
-	if next_active != active_index^ {
-		active_index^ = next_active
+	if next_active != active_option^ {
+		active_option^ = next_active
 		changed = true
 	}
 
@@ -264,19 +267,19 @@ toggle_group :: proc(
 
 //region: tab_bar
 tab_bar :: proc(
-	tabs: []string,
-	active_index: ^int,
+	tabs: $O/[$E]string,
+	active_tab: ^E,
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
-	assert(active_index != nil)
+	assert(active_tab != nil)
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
-	next_active := active_index^
+	next_active := active_tab^
 	next_focus: ui.Id = 0
 	changed := false
 
@@ -288,14 +291,17 @@ tab_bar :: proc(
 		padding = {},
 		reuse_id = true,
 	) {
-		for name, i in tabs {
-			is_active := (active_index^ == i)
-			tab_id := ui.local_id(name)
+		for iter := enum_iter_start(E); tab in enum_iter_next(&iter) {
+			is_active := (active_tab^ == tab)
+			tab_id := ui.local_id(tab)
+
 			if !disabled {
 				ui.register_focusable(tab_id)
 			}
+
 			state := get_control_state(tab_id, disabled, is_active)
 			style := g_extra.theme.controls[.TabBar]
+
 			outline := get_control_outline(
 				style,
 				!disabled && ui.is_id_focused(tab_id),
@@ -303,12 +309,12 @@ tab_bar :: proc(
 
 			if !disabled && ui.is_id_focused(tab_id) {
 				if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
-					next_active = (i - 1 + len(tabs)) % len(tabs)
-					next_focus = ui.local_id(tabs[next_active])
+					next_active = enum_prev(active_tab^)
+					next_focus = ui.local_id(next_active)
 				}
 				if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
-					next_active = (i + 1) % len(tabs)
-					next_focus = ui.local_id(tabs[next_active])
+					next_active = enum_next(active_tab^)
+					next_focus = ui.local_id(next_active)
 				}
 			}
 
@@ -327,7 +333,7 @@ tab_bar :: proc(
 				id = tab_id,
 			) {
 				ui.text(
-					name,
+					tabs[tab],
 					alignment = {.Center, .Center},
 					color = style.text[state],
 					font_size = g_extra.theme.font_size,
@@ -336,7 +342,7 @@ tab_bar :: proc(
 			}
 
 			if !disabled && ui.is_id_clicked(tab_id) {
-				next_active = i
+				next_active = tab
 			}
 		}
 	}
@@ -345,8 +351,8 @@ tab_bar :: proc(
 		ui.set_focused_id(next_focus)
 	}
 
-	if next_active != active_index^ {
-		active_index^ = next_active
+	if next_active != active_tab^ {
+		active_tab^ = next_active
 		changed = true
 	}
 
@@ -1345,15 +1351,15 @@ value_box :: proc(
 
 //region: combo_box
 combo_box :: proc(
-	options: []string,
-	active_index: ^int,
+	options: $O/[$E]string,
+	active_option: ^E,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
-	assert(active_index != nil)
+	assert(active_option != nil)
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -1371,22 +1377,21 @@ combo_box :: proc(
 
 	if !disabled && ui.is_id_focused(root_id) {
 		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
-			active_index^ = (active_index^ - 1 + len(options)) % len(options)
+			active_option^ = enum_prev(active_option^)
 			changed = true
 		}
 		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
-			active_index^ = (active_index^ + 1) % len(options)
+			active_option^ = enum_next(active_option^)
 			changed = true
 		}
 	}
 
 	if !disabled && ui.is_id_clicked(root_id) {
-		active_index^ = (active_index^ + 1) % len(options)
+		active_option^ = enum_next(active_option^)
 		changed = true
 	}
 
-	label_str :=
-		active_index^ >= 0 && active_index^ < len(options) ? options[active_index^] : ""
+	label_str := options[active_option^]
 
 	if ui.layout(
 		width = width,
@@ -1458,14 +1463,12 @@ dropdown_box :: proc(
 		if edit_mode^ {
 			if len(E) > 1 {
 				if ui.is_key_pressed(.Up) {
-					if next, ok := intrinsics_get_enum_next(active_option^);
-					   ok {
+					if next, ok := enum_next(active_option^); ok {
 						active_option^ = next
 					}
 				}
 				if ui.is_key_pressed(.Down) {
-					if prev, ok := intrinsics_get_enum_prev(active_option^);
-					   ok {
+					if prev, ok := enum_prev(active_option^); ok {
 						active_option^ = prev
 					}
 				}

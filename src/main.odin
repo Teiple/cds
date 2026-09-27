@@ -1,14 +1,12 @@
 package game
 
 import "core:fmt"
-import "core:slice/heap"
 import sapp "sokol/app"
 import sg "sokol/gfx"
 import sglue "sokol/glue"
 import slog "sokol/log"
 
 import "base:runtime"
-import linalg "core:math/linalg"
 import "core:os"
 
 import "ui"
@@ -116,8 +114,19 @@ main :: proc() {
 					}
 
 					if ui.begin(&g_state.ui.ctx, g_state.viewport.base_size) {
-						@(static) tab_idx: int = 0
-						tabs := []string{"Controls", "Containers", "Pickers"}
+						Tab :: enum {
+							Controls,
+							Containers,
+							Pickers,
+						}
+
+						@(static) active_tab: Tab = .Controls
+
+						tabs := [Tab]string {
+							.Controls   = "Controls",
+							.Containers = "Containers",
+							.Pickers    = "Pickers",
+						}
 
 						if ui.layout(
 							width = ui.fit(),
@@ -158,14 +167,14 @@ main :: proc() {
 							gap = 10,
 						) {
 							uie.tab_bar(
-								tabs,
-								&tab_idx,
+								tabs = tabs,
+								active_tab = &active_tab,
 								width = ui.grow(),
 								height = ui.fixed(30),
 							)
 
-							switch tab_idx {
-							case 0:
+							switch active_tab {
+							case .Controls:
 								if uie.vbox(gap = 8) {
 									@(static) btn_click_count: int = 0
 									btn_id := ui.local_id("demo_btn")
@@ -195,16 +204,20 @@ main :: proc() {
 										&toggle_val,
 										width = ui.fixed(140),
 									)
-
-									@(static) group_val: int = 1
-									diff_options := []string {
-										"Easy",
-										"Normal",
-										"Hard",
+									Difficulty :: enum {
+										Easy,
+										Normal,
+										Hard,
 									}
+
+									@(static) group_val: Difficulty = .Easy
 									uie.toggle_group(
-										diff_options,
-										&group_val,
+										options = [Difficulty]string {
+											.Easy = "Easy",
+											.Normal = "Normal",
+											.Hard = "Hard",
+										},
+										active_option = &group_val,
 										width = ui.fixed(240),
 									)
 
@@ -227,7 +240,7 @@ main :: proc() {
 										width = ui.fixed(240),
 									)
 								}
-							case 1:
+							case .Containers:
 								if uie.vbox(gap = 8) {
 									if uie.group_box(
 										"Audio Settings",
@@ -257,7 +270,7 @@ main :: proc() {
 								}
 
 
-							case 2:
+							case .Pickers:
 								if uie.vbox(gap = 8) {
 									@(static) text_buf: [dynamic]u8
 									@(static) text_buf_inited: bool = false
@@ -306,15 +319,21 @@ main :: proc() {
 										&val_box_edit,
 									)
 
-									@(static) combo_idx: int = 0
-									combo_opts := []string {
-										"Option A",
-										"Option B",
-										"Option C",
+									Combo :: enum {
+										A,
+										B,
+										C,
 									}
+
+									@(static) active_combo: Combo = .A
+
 									uie.combo_box(
-										combo_opts,
-										&combo_idx,
+										options = [Combo]string {
+											.A = "Option A",
+											.B = "Option B",
+											.C = "Option C",
+										},
+										active_option = &active_combo,
 										width = ui.fixed(180),
 									)
 

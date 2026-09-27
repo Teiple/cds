@@ -77,14 +77,14 @@ destroy :: proc() {
 }
 
 
-intrinsics_get_enum_next :: proc(
+enum_next :: proc(
 	val: $T,
 	wrap := true,
 ) -> (
 	next: T,
 	ok: bool,
 ) where intrinsics.type_is_enum(T) &&
-	len(T) > 0 {
+	len(T) > 0 #optional_ok {
 	info := runtime.type_info_base(
 		type_info_of(T),
 	).variant.(runtime.Type_Info_Enum)
@@ -102,14 +102,14 @@ intrinsics_get_enum_next :: proc(
 	return val, false
 }
 
-intrinsics_get_enum_prev :: proc(
+enum_prev :: proc(
 	val: $T,
 	wrap := true,
 ) -> (
 	prev: T,
 	ok: bool,
 ) where intrinsics.type_is_enum(T) &&
-	len(T) > 0 {
+	len(T) > 0 #optional_ok {
 	info := runtime.type_info_base(
 		type_info_of(T),
 	).variant.(runtime.Type_Info_Enum)
@@ -151,7 +151,7 @@ enum_iter_start :: proc($T: typeid) -> Enum_Iter(T) {
 enum_iter_next :: proc(iter: ^Enum_Iter($T)) -> (val: T, cond: bool) {
 	if cond = iter.next != nil; cond {
 		val = iter.next.?
-		next, ok := intrinsics_get_enum_next(iter.next.?, wrap = false)
+		next, ok := enum_next(iter.next.?, wrap = false)
 		iter.next = ok ? next : nil
 	}
 	return
