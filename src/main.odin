@@ -213,10 +213,10 @@ main :: proc() {
 
 									@(static) slider_val: f32 = 45.0
 									uie.slider_h(
-										&slider_val,
-										0,
-										100,
-										0.01,
+										value = &slider_val,
+										min_val = 0,
+										max_val = 100,
+										step = 0.01,
 										width = ui.fixed(240),
 									)
 
