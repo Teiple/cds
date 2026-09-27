@@ -10,7 +10,7 @@ vbox :: proc(
 	alignment: ui.Alignment = {.Left, .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
 	return ui.begin_layout(
@@ -33,7 +33,7 @@ hbox :: proc(
 	alignment: ui.Alignment = {.Left, .Top},
 	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
 	return ui.begin_layout(
@@ -56,7 +56,7 @@ panel :: proc(
 	layout_direction: ui.Layout_Direction = .Top_To_Bottom,
 	gap: f32 = 4,
 	padding: Maybe(ui.Padding) = nil,
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
 	style := g_extra.theme.controls[.Panel]
@@ -86,7 +86,7 @@ group_box :: proc(
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	gap: f32 = 4,
 	padding: ui.Padding = {8, 8, 8, 8},
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
 	style := g_extra.theme.controls[.Panel]
@@ -132,7 +132,7 @@ window_box :: proc(
 	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
 	gap: f32 = 4,
 	padding: ui.Padding = {8, 8, 8, 8},
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) -> bool {
 	panel_style := g_extra.theme.controls[.Panel]
@@ -213,7 +213,7 @@ line :: proc(
 	text: string = "",
 	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
 	color: Maybe([4]u8) = nil,
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) {
 	c := color.? or_else g_extra.theme.controls[.Default].border[.Normal]
@@ -258,7 +258,7 @@ status_bar :: proc(
 	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{24}},
 	padding: ui.Padding = {6, 6, 2, 2},
-	id: Maybe(ui.Id_Declare) = nil,
+	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
 ) {
 	style := g_extra.theme.controls[.StatusBar]

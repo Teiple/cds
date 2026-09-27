@@ -1,5 +1,6 @@
 package ui
 
+import "base:intrinsics"
 import "base:runtime"
 import "core:fmt"
 import "core:hash"
@@ -17,20 +18,17 @@ Texture_Id :: distinct u64
 Font_Id :: distinct u32
 Id :: distinct u64
 
-Id_Declare :: struct {
-	id:      Id,
-	is_auto: bool,
-}
-
 NPatch_Layout :: enum {
 	NINE_PATCH,
 	THREE_PATCH_VERTICAL,
 	THREE_PATCH_HORIZONTAL,
 }
 
+@(private)
 back :: proc(array: $D/[dynamic]$T) -> T {
 	return array[len(array) - 1]
 }
+
 @(private = "file")
 WORD_SEPARATION_CHARS :: [?]rune{' ', '\t', '\v', '\f'}
 
@@ -554,8 +552,8 @@ Child_Iter :: struct {
 	next: Maybe(Index),
 }
 
-@(require_results)
-push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
+@(require_results, private)
+push_and_dedupe_context_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
 	if id_entry, ok := ctx.ids[id]; ok {
 		id_entry.loop_count += 1
 
@@ -584,10 +582,11 @@ push_and_dedupe_id :: proc(ctx: ^Context, index: Index, id: Id) -> Id {
 	}
 }
 
-push_id :: proc(ctx: ^Context, index: Index, id: Id) {
+@(private)
+push_context_id :: proc(ctx: ^Context, index: Index, id: Id) {
 	_, existed := ctx.ids[id]
 	if existed {
-		panic("Duplicate ids without manually using dedupe")
+		panic("Duplicate ids without using dedupe")
 	}
 	ctx.ids[id] = {
 		base       = id,
@@ -2327,7 +2326,9 @@ get_float_z_index :: proc(float: Float_Mode) -> i32 {
 	return 0
 }
 
-BORDER_DEFAULT: Border_Config : {thickness = 0, color = {0, 0, 0, 255}}
+// This is no deferred end proc version, once procedure is
+// not a constant, deferred proc is stripped out
+begin_layout := layout
 
 @(require_results, deferred_none = end_layout)
 layout :: proc(
@@ -2341,7 +2342,7 @@ layout :: proc(
 	background_gradient: Maybe(Gradient) = nil,
 	background_image: Maybe(Image) = nil,
 	corner_radius: Corner_Radius = {4, 4, 4, 4},
-	border: Border_Config = BORDER_DEFAULT,
+	border: Border_Config = {thickness = 0, color = {0, 0, 0, 255}},
 	outline: Outline_Config = {},
 	pointer_mode: Pointer_Mode = .Capture,
 	clip: bool = false,
@@ -2349,60 +2350,14 @@ layout :: proc(
 	ignore_scroll: bool = false,
 	float_mode: Float_Mode = Float_None{},
 	offset: [2]f32 = {},
-	id: Maybe(Id_Declare) = nil,
+	id: Maybe(Id) = nil,
+	reuse_id: bool = false,
 	loc := #caller_location,
 ) -> bool {
-	return begin_layout(
-		width = width,
-		height = height,
-		padding = padding,
-		child_gap = child_gap,
-		layout_direction = layout_direction,
-		child_alignment = child_alignment,
-		background_color = background_color,
-		background_gradient = background_gradient,
-		background_image = background_image,
-		corner_radius = corner_radius,
-		border = border,
-		outline = outline,
-		pointer_mode = pointer_mode,
-		clip = clip,
-		scroll = scroll,
-		ignore_scroll = ignore_scroll,
-		float_mode = float_mode,
-		offset = offset,
-		id = id,
-		loc = loc,
-	)
-}
-
-begin_layout :: proc(
-	width: Sizing_Axis = {mode = Fit_Size{}},
-	height: Sizing_Axis = {mode = Fit_Size{}},
-	padding: Padding = {2, 2, 2, 2},
-	child_gap: f32 = 2,
-	layout_direction: Layout_Direction = .Left_To_Right,
-	child_alignment: Alignment = {x = .Left, y = .Top},
-	background_color: [4]u8 = {},
-	background_gradient: Maybe(Gradient) = nil,
-	background_image: Maybe(Image) = nil,
-	corner_radius: Corner_Radius = {4, 4, 4, 4},
-	border: Border_Config = BORDER_DEFAULT,
-	outline: Outline_Config = {},
-	pointer_mode: Pointer_Mode = .Capture,
-	clip: bool = false,
-	scroll: bool = false,
-	ignore_scroll: bool = false,
-	float_mode: Float_Mode = Float_None{},
-	offset: [2]f32 = {},
-	id: Maybe(Id_Declare) = nil,
-	loc := #caller_location,
-) -> bool {
-	actual_id := register_id(id, loc)
 	return open_layout(
 		g_ui_builder.current_context,
-		actual_id,
-		{
+		id = reuse_id ? last_id() : push_id(id),
+		config = {
 			width = width.mode,
 			height = height.mode,
 			padding = padding,
@@ -2422,7 +2377,7 @@ begin_layout :: proc(
 			ignore_scroll = ignore_scroll,
 			offset = offset,
 		},
-		{
+		limits = {
 			x = {min = width.min, max = width.max},
 			y = {min = height.min, max = height.max},
 		},
@@ -2436,14 +2391,13 @@ text :: proc(
 	color: [4]u8 = {0, 0, 0, 255},
 	line_spacing: f32 = 8,
 	alignment: Alignment = {x = .Left, y = .Top},
-	id: Maybe(Id_Declare) = nil,
+	id: Maybe(Id) = nil,
 	loc := #caller_location,
 ) -> bool {
-	actual_id := register_id(id, loc)
 	open_text(
 		g_ui_builder.current_context,
-		actual_id,
-		{
+		id = push_id(id),
+		config = {
 			content = content,
 			font_index = font_index,
 			font_size = font_size,
@@ -2470,14 +2424,13 @@ text_edit :: proc(
 	scroll_offset: [2]f32 = {0, 0},
 	multiline: bool = false,
 	wrap: bool = false,
-	id: Maybe(Id_Declare) = nil,
+	id: Maybe(Id) = nil,
 	loc := #caller_location,
 ) -> bool {
-	actual_id := register_id(id, loc)
 	open_text_edit(
 		g_ui_builder.current_context,
-		actual_id,
-		{
+		id = id == nil ? push_auto_id(loc) : push_id(id.?),
+		config = {
 			content = content,
 			font_index = font_index,
 			font_size = font_size,
@@ -2968,10 +2921,7 @@ rect_contains :: proc(p: [2]f32, rec: Rect) -> bool {
 }
 
 
-auto_id_hash :: proc(
-	parent_hash: Id,
-	loc: runtime.Source_Code_Location,
-) -> Id {
+auto_id_hash :: proc(parent_id: Id, loc: runtime.Source_Code_Location) -> Id {
 	line := transmute([4]u8)loc.line
 	column := transmute([4]u8)loc.column
 	path := loc.file_path
@@ -2983,67 +2933,78 @@ auto_id_hash :: proc(
 			path = path[len(entry_dir):]
 		}
 	}
-	h: u64 = u64(parent_hash)
+	h: u64 = u64(parent_id)
 	h = hash.fnv64a(transmute([]u8)path, h)
 	h = hash.fnv64a(line[:], h)
 	h = hash.fnv64a(column[:], h)
 	return Id(h)
 }
 
-auto_id :: proc(loc := #caller_location) -> Id_Declare {
-	parent_hash :=
-		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	return {id = auto_id_hash(parent_hash, loc), is_auto = true}
+@(private)
+push_auto_id :: proc(loc: runtime.Source_Code_Location) -> Id {
+	parent := back(g_ui_builder.current_context.open_layout_stack)
+	parent_id := g_ui_builder.current_context.elements[parent].id
+	next_index := Index(len(g_ui_builder.current_context.elements))
+
+	id := auto_id_hash(parent_id, loc)
+	id = push_and_dedupe_context_id(
+		g_ui_builder.current_context,
+		next_index,
+		id,
+	)
+
+	return id
 }
 
-@(require_results)
-global_id :: proc(id: string) -> Id_Declare {
-	return {id = Id(hash.fnv64a(transmute([]u8)id)), is_auto = false}
-}
-
-@(require_results)
-local_id :: proc(id: string) -> Id_Declare {
-	parent_hash :=
-		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	return {
-		id = Id(hash.fnv64a(transmute([]u8)id, u64(parent_hash))),
-		is_auto = false,
-	}
-}
-
-@(require_results)
-family_id :: proc(id: string, owner: string) -> Id_Declare {
-	parent_hash :=
-		g_ui_builder.current_context.elements[back(g_ui_builder.current_context.open_layout_stack)].id
-	return {
-		id = Id(hash.fnv64a(transmute([]u8)id, u64(parent_hash))),
-		is_auto = false,
-	}
-}
-
-register_id :: proc(
-	id: Maybe(Id_Declare),
-	loc: runtime.Source_Code_Location,
-) -> Id {
-	index := i32(len(g_ui_builder.current_context.elements))
-
-	decl := id.? or_else auto_id(loc)
-
-	actual_id: Id
-	if decl.is_auto {
-		actual_id = push_and_dedupe_id(
-			g_ui_builder.current_context,
-			index,
-			decl.id,
-		)
+push_id :: proc(id: Maybe(Id), loc := #caller_location) -> Id {
+	new_id: Id
+	if id == nil {
+		new_id = push_auto_id(loc)
 	} else {
-		push_id(g_ui_builder.current_context, index, decl.id)
-		actual_id = decl.id
+		new_id = id.?
+		next_index := Index(len(g_ui_builder.current_context.elements))
+		push_context_id(g_ui_builder.current_context, next_index, new_id)
 	}
 
-	g_ui_builder.last_id = actual_id
-	return actual_id
+	g_ui_builder.last_id = new_id
+
+	return new_id
 }
+
+@(require_results)
+global_id :: proc(id: string) -> Id {
+	return Id(hash.fnv64a(transmute([]u8)id))
+}
+
+
+@(require_results)
+local_id_string :: proc(id: string) -> Id {
+	parent := back(g_ui_builder.current_context.open_layout_stack)
+	parent_id := g_ui_builder.current_context.elements[parent].id
+	return Id(hash.fnv64a(transmute([]u8)id, u64(parent_id)))
+}
+
+@(require_results)
+local_id_enum :: proc(val: $E) -> Id where intrinsics.type_is_enum(E) {
+	parent := back(g_ui_builder.current_context.open_layout_stack)
+	parent_id := g_ui_builder.current_context.elements[parent].id
+	val_u64 := u64(val)
+	bytes := transmute([8]u8)val_u64
+	return Id(hash.fnv64a(bytes[:], u64(parent_id)))
+}
+
+local_id :: proc {
+	local_id_string,
+	local_id_enum,
+}
+
+@(require_results)
+family_id :: proc(id: string, owner: string) -> Id {
+	parent := back(g_ui_builder.current_context.open_layout_stack)
+	parent_id := g_ui_builder.current_context.elements[parent].id
+	return Id(hash.fnv64a(transmute([]u8)id, u64(parent_id)))
+}
+
 
 end_layout :: proc() {
 	close_layout(g_ui_builder.current_context)

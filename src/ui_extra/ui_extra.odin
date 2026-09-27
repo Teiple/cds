@@ -2,7 +2,6 @@ package ui_extra
 import "../ui"
 import "base:intrinsics"
 import "base:runtime"
-import "core:reflect"
 
 /* IMPORTANT:
 Please follow this when implement custom ui:
@@ -78,7 +77,7 @@ destroy :: proc() {
 }
 
 
-trick_get_enum_next :: proc(
+intrinsics_get_enum_next :: proc(
 	val: $T,
 	wrap := true,
 ) -> (
@@ -103,7 +102,7 @@ trick_get_enum_next :: proc(
 	return val, false
 }
 
-trick_get_enum_prev :: proc(
+intrinsics_get_enum_prev :: proc(
 	val: $T,
 	wrap := true,
 ) -> (
@@ -126,4 +125,45 @@ trick_get_enum_prev :: proc(
 		}
 	}
 	return val, false
+}
+
+intrinsics_get_enum_first :: proc(
+	$T: typeid,
+) -> T where intrinsics.type_is_enum(T) &&
+	len(T) > 0 {
+	info := runtime.type_info_base(
+		type_info_of(T),
+	).variant.(runtime.Type_Info_Enum)
+	return T(info.values[0])
+}
+
+Enum_Iter :: struct(
+	$T: typeid
+) where intrinsics.type_is_enum(T) &&
+	len(T) > 0 {
+	next: Maybe(T),
+}
+
+enum_iter_start :: proc($T: typeid) -> Enum_Iter(T) {
+	return {next = intrinsics_get_enum_first(T)}
+}
+
+enum_iter_next :: proc(iter: ^Enum_Iter($T)) -> (val: T, cond: bool) {
+	if cond = iter.next != nil; cond {
+		val = iter.next.?
+		next, ok := intrinsics_get_enum_next(iter.next.?, wrap = false)
+		iter.next = ok ? next : nil
+	}
+	return
+}
+
+
+@(deferred_out = end_wrap_id)
+wrap_id :: proc(id: ui.Id) -> ui.Id {
+	return id
+}
+
+@(private = "file")
+end_wrap_id :: proc(id: ui.Id) {
+	ui.get_builder().last_id = id
 }

@@ -181,7 +181,7 @@ main :: proc() {
 										btn_click_count += 1
 									}
 									uie.tooltip(
-										btn_id.id,
+										btn_id,
 										"Click me to increment counter",
 									)
 
