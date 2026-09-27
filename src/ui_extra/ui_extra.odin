@@ -1,5 +1,7 @@
 package ui_extra
 import "../ui"
+import "base:intrinsics"
+import "core:reflect"
 
 /* IMPORTANT:
 Please follow this when implement custom ui:
@@ -19,8 +21,6 @@ the last_id of builder to the root layout's id
 layout before any of children is drawn
 + ui.local_id() must be used inside an opened layout. In case of wrapper, you must always remeber to use it inside a known layout scope
 + Passed pointers (active: ^bool, value: ^i32, buffer: ^[dynamic]u8, edit_mode: ^bool) must use assert(ptr != nil) UNLESS nil pointer is an explict, meaningful behavior 
-+ Popup items require .Passthrough pointer-mode upto its root layout if you want ui.is_pressed_away(popup_id/popup_root_layout_id) to work, as their content
-can capture the mouse and caused a pressed away when in fact it was not a pressed away  
 */
 
 UI_Extra_State :: struct {
@@ -74,4 +74,55 @@ get_control_outline :: proc(
 
 destroy :: proc() {
 	delete(g_extra.text_box.buffer)
+}
+
+
+trick_get_enum_next :: proc(
+	val: $T,
+	wrap := true,
+) -> (
+	next: T,
+	ok: bool,
+) where intrinsics.type_is_enum(T) &&
+	len(T) > 0 {
+	info := runtime.type_info_base(
+		type_info_of(T),
+	).variant.(runtime.Type_Info_Enum)
+	values := info.values
+	for v, i in values {
+		if T(v) == val {
+			if i + 1 < len(values) {
+				return T(values[i + 1]), true
+			} else if wrap && len(values) > 0 {
+				return T(values[0]), true
+			}
+			return val, false
+		}
+	}
+	return val, false
+}
+
+trick_get_enum_prev :: proc(
+	val: $T,
+	wrap := true,
+) -> (
+	prev: T,
+	ok: bool,
+) where intrinsics.type_is_enum(T) &&
+	len(T) > 0 {
+	info := runtime.type_info_base(
+		type_info_of(T),
+	).variant.(runtime.Type_Info_Enum)
+	values := info.values
+	for v, i in values {
+		if T(v) == val {
+			if i > 0 {
+				return T(values[i - 1]), true
+			} else if wrap && len(values) > 0 {
+				return T(values[len(values) - 1]), true
+			}
+			return val, false
+		}
+	}
+	return val, false
 }

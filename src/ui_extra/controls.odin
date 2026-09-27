@@ -1,6 +1,7 @@
 package ui_extra
 
 import "../ui"
+import "base:intrinsics"
 import "core:fmt"
 import "core:math"
 import "core:strconv"
@@ -1452,144 +1453,178 @@ draw_combo_box :: proc(
 
 //region: dropdown_box
 dropdown_box :: proc(
+	type_hint: $E, // Any value of the targeted enum type, you can pass default value such as Your_Enum{} here
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
-) -> ui.Element_Draw(type_of(draw_dropdown_box)) {
+) -> (
+	draw_dropdown_box: ui.Element_Draw(
+		proc(
+			options: [E]string,
+			active_option: ^E,
+			edit_mode: ^bool,
+			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+			disabled: bool = false,
+			z_index: i32 = 500,
+		) -> bool,
+	),
+) where intrinsics.type_is_enum(E) {
 	ui.declare_id(id, loc)
-	return {draw_dropdown_box}
-}
+	return {
+		draw = proc(
+			options: [E]string, // If an error brought you here, dropdown box doesn't support non contiguous enums
+			active_option: ^E,
+			edit_mode: ^bool,
+			width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+			height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+			disabled: bool = false,
+			z_index: i32 = 500,
+		) -> bool {
+			assert(active_option != nil)
+			assert(edit_mode != nil)
 
-draw_dropdown_box :: proc(
-	options: []string,
-	active_index: ^int,
-	edit_mode: ^bool,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	z_index: i32 = 500,
-) -> bool {
-	assert(active_index != nil)
-	assert(edit_mode != nil)
-	wrap_id()
-	id := ui.last_id()
-	if !disabled {
-		ui.register_this_focusable()
-	}
-
-	state := get_control_state(id, disabled, edit_mode^)
-	style := g_extra.theme.controls[.DropdownBox]
-	outline := get_control_outline(style, !disabled && ui.is_id_focused(id))
-	changed := false
-
-	if !disabled && ui.is_id_pressed(id) {
-		ui.set_focused_id(id)
-		edit_mode^ = !edit_mode^
-	}
-
-	if !disabled && ui.is_id_focused(id) {
-		if edit_mode^ {
-			if ui.is_key_pressed(.Up) {
-				active_index^ =
-					(active_index^ - 1 + len(options)) % len(options)
-				changed = true
+			wrap_id()
+			id := ui.last_id()
+			if !disabled {
+				ui.register_this_focusable()
 			}
-			if ui.is_key_pressed(.Down) {
-				active_index^ = (active_index^ + 1) % len(options)
-				changed = true
-			}
-			if ui.is_key_pressed(.Escape) ||
-			   ui.is_key_pressed(.Enter) ||
-			   ui.is_key_pressed(.Space) {
-				edit_mode^ = false
-			}
-		}
-	}
-
-	label :=
-		active_index^ >= 0 && active_index^ < len(options) ? options[active_index^] : ""
-
-	if ui.layout(reuse_id = true).draw(
-		width = width,
-		height = height,
-		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Left, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-	) {
-		ui.text().draw(
-			label,
-			alignment = {.Left, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
-			font_index = g_extra.theme.font_index,
-		)
-
-		if edit_mode^ && !disabled {
-			mask_id := ui.local_id("mask")
-			if ui.layout(mask_id).draw(
-				width = ui.grow(),
-				height = ui.grow(),
-				float_mode = ui.Float_At_Root{z_index = z_index - 1},
-				pointer_mode = .Passthrough,
-			) {
-				if ui.is_id_pressed(mask_id) {
-					edit_mode^ = false
-				}
+			if !disabled && ui.is_id_pressed(id) {
+				ui.set_focused_id(id)
+				edit_mode^ = !edit_mode^
 			}
 
-			popup_id := ui.local_id("popup")
-			if ui.layout(popup_id).draw(
-				width = ui.grow(),
-				height = ui.fit(),
-				layout_direction = .Top_To_Bottom,
-				padding = {2, 2, 2, 2},
-				child_gap = 1,
-				background_color = g_extra.theme.controls[.Panel].background[.Normal],
-				border = {
-					thickness = style.border_width,
-					color = style.border[.Hovered],
-				},
-				corner_radius = style.corner_radius,
-				float_mode = ui.Float_At_Parent {
-					offset = {0, 2},
-					attach_points = {element = .LeftTop, parent = .LeftBottom},
-					z_index = z_index,
-				},
-			) {
-				for opt, i in options {
-					opt_id := ui.local_id(opt)
-					is_selected := (active_index^ == i)
-					opt_state := get_control_state(opt_id, false, is_selected)
-					if ui.layout(opt_id).draw(
-						width = ui.grow(),
-						height = ui.fit(),
-						background_color = style.background[get_this_control_state(active = is_selected)],
-						padding = {6, 6, 2, 2},
-						child_alignment = {.Left, .Center},
-					) {
-						ui.text().draw(
-							opt,
-							alignment = {.Left, .Center},
-							color = style.text[opt_state],
-							font_size = g_extra.theme.font_size,
-							font_index = g_extra.theme.font_index,
-						)
-					}
-					if ui.is_id_clicked(opt_id) ||
-					   (ui.was_id_held(id) && ui.is_id_released(opt_id)) {
-						active_index^ = i
-						edit_mode^ = false
+			style := g_extra.theme.controls[.DropdownBox]
+			outline := get_control_outline(
+				style,
+				!disabled && ui.is_id_focused(id),
+			)
+			changed := false
+
+			state: Control_State
+			// dropdown state push active mode upwards, which is different from get_control_state()
+			// if not then when hold-release to select option, the button would be in .Pressed state
+			{
+				active := edit_mode^
+				if disabled do state = .Disabled
+				else if active do state = .Active
+				else if ui.is_id_held(id) do state = .Pressed
+				else if ui.is_id_hovered(id) do state = .Hovered
+				else do state = .Normal
+			}
+
+			if !disabled && ui.is_id_focused(id) {
+				if edit_mode^ {
+					if len(E) > 1 {
+						if ui.is_key_pressed(.Up) {
+							active_option^ = trick_get_enum_next(
+								active_option^,
+							)
+						}
+						if ui.is_key_pressed(.Down) {
+							active_option^ = trick_get_enum_prev(
+								active_option^,
+							)
+						}
 						changed = true
 					}
+					if ui.is_key_pressed(.Escape) ||
+					   ui.is_key_pressed(.Enter) ||
+					   ui.is_key_pressed(.Space) {
+						edit_mode^ = false
+					}
 				}
 			}
-		}
+
+			label := options[active_option^]
+
+			if ui.layout(reuse_id = true).draw(
+				width = width,
+				height = height,
+				background_color = style.background[state],
+				padding = style.padding,
+				child_alignment = {.Left, .Center},
+				border = {
+					thickness = style.border_width,
+					color = style.border[state],
+				},
+				outline = outline,
+				corner_radius = style.corner_radius,
+			) {
+				ui.text().draw(
+					label,
+					alignment = {.Left, .Center},
+					color = style.text[state],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+
+				if edit_mode^ && !disabled {
+					popup_id := ui.local_id("popup")
+					if ui.is_float_pressed_away(popup_id) &&
+					   !ui.is_id_pressed(id) {
+						edit_mode^ = false
+					}
+
+					if ui.layout(popup_id).draw(
+						width = ui.grow(),
+						height = ui.fit(),
+						layout_direction = .Top_To_Bottom,
+						padding = {2, 2, 2, 2},
+						child_gap = 1,
+						background_color = g_extra.theme.controls[.Panel].background[.Normal],
+						border = {
+							thickness = style.border_width,
+							color = style.border[.Hovered],
+						},
+						corner_radius = style.corner_radius,
+						float_mode = ui.Float_At_Parent {
+							offset = {0, 2},
+							attach_points = {
+								element = .LeftTop,
+								parent = .LeftBottom,
+							},
+							z_index = z_index,
+						},
+					) {
+						for opt, i in options {
+							opt_id := ui.local_id(opt)
+							is_selected := (active_option^ == i)
+							opt_state := get_control_state(
+								opt_id,
+								false,
+								is_selected,
+							)
+							if ui.layout(opt_id).draw(
+								width = ui.grow(),
+								height = ui.fit(),
+								background_color = style.background[get_this_control_state(active = is_selected)],
+								padding = {6, 6, 2, 2},
+								child_alignment = {.Left, .Center},
+							) {
+								ui.text().draw(
+									opt,
+									alignment = {.Left, .Center},
+									color = style.text[opt_state],
+									font_size = g_extra.theme.font_size,
+									font_index = g_extra.theme.font_index,
+								)
+							}
+							if ui.is_id_clicked(opt_id) ||
+							   (ui.was_id_held(id) &&
+									   ui.is_id_released(opt_id)) {
+								active_option^ = i
+								edit_mode^ = false
+								changed = true
+							}
+						}
+					}
+				}
+			}
+
+
+			return changed
+		},
 	}
-
-
-	return changed
 }
 
 //region: slider

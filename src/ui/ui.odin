@@ -124,6 +124,8 @@ Input_Event :: struct {
 	pointer_captured:  bool,
 	scroll_captured:   bool,
 	scroll_depth:      int,
+	pressed_float_id:  Id,
+	hovered_float_id:  Id,
 	keyboard_captured: bool,
 	pressed_once:      bool,
 	hovered_elements:  [dynamic]Id,
@@ -1491,6 +1493,8 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 		ctx.input_event.pointer_captured = false
 		ctx.input_event.scroll_captured = false
 		ctx.input_event.scroll_depth = 0
+		ctx.input_event.pressed_float_id = 0
+		ctx.input_event.hovered_float_id = 0
 		ctx.input_event.pressed_once = false
 
 		clear(&ctx.input_event.hovered_elements)
@@ -1502,7 +1506,17 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 
 		// detect pointer input on floats first, in reverse z index order
 		#reverse for idx in ctx.floats {
+			pressed_before := len(ctx.input_event.pressed_elements)
+			hovered_before := len(ctx.input_event.hovered_elements)
 			detect_pointer(ctx, idx)
+			if ctx.input_event.pressed_float_id == 0 &&
+			   len(ctx.input_event.pressed_elements) > pressed_before {
+				ctx.input_event.pressed_float_id = ctx.elements[idx].id
+			}
+			if ctx.input_event.hovered_float_id == 0 &&
+			   len(ctx.input_event.hovered_elements) > hovered_before {
+				ctx.input_event.hovered_float_id = ctx.elements[idx].id
+			}
 			if detect_pointer_should_stop(ctx) do break
 		}
 		// then the normal layout layer
@@ -2600,6 +2614,33 @@ is_id_pressed_away :: proc(id: Id) -> bool {
 
 is_this_pressed_away :: proc() -> bool {
 	return is_id_pressed_away(g_ui_builder.last_id)
+}
+
+is_float_pressed_away :: proc(float_id: Id) -> bool {
+	if len(g_ui_builder.current_context.input_event.pressed_elements) == 0 {
+		return false
+	}
+	return g_ui_builder.current_context.input_event.pressed_float_id != float_id
+}
+
+is_this_float_pressed_away :: proc() -> bool {
+	return is_float_pressed_away(g_ui_builder.last_id)
+}
+
+is_float_hovered :: proc(float_id: Id) -> bool {
+	return g_ui_builder.current_context.input_event.hovered_float_id == float_id
+}
+
+is_this_float_hovered :: proc() -> bool {
+	return is_float_hovered(g_ui_builder.last_id)
+}
+
+get_pressed_float_id :: proc() -> Id {
+	return g_ui_builder.current_context.input_event.pressed_float_id
+}
+
+get_hovered_float_id :: proc() -> Id {
+	return g_ui_builder.current_context.input_event.hovered_float_id
 }
 
 is_pressed_away :: proc(ids: ..Id) -> bool {

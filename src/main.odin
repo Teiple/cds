@@ -325,15 +325,21 @@ main :: proc() {
 										width = ui.fixed(180),
 									)
 
-									@(static) drop_idx: int = 0
+									@(static) drop_idx: Drop_Option = .Low
 									@(static) drop_edit: bool = false
-									drop_opts := []string {
-										"High Quality",
-										"Medium Quality",
-										"Low Quality",
+
+									Drop_Option :: enum {
+										High   = 200,
+										Medium = -50,
+										Low    = 0,
 									}
-									uie.dropdown_box().draw(
-										drop_opts,
+
+									uie.dropdown_box(Drop_Option{}).draw(
+										#sparse[Drop_Option]string{
+											.High = "High Quality",
+											.Medium = "Medium Quality",
+											.Low = "Low Quality",
+										},
 										&drop_idx,
 										&drop_edit,
 										width = ui.fixed(180),
