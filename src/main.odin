@@ -307,6 +307,25 @@ main :: proc() {
 										width = ui.fixed(200),
 									)
 
+									@(static) multi_buf: [dynamic]u8
+									@(static) multi_buf_inited: bool = false
+									@(static) multi_edit: bool = false
+									if !multi_buf_inited {
+										multi_buf = make([dynamic]u8, 0, 256)
+										init_multi := "Line 1: Multi-line text box\nLine 2: Supports editing\nLine 3: Scrollable content\nLine 4: Up/Down arrow nav\nLine 5: Multiple lines demo"
+										append(
+											&multi_buf,
+											..transmute([]u8)init_multi,
+										)
+										multi_buf_inited = true
+									}
+									uie.text_box_multi(
+										&multi_buf,
+										&multi_edit,
+										width = ui.fixed(240),
+										height = ui.fixed(80),
+									)
+
 									@(static) spin_val: i32 = 5
 									@(static) spin_edit: bool = false
 									uie.spinner(

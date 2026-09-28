@@ -2506,6 +2506,10 @@ pointer_delta :: proc() -> [2]f32 {
 	return g_ui_builder.current_context.input.pointer.delta
 }
 
+pointer_scroll :: proc() -> [2]f32 {
+	return g_ui_builder.current_context.input.pointer.scroll
+}
+
 pointer_position :: proc() -> [2]f32 {
 	return g_ui_builder.current_context.input.pointer.position
 }

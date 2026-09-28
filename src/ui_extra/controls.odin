@@ -447,6 +447,7 @@ Text_Box_State :: struct {
 	select_start:    int,
 	select_length:   int,
 	scroll_offset_x: f32,
+	scroll_offset_y: f32,
 	blink_counter:   int,
 	buffer:          [dynamic]u8,
 }
@@ -890,7 +891,7 @@ text_box :: proc(
 				color = style.text[state],
 				alignment = {.Left, .Center},
 				selection_range = sel_range,
-				selection_color = {61, 206, 148, 80},
+				selection_color = style.overlay_color,
 				cursor_index = g_extra.text_box.cursor_pos,
 				cursor_visible = cursor_visible,
 				cursor_color = style.text[state],
@@ -903,6 +904,681 @@ text_box :: proc(
 				color = style.text[state],
 				font_size = g_extra.theme.font_size,
 				font_index = g_extra.theme.font_index,
+			)
+		}
+	}
+
+	return changed, committed
+}
+
+@(private)
+get_line_ranges :: proc(str: string, ranges: ^[dynamic][2]int) {
+	clear(ranges)
+	start := 0
+	for i := 0; i <= len(str); i += 1 {
+		if i == len(str) || str[i] == '\n' {
+			end := i
+			if end > start && str[end - 1] == '\r' {
+				end -= 1
+			}
+			append(ranges, [2]int{start, end})
+			start = i + 1
+		}
+	}
+	if len(ranges^) == 0 {
+		append(ranges, [2]int{0, 0})
+	}
+}
+
+@(private)
+find_cursor_row_col :: proc(
+	ranges: [][2]int,
+	cursor_pos: int,
+) -> (
+	row: int,
+	col: int,
+) {
+	for r, i in ranges {
+		if cursor_pos >= r[0] && (cursor_pos <= r[1] || i == len(ranges) - 1) {
+			return i, clamp(cursor_pos - r[0], 0, r[1] - r[0])
+		}
+	}
+	if len(ranges) > 0 {
+		last := len(ranges) - 1
+		return last, ranges[last][1] - ranges[last][0]
+	}
+	return 0, 0
+}
+
+text_box_multi :: proc(
+	buffer: ^[dynamic]u8,
+	edit_mode: ^bool,
+	max_len: int = 4096,
+	blink_rate: int = 120,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{240}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
+	line_spacing: f32 = 4,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> (
+	changed: bool,
+	committed: bool,
+) {
+	assert(buffer != nil)
+	assert(edit_mode != nil)
+
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	is_editing := edit_mode^
+	state := get_control_state(root_id, disabled, is_editing)
+	style := g_extra.theme.controls[.Text_Box]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	text_str :=
+		is_editing && g_extra.text_box.id == root_id ? string(g_extra.text_box.buffer[:]) : string(buffer^[:])
+	ranges := make([dynamic][2]int, context.temp_allocator)
+	get_line_ranges(text_str, &ranges)
+
+	if !disabled && ui.is_id_pressed(root_id) {
+		ui.set_focused_id(root_id)
+		if !edit_mode^ {
+			edit_mode^ = true
+			is_editing = true
+			state = get_control_state(root_id, disabled, true)
+			if g_extra.text_box.id != 0 && g_extra.text_box.id != root_id {
+				g_extra.text_box.scroll_offset_x = 0
+				g_extra.text_box.scroll_offset_y = 0
+			}
+			g_extra.text_box.id = root_id
+			if buffer != &g_extra.text_box.buffer {
+				clear(&g_extra.text_box.buffer)
+				append(&g_extra.text_box.buffer, ..buffer^[:])
+			}
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
+			g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+			g_extra.text_box.select_length = 0
+			g_extra.text_box.blink_counter = 0
+
+			text_str = string(g_extra.text_box.buffer[:])
+			get_line_ranges(text_str, &ranges)
+		}
+	}
+
+	line_h := g_extra.theme.font_size + line_spacing
+
+	cursor_moved := false
+
+	if is_editing {
+		ui.capture_keyboard()
+		if g_extra.text_box.id != root_id {
+			if g_extra.text_box.id != 0 {
+				g_extra.text_box.scroll_offset_x = 0
+				g_extra.text_box.scroll_offset_y = 0
+			}
+			g_extra.text_box.id = root_id
+			if buffer != &g_extra.text_box.buffer {
+				clear(&g_extra.text_box.buffer)
+				append(&g_extra.text_box.buffer, ..buffer^[:])
+			}
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
+			g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+			g_extra.text_box.select_length = 0
+			g_extra.text_box.blink_counter = 0
+
+			text_str = string(g_extra.text_box.buffer[:])
+			get_line_ranges(text_str, &ranges)
+		}
+
+		g_extra.text_box.cursor_pos = clamp(
+			g_extra.text_box.cursor_pos,
+			0,
+			len(g_extra.text_box.buffer),
+		)
+		g_extra.text_box.blink_counter += 1
+
+		if !disabled {
+			bounds, ok := ui.rect_by_id(root_id)
+			if ok {
+				mouse_pos := ui.pointer_position()
+				local_y :=
+					mouse_pos.y -
+					bounds.y -
+					style.padding.top +
+					g_extra.text_box.scroll_offset_y
+				target_row := clamp(int(local_y / line_h), 0, len(ranges) - 1)
+				target_r := ranges[target_row]
+				line_slice := text_str[target_r[0]:target_r[1]]
+				local_x :=
+					mouse_pos.x -
+					bounds.x -
+					style.padding.left +
+					g_extra.text_box.scroll_offset_x
+				char_idx := ui.get_char_index_at_x(
+					line_slice,
+					local_x,
+					g_extra.theme.font_size,
+					g_extra.theme.font_index,
+				)
+				new_pos := target_r[0] + char_idx
+
+				if ui.is_id_pressed(root_id) {
+					g_extra.text_box.cursor_pos = new_pos
+					g_extra.text_box.select_start = new_pos
+					g_extra.text_box.select_length = 0
+					g_extra.text_box.blink_counter = 0
+					cursor_moved = true
+				} else if ui.is_id_held(root_id) &&
+				   ui.pointer_delta() != {0, 0} {
+					g_extra.text_box.cursor_pos = new_pos
+					g_extra.text_box.select_length =
+						new_pos - g_extra.text_box.select_start
+					g_extra.text_box.blink_counter = 0
+					cursor_moved = true
+				}
+			}
+		}
+
+		ctrl_down := ui.has_modifier(.Ctrl)
+		shift_down := ui.has_modifier(.Shift)
+
+		if ctrl_down && ui.is_key_pressed(.A) {
+			g_extra.text_box.select_start = 0
+			g_extra.text_box.select_length = len(g_extra.text_box.buffer)
+			g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
+			g_extra.text_box.blink_counter = 0
+			cursor_moved = true
+		} else if ctrl_down && ui.is_key_pressed(.C) {
+			if g_extra.text_box.select_length != 0 {
+				s_start := min(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_end := max(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				if s_start < s_end {
+					ui.set_clipboard(
+						string(g_extra.text_box.buffer[s_start:s_end]),
+					)
+				}
+			}
+		} else if ctrl_down && ui.is_key_pressed(.X) {
+			if g_extra.text_box.select_length != 0 {
+				s_start := min(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_end := max(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				if s_start < s_end {
+					ui.set_clipboard(
+						string(g_extra.text_box.buffer[s_start:s_end]),
+					)
+					remove_range(&g_extra.text_box.buffer, s_start, s_end)
+					g_extra.text_box.cursor_pos = s_start
+					g_extra.text_box.select_start = s_start
+					g_extra.text_box.select_length = 0
+					changed = true
+					cursor_moved = true
+					g_extra.text_box.blink_counter = 0
+					text_str = string(g_extra.text_box.buffer[:])
+					get_line_ranges(text_str, &ranges)
+				}
+			}
+		} else if ctrl_down && ui.is_key_pressed(.V) {
+			clip := ui.get_clipboard()
+			if len(clip) > 0 {
+				if g_extra.text_box.select_length != 0 {
+					s_start := min(
+						g_extra.text_box.select_start,
+						g_extra.text_box.select_start +
+						g_extra.text_box.select_length,
+					)
+					s_end := max(
+						g_extra.text_box.select_start,
+						g_extra.text_box.select_start +
+						g_extra.text_box.select_length,
+					)
+					s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+					s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+					remove_range(&g_extra.text_box.buffer, s_start, s_end)
+					g_extra.text_box.cursor_pos = s_start
+					g_extra.text_box.select_length = 0
+				}
+				for ch in clip {
+					if ((ch >= 32 && ch < 127) || ch == '\n' || ch == '\t') &&
+					   len(g_extra.text_box.buffer) < max_len {
+						inject_at(
+							&g_extra.text_box.buffer,
+							g_extra.text_box.cursor_pos,
+							u8(ch),
+						)
+						g_extra.text_box.cursor_pos += 1
+						changed = true
+						cursor_moved = true
+					}
+				}
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			}
+		} else if !ctrl_down {
+			chars := ui.get_input_characters()
+			for ch in chars {
+				if ((ch >= 32 && ch < 127) || ch == '\t') &&
+				   len(g_extra.text_box.buffer) < max_len {
+					if g_extra.text_box.select_length != 0 {
+						s_start := min(
+							g_extra.text_box.select_start,
+							g_extra.text_box.select_start +
+							g_extra.text_box.select_length,
+						)
+						s_end := max(
+							g_extra.text_box.select_start,
+							g_extra.text_box.select_start +
+							g_extra.text_box.select_length,
+						)
+						s_start = clamp(
+							s_start,
+							0,
+							len(g_extra.text_box.buffer),
+						)
+						s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+						remove_range(&g_extra.text_box.buffer, s_start, s_end)
+						g_extra.text_box.cursor_pos = s_start
+						g_extra.text_box.select_length = 0
+					}
+					inject_at(
+						&g_extra.text_box.buffer,
+						g_extra.text_box.cursor_pos,
+						u8(ch),
+					)
+					g_extra.text_box.cursor_pos += 1
+					g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+					changed = true
+					cursor_moved = true
+					g_extra.text_box.blink_counter = 0
+					text_str = string(g_extra.text_box.buffer[:])
+					get_line_ranges(text_str, &ranges)
+				}
+			}
+		}
+
+		if ui.is_key_pressed(.Left) && g_extra.text_box.cursor_pos > 0 {
+			g_extra.text_box.cursor_pos -= 1
+			cursor_moved = true
+			if shift_down {
+				g_extra.text_box.select_length =
+					g_extra.text_box.cursor_pos - g_extra.text_box.select_start
+			} else {
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				g_extra.text_box.select_length = 0
+			}
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Right) &&
+		   g_extra.text_box.cursor_pos < len(g_extra.text_box.buffer) {
+			g_extra.text_box.cursor_pos += 1
+			cursor_moved = true
+			if shift_down {
+				g_extra.text_box.select_length =
+					g_extra.text_box.cursor_pos - g_extra.text_box.select_start
+			} else {
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				g_extra.text_box.select_length = 0
+			}
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Up) {
+			row, col := find_cursor_row_col(
+				ranges[:],
+				g_extra.text_box.cursor_pos,
+			)
+			if row > 0 {
+				target_r := ranges[row - 1]
+				target_col := min(col, target_r[1] - target_r[0])
+				g_extra.text_box.cursor_pos = target_r[0] + target_col
+				cursor_moved = true
+				if shift_down {
+					g_extra.text_box.select_length =
+						g_extra.text_box.cursor_pos -
+						g_extra.text_box.select_start
+				} else {
+					g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+					g_extra.text_box.select_length = 0
+				}
+				g_extra.text_box.blink_counter = 0
+			}
+		}
+		if ui.is_key_pressed(.Down) {
+			row, col := find_cursor_row_col(
+				ranges[:],
+				g_extra.text_box.cursor_pos,
+			)
+			if row < len(ranges) - 1 {
+				target_r := ranges[row + 1]
+				target_col := min(col, target_r[1] - target_r[0])
+				g_extra.text_box.cursor_pos = target_r[0] + target_col
+				cursor_moved = true
+				if shift_down {
+					g_extra.text_box.select_length =
+						g_extra.text_box.cursor_pos -
+						g_extra.text_box.select_start
+				} else {
+					g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+					g_extra.text_box.select_length = 0
+				}
+				g_extra.text_box.blink_counter = 0
+			}
+		}
+		if ui.is_key_pressed(.Home) {
+			row, _ := find_cursor_row_col(
+				ranges[:],
+				g_extra.text_box.cursor_pos,
+			)
+			if ctrl_down {
+				g_extra.text_box.cursor_pos = 0
+			} else {
+				g_extra.text_box.cursor_pos = ranges[row][0]
+			}
+			cursor_moved = true
+			if shift_down {
+				g_extra.text_box.select_length =
+					g_extra.text_box.cursor_pos - g_extra.text_box.select_start
+			} else {
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				g_extra.text_box.select_length = 0
+			}
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.End) {
+			row, _ := find_cursor_row_col(
+				ranges[:],
+				g_extra.text_box.cursor_pos,
+			)
+			if ctrl_down {
+				g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
+			} else {
+				g_extra.text_box.cursor_pos = ranges[row][1]
+			}
+			cursor_moved = true
+			if shift_down {
+				g_extra.text_box.select_length =
+					g_extra.text_box.cursor_pos - g_extra.text_box.select_start
+			} else {
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				g_extra.text_box.select_length = 0
+			}
+			g_extra.text_box.blink_counter = 0
+		}
+		if ui.is_key_pressed(.Enter) {
+			if g_extra.text_box.select_length != 0 {
+				s_start := min(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_end := max(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				remove_range(&g_extra.text_box.buffer, s_start, s_end)
+				g_extra.text_box.cursor_pos = s_start
+				g_extra.text_box.select_length = 0
+			}
+			if len(g_extra.text_box.buffer) < max_len {
+				inject_at(
+					&g_extra.text_box.buffer,
+					g_extra.text_box.cursor_pos,
+					u8('\n'),
+				)
+				g_extra.text_box.cursor_pos += 1
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				changed = true
+				cursor_moved = true
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			}
+		}
+		if ui.is_key_pressed(.Backspace) {
+			if g_extra.text_box.select_length != 0 {
+				s_start := min(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_end := max(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				remove_range(&g_extra.text_box.buffer, s_start, s_end)
+				g_extra.text_box.cursor_pos = s_start
+				g_extra.text_box.select_start = s_start
+				g_extra.text_box.select_length = 0
+				changed = true
+				cursor_moved = true
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			} else if g_extra.text_box.cursor_pos > 0 {
+				ordered_remove(
+					&g_extra.text_box.buffer,
+					g_extra.text_box.cursor_pos - 1,
+				)
+				g_extra.text_box.cursor_pos -= 1
+				g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+				changed = true
+				cursor_moved = true
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			}
+		}
+		if ui.is_key_pressed(.Delete) {
+			if g_extra.text_box.select_length != 0 {
+				s_start := min(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_end := max(
+					g_extra.text_box.select_start,
+					g_extra.text_box.select_start +
+					g_extra.text_box.select_length,
+				)
+				s_start = clamp(s_start, 0, len(g_extra.text_box.buffer))
+				s_end = clamp(s_end, 0, len(g_extra.text_box.buffer))
+				remove_range(&g_extra.text_box.buffer, s_start, s_end)
+				g_extra.text_box.cursor_pos = s_start
+				g_extra.text_box.select_start = s_start
+				g_extra.text_box.select_length = 0
+				changed = true
+				cursor_moved = true
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			} else if g_extra.text_box.cursor_pos <
+			   len(g_extra.text_box.buffer) {
+				ordered_remove(
+					&g_extra.text_box.buffer,
+					g_extra.text_box.cursor_pos,
+				)
+				changed = true
+				cursor_moved = true
+				g_extra.text_box.blink_counter = 0
+				text_str = string(g_extra.text_box.buffer[:])
+				get_line_ranges(text_str, &ranges)
+			}
+		}
+		if ui.is_key_pressed(.Escape) {
+			clear(&g_extra.text_box.buffer)
+			g_extra.text_box.id = 0
+			edit_mode^ = false
+		}
+		if ui.is_key_pressed(.Tab) {
+			if buffer != &g_extra.text_box.buffer {
+				clear(buffer)
+				append(buffer, ..g_extra.text_box.buffer[:])
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			}
+			edit_mode^ = false
+			committed = true
+			if shift_down {
+				ui.focus_previous()
+			} else {
+				ui.focus_next()
+			}
+		}
+
+		if ui.is_id_pressed_away(root_id) {
+			if buffer != &g_extra.text_box.buffer {
+				clear(buffer)
+				append(buffer, ..g_extra.text_box.buffer[:])
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+			}
+			edit_mode^ = false
+			committed = true
+		}
+	}
+
+	bounds, has_bounds := ui.rect_by_id(root_id)
+	view_h: f32 =
+		has_bounds ? bounds.height - style.padding.top - style.padding.bottom : 0
+	content_h := f32(len(ranges)) * line_h
+	max_scroll_y := max(f32(0), content_h - view_h)
+
+	if !disabled && ui.is_id_hovered(root_id) {
+		wheel := ui.pointer_scroll().y
+		if wheel != 0 {
+			g_extra.text_box.scroll_offset_y = clamp(
+				g_extra.text_box.scroll_offset_y - wheel * line_h * 2,
+				0,
+				max_scroll_y,
+			)
+		}
+	}
+
+	if is_editing && g_extra.text_box.id == root_id && cursor_moved {
+		row, _ := find_cursor_row_col(ranges[:], g_extra.text_box.cursor_pos)
+		cursor_top := f32(row) * line_h
+		cursor_bottom := cursor_top + line_h
+
+		if view_h > 0 {
+			if cursor_bottom > g_extra.text_box.scroll_offset_y + view_h {
+				g_extra.text_box.scroll_offset_y = cursor_bottom - view_h
+			} else if cursor_top < g_extra.text_box.scroll_offset_y {
+				g_extra.text_box.scroll_offset_y = cursor_top
+			}
+		}
+	}
+
+	g_extra.text_box.scroll_offset_y = clamp(
+		g_extra.text_box.scroll_offset_y,
+		0,
+		max_scroll_y,
+	)
+
+	cursor_visible :=
+		is_editing && ((g_extra.text_box.blink_counter / blink_rate) % 2 == 0)
+
+	show_scrollbar := content_h > view_h && view_h > 0
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_color = style.background[state],
+		padding = style.padding,
+		clip = true,
+		child_alignment = {.Left, .Top},
+		layout_direction = .Left_To_Right,
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		reuse_id = true,
+	) {
+		if is_editing {
+			sel_range := [2]int {
+				g_extra.text_box.select_start,
+				g_extra.text_box.select_start + g_extra.text_box.select_length,
+			}
+			ui.text_edit(
+				content = text_str,
+				font_index = g_extra.theme.font_index,
+				font_size = g_extra.theme.font_size,
+				color = style.text[state],
+				line_spacing = line_spacing,
+				alignment = {.Left, .Top},
+				selection_range = sel_range,
+				selection_color = style.overlay_color,
+				cursor_index = g_extra.text_box.cursor_pos,
+				cursor_visible = cursor_visible,
+				cursor_color = style.text[state],
+				scroll_offset = {
+					g_extra.text_box.scroll_offset_x,
+					g_extra.text_box.scroll_offset_y,
+				},
+				multiline = true,
+				wrap = false,
+			)
+		} else {
+			ui.text_edit(
+				content = text_str,
+				font_index = g_extra.theme.font_index,
+				font_size = g_extra.theme.font_size,
+				color = style.text[state],
+				line_spacing = line_spacing,
+				alignment = {.Left, .Top},
+				scroll_offset = {
+					g_extra.text_box.scroll_offset_x,
+					g_extra.text_box.scroll_offset_y,
+				},
+				multiline = true,
+				wrap = false,
+			)
+		}
+
+		if show_scrollbar {
+			scroll_bar(
+				&g_extra.text_box.scroll_offset_y,
+				0,
+				max_scroll_y,
+				view_h,
+				content_h,
+				.Vertical,
+				width = {mode = ui.Fixed_Size{12}},
+				height = {mode = ui.Grow_Size{}},
+				disabled = disabled,
 			)
 		}
 	}

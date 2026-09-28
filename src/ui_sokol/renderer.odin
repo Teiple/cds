@@ -2,7 +2,6 @@ package ui_sokol
 
 import sg "../sokol/gfx"
 import "../ui"
-import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import stbtt "vendor:stb/truetype"
@@ -1104,7 +1103,10 @@ render :: proc(
 
 		case ui.Text_Edit_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
+			// Ensure minimal width so scissor intersection does not fail when text content is empty and cursor needs to be drawn
+			c_rect := c.rect
+			c_rect.width = max(c_rect.width, 2)
+			if _, ok := ui.intersect_rect(cur, to_screen_rect(c_rect, dest_rect, scale)); !ok do break
 
 			font_idx := int(c.font)
 			assert(font_idx < len(r.fonts))
@@ -1112,87 +1114,151 @@ render :: proc(
 			scale_font :=
 				font_obj.base_size > 0 ? (c.font_size / font_obj.base_size) : 1.0
 
-			line_str := len(c.lines) > 0 ? c.lines[0] : ""
+			line_h := c.font_size + c.line_spacing
 
-			if c.selection_range[0] != c.selection_range[1] &&
-			   c.selection_color.a > 0 {
-				sel_min := min(c.selection_range[0], c.selection_range[1])
-				sel_max := max(c.selection_range[0], c.selection_range[1])
-				sel_min = clamp(sel_min, 0, len(line_str))
-				sel_max = clamp(sel_max, 0, len(line_str))
+			sel_min := min(c.selection_range[0], c.selection_range[1])
+			sel_max := max(c.selection_range[0], c.selection_range[1])
+			has_selection :=
+				c.selection_range[0] != c.selection_range[1] &&
+				c.selection_color.a > 0
 
-				x_start :=
-					c.rect.x -
-					c.scroll_offset.x +
-					measure_substring_width(
-						font_obj,
-						line_str[:sel_min],
-						scale_font,
-						c.spacing,
-					)
-				x_end :=
-					c.rect.x -
-					c.scroll_offset.x +
-					measure_substring_width(
-						font_obj,
-						line_str[:sel_max],
-						scale_font,
-						c.spacing,
-					)
-
+			if has_selection {
 				set_active_batch(r, r.white_view, cur)
-				render_rounded_rect_filled(
-					r,
-					{
-						x = x_start,
-						y = c.rect.y,
-						width = max(0, x_end - x_start),
-						height = c.rect.height,
-					},
-					c.selection_color,
-					{0, 0, 0, 0},
-				)
+				line_start_idx := 0
+				for line, i in c.lines {
+					line_end_idx := line_start_idx + len(line)
+					line_y := c.rect.y - c.scroll_offset.y + f32(i) * line_h
+
+					if sel_max >= line_start_idx && sel_min <= line_end_idx {
+						s_start :=
+							clamp(sel_min, line_start_idx, line_end_idx) -
+							line_start_idx
+						s_end :=
+							clamp(sel_max, line_start_idx, line_end_idx) -
+							line_start_idx
+
+						if s_end > s_start ||
+						   (sel_max > line_end_idx && i < len(c.lines) - 1) {
+							x_start :=
+								c.rect.x -
+								c.scroll_offset.x +
+								measure_substring_width(
+									font_obj,
+									line[:s_start],
+									scale_font,
+									c.spacing,
+								)
+							x_end :=
+								c.rect.x -
+								c.scroll_offset.x +
+								measure_substring_width(
+									font_obj,
+									line[:s_end],
+									scale_font,
+									c.spacing,
+								)
+
+							extra_w: f32 = 0
+							if sel_max > line_end_idx && i < len(c.lines) - 1 {
+								extra_w = 6
+							}
+
+							render_rounded_rect_filled(
+								r,
+								{
+									x = x_start,
+									y = line_y,
+									width = max(0, x_end - x_start + extra_w),
+									height = line_h,
+								},
+								c.selection_color,
+								{0, 0, 0, 0},
+							)
+						}
+					}
+					line_start_idx = line_end_idx + 1
+				}
 			}
 
 			set_active_batch(r, font_obj.view, cur)
-			pen_x := c.rect.x - c.scroll_offset.x
-			pen_y := c.rect.y - c.scroll_offset.y + c.font_size * 0.78
-			draw_text_line(
-				r,
-				font_obj,
-				line_str,
-				pen_x,
-				pen_y,
-				scale_font,
-				c.spacing,
-				c.color,
-			)
+			for line, i in c.lines {
+				pen_x := c.rect.x - c.scroll_offset.x
+				pen_y :=
+					c.rect.y -
+					c.scroll_offset.y +
+					f32(i) * line_h +
+					c.font_size * 0.78
+				draw_text_line(
+					r,
+					font_obj,
+					line,
+					pen_x,
+					pen_y,
+					scale_font,
+					c.spacing,
+					c.color,
+				)
+			}
 
 			if c.cursor_visible &&
 			   c.cursor_index >= 0 &&
 			   c.cursor_color.a > 0 {
-				cur_idx := clamp(c.cursor_index, 0, len(line_str))
-				cur_x :=
-					c.rect.x -
-					c.scroll_offset.x +
-					measure_substring_width(
-						font_obj,
-						line_str[:cur_idx],
-						scale_font,
-						c.spacing,
+				cursor_drawn := false
+				line_start_idx := 0
+				for line, i in c.lines {
+					line_end_idx := line_start_idx + len(line)
+					is_last_line := i == len(c.lines) - 1
+
+					if c.cursor_index >= line_start_idx &&
+					   (c.cursor_index <= line_end_idx || is_last_line) {
+						col_idx := clamp(
+							c.cursor_index - line_start_idx,
+							0,
+							len(line),
+						)
+						cur_x :=
+							c.rect.x -
+							c.scroll_offset.x +
+							measure_substring_width(
+								font_obj,
+								line[:col_idx],
+								scale_font,
+								c.spacing,
+							)
+						cur_y := c.rect.y - c.scroll_offset.y + f32(i) * line_h
+
+						set_active_batch(r, r.white_view, cur)
+						render_rounded_rect_filled(
+							r,
+							{
+								x = cur_x,
+								y = cur_y + 1,
+								width = 1.5,
+								height = max(0, c.font_size + 2),
+							},
+							c.cursor_color,
+							{0, 0, 0, 0},
+						)
+						cursor_drawn = true
+						break
+					}
+					line_start_idx = line_end_idx + 1
+				}
+
+				if !cursor_drawn {
+					set_active_batch(r, r.white_view, cur)
+					render_rounded_rect_filled(
+						r,
+						{
+							x = c.rect.x - c.scroll_offset.x,
+							y = c.rect.y - c.scroll_offset.y + 1,
+							width = 1.5,
+							height = max(0, c.font_size + 2),
+						},
+						c.cursor_color,
+						{0, 0, 0, 0},
 					)
-				set_active_batch(r, r.white_view, cur)
-				render_rounded_rect_filled(
-					r,
-					{
-						x = cur_x,
-						y = c.rect.y + 2,
-						width = 1.5,
-						height = max(0, c.rect.height - 4),
-					},
-					c.cursor_color,
-					{0, 0, 0, 0},
-				)
+				}
 			}
 		}
 	}
