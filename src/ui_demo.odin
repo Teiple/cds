@@ -16,14 +16,12 @@ ui_demo_init :: proc(state: ^Ui_Demo_State) {
 ui_demo_destroy :: proc(state: ^Ui_Demo_State) {
 }
 
+quit_panel_opened := false
+
 ui_demo_update :: proc(state: ^Ui_Demo_State, dt: f32) {
 	if ui.layout(
 		width            = ui.fit(),
 		height           = ui.fit(),
-		padding          = {8, 8, 4, 4},
-		background_color = {20, 20, 25, 200},
-		border           = {thickness = 1, color = {60, 60, 70, 255}},
-		corner_radius    = ui.corner_radius_all(4),
 		float_mode       = ui.Float_At_Root {
 			offset        = {-12, 12},
 			attach_points = {element = .RightTop, parent = .RightTop},
@@ -43,11 +41,18 @@ ui_demo_update :: proc(state: ^Ui_Demo_State, dt: f32) {
 		)
 	}
 
-	if uie.panel(
+	if uie.button(
+		label = "Quit",
 		width = ui.grow(),
-		height = ui.grow(),
-		padding = ui.pad_all(12),
-		gap = 10,
+		height = ui.fixed(32)
 	) {
+		quit_panel_opened = true
 	}
+
+	uie.message_box(
+		open    = &quit_panel_opened,
+		title   = "Quit Game",
+		message = "Are you sure you want to quit?",	
+		buttons = {"Yes", "No"}, 
+	)
 }

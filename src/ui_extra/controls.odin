@@ -3128,7 +3128,7 @@ color_picker :: proc(
 	loc        : = #caller_location,
 ) -> bool {
 	assert(color != nil)
-	
+
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -3210,20 +3210,20 @@ color_picker :: proc(
 
 // region: message box
 message_box :: proc(
-	open: ^bool,
-	title: string,
-	message: string,
-	buttons: []string = {"OK"},
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
-	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	z_index: i32 = 1000,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> int {
-	if open != nil && !open^ {
-		return -1
-	}
+	open     : ^bool,
+	title    : string,
+	message  : string,
+	buttons  : []string = {"OK"},
+	width    : ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
+	height   : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	z_index  : i32 = 1000,
+	id       : Maybe(ui.Id) = nil,
+	reuse_id : bool = false,
+	loc      : = #caller_location,
+) -> i32 {
+	assert(open != nil)
+
+	if !open^ do return -1
 
 	ui.push_focus_scope()
 	defer ui.pop_focus_scope()
@@ -3231,7 +3231,7 @@ message_box :: proc(
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
-	result := -1
+	result : i32 = -1
 	closed := false
 
 	if ui.layout(
@@ -3263,6 +3263,8 @@ message_box :: proc(
 				font_index = g_extra.theme.font_index,
 			)
 
+			uie.line()
+
 			if ui.layout(
 				width            = ui.grow(),
 				height           = ui.fit(),
@@ -3272,22 +3274,24 @@ message_box :: proc(
 			) {
 				for btn_text, i in buttons {
 					btn_id := ui.local_id(i)
+					
+					index := i32(i)
 					if button(
 						btn_text,
 						width  = ui.grow(),
 						height = ui.fixed(28),
 						id     = btn_id,
 					) {
-						result = i + 1
-						if open != nil do open^ = false
+						result = index + 1
+						open^ = false
 					}
 				}
 			}
 		}
 
 		if closed {
-			result = 0
-			if open != nil do open^ = false
+			result = -1
+			open^  = false 
 		}
 	}
 
