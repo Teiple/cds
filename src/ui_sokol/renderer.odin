@@ -30,25 +30,29 @@ UI_Sokol_Font :: struct {
 }
 
 Renderer :: struct {
-	pipeline:      sg.Pipeline,
-	vertex_buffer: sg.Buffer,
-	index_buffer:  sg.Buffer,
-	sampler:       sg.Sampler,
-	white_image:   sg.Image,
-	white_view:    sg.View,
-	fonts:         [dynamic]UI_Sokol_Font,
-	vertices:      [dynamic]Vertex,
-	indices:       [dynamic]u16,
-	batches:       [dynamic]Draw_Batch,
-	scissor_stack: [dynamic]ui.Rect,
+	pipeline:        sg.Pipeline,
+	vertex_buffer:   sg.Buffer,
+	index_buffer:    sg.Buffer,
+	vertex_capacity: int,
+	index_capacity:  int,
+	sampler:         sg.Sampler,
+	white_image:     sg.Image,
+	white_view:      sg.View,
+	fonts:           [dynamic]UI_Sokol_Font,
+	vertices:        [dynamic]Vertex,
+	indices:         [dynamic]u16,
+	batches:         [dynamic]Draw_Batch,
+	scissor_stack:   [dynamic]ui.Rect,
 }
 
-init :: proc(r: ^Renderer, max_vertices := 16384, max_indices := 32768) {
+init :: proc(r: ^Renderer, max_vertices := 65536, max_indices := 131072) {
 	r.vertices = make([dynamic]Vertex, 0, max_vertices)
 	r.indices = make([dynamic]u16, 0, max_indices)
 	r.batches = make([dynamic]Draw_Batch, 0, 64)
 	r.scissor_stack = make([dynamic]ui.Rect, 0, 16)
 	r.fonts = make([dynamic]UI_Sokol_Font, 0, 4)
+	r.vertex_capacity = max_vertices
+	r.index_capacity = max_indices
 
 	r.vertex_buffer = sg.make_buffer({
 		usage = {vertex_buffer = true, dynamic_update = true},
@@ -1264,6 +1268,24 @@ render :: proc(
 	}
 
 	if len(r.indices) == 0 do return
+
+	if len(r.vertices) > r.vertex_capacity {
+		sg.destroy_buffer(r.vertex_buffer)
+		r.vertex_capacity = max(r.vertex_capacity * 2, len(r.vertices))
+		r.vertex_buffer = sg.make_buffer({
+			usage = {vertex_buffer = true, dynamic_update = true},
+			size = uint(r.vertex_capacity * size_of(Vertex)),
+		})
+	}
+
+	if len(r.indices) > r.index_capacity {
+		sg.destroy_buffer(r.index_buffer)
+		r.index_capacity = max(r.index_capacity * 2, len(r.indices))
+		r.index_buffer = sg.make_buffer({
+			usage = {index_buffer = true, dynamic_update = true},
+			size = uint(r.index_capacity * size_of(u16)),
+		})
+	}
 
 	sg.update_buffer(
 		r.vertex_buffer,

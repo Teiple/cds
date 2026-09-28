@@ -266,6 +266,185 @@ toggle_group :: proc(
 	return changed
 }
 
+toggle_slider_slice :: proc(
+	options: []string,
+	active: ^int,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(active != nil)
+	if len(options) == 0 do return false
+
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style_track := g_extra.theme.controls[.Slider]
+	style_thumb := g_extra.theme.controls[.Toggle]
+	outline := get_control_outline(
+		style_track,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	changed := false
+	n := len(options)
+
+	if !disabled && ui.is_id_focused(root_id) {
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
+			if active^ > 0 {
+				active^ -= 1
+				changed = true
+			}
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
+			if active^ < n - 1 {
+				active^ += 1
+				changed = true
+			}
+		}
+	}
+
+	bounds, has_bounds := ui.rect_by_id(root_id)
+
+	if !disabled &&
+	   (ui.is_id_clicked(root_id) || ui.is_id_held(root_id)) &&
+	   has_bounds &&
+	   bounds.width > 0 {
+		mouse_pos := ui.pointer_position()
+		slot_w := bounds.width / f32(n)
+		slot := int(clamp((mouse_pos.x - bounds.x) / slot_w, 0, f32(n - 1)))
+		if slot != active^ {
+			active^ = slot
+			changed = true
+		}
+	}
+
+	active^ = clamp(active^, 0, n - 1)
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_color = style_track.background[state],
+		border = {
+			thickness = style_track.border_width,
+			color = style_track.border[state],
+		},
+		outline = outline,
+		corner_radius = style_track.corner_radius,
+		layout_direction = .Left_To_Right,
+		padding = {2, 2, 2, 2},
+		child_gap = 2,
+		reuse_id = true,
+	) {
+		for opt_text, i in options {
+			is_active := (i == active^)
+			slot_id := ui.local_id(i)
+
+			if is_active {
+				if ui.layout(
+					width = ui.grow(),
+					height = ui.grow(),
+					background_color = style_thumb.background[get_this_control_state(active = true)],
+					border = {
+						thickness = style_thumb.border_width,
+						color = style_thumb.border[state],
+					},
+					corner_radius = style_thumb.corner_radius,
+					child_alignment = {.Center, .Center},
+					pointer_mode = .Ignore,
+					id = slot_id,
+				) {
+					ui.text(
+						opt_text,
+						alignment = {.Center, .Center},
+						color = style_thumb.text[.Active],
+						font_size = g_extra.theme.font_size,
+						font_index = g_extra.theme.font_index,
+					)
+				}
+			} else {
+				if ui.layout(
+					width = ui.grow(),
+					height = ui.grow(),
+					background_color = {0, 0, 0, 0},
+					child_alignment = {.Center, .Center},
+					pointer_mode = .Ignore,
+					id = slot_id,
+				) {
+					ui.text(
+						opt_text,
+						alignment = {.Center, .Center},
+						color = style_track.text[state],
+						font_size = g_extra.theme.font_size,
+						font_index = g_extra.theme.font_index,
+					)
+				}
+			}
+		}
+	}
+
+	return changed
+}
+
+toggle_slider_enum :: proc(
+	options: $O/[$E]string,
+	active: ^E,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool where intrinsics.type_is_enum(E) &&
+	len(E) > 0 {
+	assert(active != nil)
+	opts := make([]string, len(E), context.temp_allocator)
+	idx := 0
+	active_idx := 0
+	for iter := enum_iter_start(E); opt in enum_iter_next(&iter) {
+		opts[idx] = options[opt]
+		if opt == active^ {
+			active_idx = idx
+		}
+		idx += 1
+	}
+
+	changed := toggle_slider_slice(
+		options = opts,
+		active = &active_idx,
+		width = width,
+		height = height,
+		disabled = disabled,
+		id = id,
+		reuse_id = reuse_id,
+		loc = loc,
+	)
+	if changed {
+		idx = 0
+		for iter := enum_iter_start(E); opt in enum_iter_next(&iter) {
+			if idx == active_idx {
+				active^ = opt
+				break
+			}
+			idx += 1
+		}
+	}
+	return changed
+}
+
+toggle_slider :: proc {
+	toggle_slider_slice,
+	toggle_slider_enum,
+}
+
 //region: tab_bar
 tab_bar :: proc(
 	tabs: $O/[$E]string,
@@ -3444,6 +3623,9 @@ message_box :: proc(
 		return -1
 	}
 
+	ui.push_focus_scope()
+	defer ui.pop_focus_scope()
+
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -3529,12 +3711,19 @@ text_input_box :: proc(
 		return -1
 	}
 
+	ui.push_focus_scope()
+	defer ui.pop_focus_scope()
+
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
 	result := -1
 	closed := false
 	input_id := ui.local_id("input")
+
+	if edit_mode != nil && ui.is_id_focused(input_id) && !edit_mode^ {
+		edit_mode^ = true
+	}
 
 	if ui.layout(
 		width = ui.grow(),

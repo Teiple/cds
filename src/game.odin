@@ -20,6 +20,7 @@ Game_State :: struct {
 		ctx:      ui.Context,
 		renderer: ui_sokol.Renderer,
 	},
+	demo:          Ui_Demo_State,
 	button_clicks: int,
 }
 

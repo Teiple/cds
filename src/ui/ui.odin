@@ -140,6 +140,8 @@ Input_Event :: struct {
 	scrolls:           map[Id]Scroll_Data,
 	focusables:        [dynamic]Id,
 	focused_id:        Id,
+	focus_scopes:      [dynamic]i32,
+	active_focus_trap: Maybe([2]i32),
 }
 
 Scroll_Data :: struct #all_or_none {
@@ -1399,6 +1401,8 @@ make_context :: proc(
 			scrolls = make(map[Id]Scroll_Data, 4),
 			focusables = make([dynamic]Id, 0, 16),
 			focused_id = 0,
+			focus_scopes = make([dynamic]i32, 0, 8),
+			active_focus_trap = nil,
 		},
 		clip = {open_clip_stack = make([dynamic]Rect, 0, 2)},
 		ids = make(map[Id]Id_Info, 50),
@@ -1432,6 +1436,7 @@ delete_context :: proc(ctx: Context) {
 	delete(ctx.input_event.clicked_elements)
 	delete(ctx.input_event.scrolls)
 	delete(ctx.input_event.focusables)
+	delete(ctx.input_event.focus_scopes)
 	delete(ctx.clip.open_clip_stack)
 	delete(ctx.ids)
 	delete(ctx.floats)
@@ -1450,6 +1455,8 @@ begin :: proc(ctx: ^Context, canvas_size: [2]f32) -> bool {
 	clear(&ctx.open_layout_stack)
 	clear(&ctx.floats)
 	clear(&ctx.input_event.focusables)
+	clear(&ctx.input_event.focus_scopes)
+	ctx.input_event.active_focus_trap = nil
 	ctx.input_event.keyboard_captured = false
 
 	append(&ctx.elements, root_layout(canvas_size))
@@ -1538,6 +1545,24 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 		ctx.input_event.focused_id = ctx.input_event.clicked_elements[0]
 	}
 
+	if trap, ok := ctx.input_event.active_focus_trap.?; ok {
+		start := max(0, trap[0])
+		end := min(cast(i32)len(ctx.input_event.focusables), trap[1])
+		if start < end {
+			is_focused_in_trap := false
+			for i in start ..< end {
+				if ctx.input_event.focusables[i] ==
+				   ctx.input_event.focused_id {
+					is_focused_in_trap = true
+					break
+				}
+			}
+			if !is_focused_in_trap {
+				ctx.input_event.focused_id = ctx.input_event.focusables[start]
+			}
+		}
+	}
+
 	if !ctx.input_event.keyboard_captured {
 		if ctx.input.keyboard.keys[.Tab] == .Pressed {
 			if .Shift in ctx.input.keyboard.modifiers {
@@ -1582,29 +1607,60 @@ end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
 @(private = "file")
 focus_next_in_ctx :: proc(ctx: ^Context) {
 	if len(ctx.input_event.focusables) == 0 do return
-	current_idx := -1
-	for id, i in ctx.input_event.focusables {
-		if id == ctx.input_event.focused_id {
+
+	start: i32 = 0
+	end: i32 = cast(i32)len(ctx.input_event.focusables)
+	if trap, ok := ctx.input_event.active_focus_trap.?; ok {
+		start = max(0, trap[0])
+		end = min(cast(i32)len(ctx.input_event.focusables), trap[1])
+		if start >= end do return
+	}
+
+	current_idx: i32 = -1
+	for i in start ..< end {
+		if ctx.input_event.focusables[i] == ctx.input_event.focused_id {
 			current_idx = i
 			break
 		}
 	}
-	next_idx := (current_idx + 1) % len(ctx.input_event.focusables)
+
+	count := end - start
+	next_idx: i32
+	if current_idx < start || current_idx >= end {
+		next_idx = start
+	} else {
+		next_idx = start + (current_idx - start + 1) % count
+	}
 	ctx.input_event.focused_id = ctx.input_event.focusables[next_idx]
 }
 
 @(private = "file")
 focus_previous_in_ctx :: proc(ctx: ^Context) {
 	if len(ctx.input_event.focusables) == 0 do return
-	current_idx := -1
-	for id, i in ctx.input_event.focusables {
-		if id == ctx.input_event.focused_id {
+
+	start: i32 = 0
+	end: i32 = cast(i32)len(ctx.input_event.focusables)
+	if trap, ok := ctx.input_event.active_focus_trap.?; ok {
+		start = max(0, trap[0])
+		end = min(cast(i32)len(ctx.input_event.focusables), trap[1])
+		if start >= end do return
+	}
+
+	current_idx: i32 = -1
+	for i in start ..< end {
+		if ctx.input_event.focusables[i] == ctx.input_event.focused_id {
 			current_idx = i
 			break
 		}
 	}
-	prev_idx :=
-		current_idx <= 0 ? len(ctx.input_event.focusables) - 1 : current_idx - 1
+
+	count := end - start
+	prev_idx: i32
+	if current_idx < start || current_idx >= end {
+		prev_idx = end - 1
+	} else {
+		prev_idx = start + (current_idx - start - 1 + count) % count
+	}
 	ctx.input_event.focused_id = ctx.input_event.focusables[prev_idx]
 }
 
@@ -2720,6 +2776,27 @@ focus_next :: proc() {
 
 focus_previous :: proc() {
 	focus_previous_in_ctx(g_ui_builder.current_context)
+}
+
+push_focus_scope :: proc() {
+	append(
+		&g_ui_builder.current_context.input_event.focus_scopes,
+		cast(i32)len(g_ui_builder.current_context.input_event.focusables),
+	)
+}
+
+pop_focus_scope :: proc(trap: bool = true) {
+	ctx := g_ui_builder.current_context
+	if len(ctx.input_event.focus_scopes) > 0 {
+		start := pop(&ctx.input_event.focus_scopes)
+		end := cast(i32)len(ctx.input_event.focusables)
+		if trap && end > start {
+			if curr, ok := ctx.input_event.active_focus_trap.?;
+			   !ok || start >= curr[0] {
+				ctx.input_event.active_focus_trap = [2]i32{start, end}
+			}
+		}
+	}
 }
 
 key_state :: proc(k: Key) -> Key_State {
