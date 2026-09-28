@@ -6,6 +6,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:math"
 import "core:strconv"
+import "core:strings"
 
 //region: label
 label :: proc(
@@ -910,184 +911,20 @@ text_box :: proc(
 }
 
 //region: spinner
-spinner_i32 :: proc(
-	value: ^i32,
-	min_val: i32,
-	max_val: i32,
+spinner :: proc(
+	value: ^$T,
+	min_val: T,
+	max_val: T,
 	edit_mode: ^bool,
-	step: i32 = 1,
-	drag_speed: f32 = 1.0,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
-	assert(value != nil)
-	assert(edit_mode != nil)
-	root_id := ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	if !disabled {
-		ui.register_focusable(root_id)
-	}
-
-	style := g_extra.theme.controls[.Spinner]
-	outline := get_control_outline(
-		style,
-		!disabled && ui.is_id_focused(root_id),
-	)
-	changed := false
-
-	if !disabled && ui.is_id_focused(root_id) && !edit_mode^ {
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
-			if value^ > min_val {
-				value^ = max(value^ - step, min_val)
-				changed = true
-			}
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
-			if value^ < max_val {
-				value^ = min(value^ + step, max_val)
-				changed = true
-			}
-		}
-	}
-
-	if ui.layout(
-		width = width,
-		height = height,
-		layout_direction = .Left_To_Right,
-		child_gap = 2,
-		padding = {},
-		outline = outline,
-		reuse_id = true,
-	) {
-		btn_left := ui.local_id("dec")
-		if button(
-			"<",
-			width = ui.fixed(24),
-			height = ui.grow(),
-			disabled = disabled || value^ <= min_val,
-			id = btn_left,
-		) {
-			value^ = max(value^ - step, min_val)
-			changed = true
-		}
-
-		box_id := ui.local_id("val")
-		is_editing := edit_mode^
-
-		if !disabled && !is_editing && ui.is_id_clicked(box_id) {
-			edit_mode^ = true
-			is_editing = true
-			g_extra.text_box.id = box_id
-			clear(&g_extra.text_box.buffer)
-			b := fmt.tprintf("%d", value^)
-			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
-		}
-
-		if is_editing {
-			if g_extra.text_box.id != box_id {
-				g_extra.text_box.id = box_id
-				clear(&g_extra.text_box.buffer)
-				b := fmt.tprintf("%d", value^)
-				append(&g_extra.text_box.buffer, ..transmute([]u8)b)
-			}
-			_, committed := text_box(
-				&g_extra.text_box.buffer,
-				edit_mode,
-				max_len = 16,
-				width = ui.grow(),
-				height = ui.grow(),
-				disabled = disabled,
-				id = box_id,
-			)
-			if committed {
-				val, ok := strconv.parse_int(
-					string(g_extra.text_box.buffer[:]),
-				)
-				if ok {
-					value^ = clamp(i32(val), min_val, max_val)
-					changed = true
-				}
-				clear(&g_extra.text_box.buffer)
-				g_extra.text_box.id = 0
-			} else if !edit_mode^ {
-				clear(&g_extra.text_box.buffer)
-				g_extra.text_box.id = 0
-			}
-		} else {
-			if !disabled && ui.is_id_held(box_id) {
-				delta := ui.pointer_delta().x
-				if delta != 0 {
-					new_val := clamp(
-						value^ + i32(delta * drag_speed),
-						min_val,
-						max_val,
-					)
-					if new_val != value^ {
-						value^ = new_val
-						changed = true
-					}
-				}
-			}
-
-			box_state := get_control_state(box_id, disabled)
-			if ui.layout(
-				width = ui.grow(),
-				height = ui.grow(),
-				background_color = style.background[box_state],
-				border = {
-					thickness = style.border_width,
-					color = style.border[box_state],
-				},
-				corner_radius = style.corner_radius,
-				padding = {4, 4, 2, 2},
-				child_alignment = {.Center, .Center},
-				id = box_id,
-			) {
-				text_str := fmt.tprintf("%d", value^)
-				ui.text(
-					text_str,
-					alignment = {.Center, .Center},
-					color = style.text[box_state],
-					font_size = g_extra.theme.font_size,
-					font_index = g_extra.theme.font_index,
-				)
-			}
-		}
-
-		btn_right := ui.local_id("inc")
-		if button(
-			">",
-			width = ui.fixed(24),
-			height = ui.grow(),
-			disabled = disabled || value^ >= max_val,
-			id = btn_right,
-		) {
-			value^ = min(value^ + step, max_val)
-			changed = true
-		}
-	}
-
-	return changed
-}
-
-spinner_f32 :: proc(
-	value: ^f32,
-	min_val: f32,
-	max_val: f32,
-	edit_mode: ^bool,
-	step: f32 = 0.1,
+	step: T,
+	drag_speed: f32,
 	precision: int = 2,
-	drag_speed: f32 = 0.05,
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
 	id: Maybe(ui.Id) = nil,
 	loc := #caller_location,
-) -> bool {
+) -> bool where intrinsics.type_is_numeric(T) {
 	assert(value != nil)
 	assert(edit_mode != nil)
 	root_id := ui.push_id(id, loc)
@@ -1104,16 +941,23 @@ spinner_f32 :: proc(
 	)
 	changed := false
 
+	actual_step: T = step
+	when intrinsics.type_is_float(T) {
+		if actual_step == 0 do actual_step = 0.1
+	} else {
+		if actual_step == 0 do actual_step = 1
+	}
+
 	if !disabled && ui.is_id_focused(root_id) && !edit_mode^ {
 		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Down) {
 			if value^ > min_val {
-				value^ = max(value^ - step, min_val)
+				value^ = max(value^ - actual_step, min_val)
 				changed = true
 			}
 		}
 		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Up) {
 			if value^ < max_val {
-				value^ = min(value^ + step, max_val)
+				value^ = min(value^ + actual_step, max_val)
 				changed = true
 			}
 		}
@@ -1136,7 +980,7 @@ spinner_f32 :: proc(
 			disabled = disabled || value^ <= min_val,
 			id = btn_left,
 		) {
-			value^ = max(value^ - step, min_val)
+			value^ = max(value^ - actual_step, min_val)
 			changed = true
 		}
 
@@ -1148,7 +992,12 @@ spinner_f32 :: proc(
 			is_editing = true
 			g_extra.text_box.id = box_id
 			clear(&g_extra.text_box.buffer)
-			b := fmt.tprintf("%.*f", precision, value^)
+			b: string
+			when intrinsics.type_is_float(T) {
+				b = fmt.tprintf("%.*f", precision, f64(value^))
+			} else {
+				b = fmt.tprintf("%d", value^)
+			}
 			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 		}
 
@@ -1156,7 +1005,12 @@ spinner_f32 :: proc(
 			if g_extra.text_box.id != box_id {
 				g_extra.text_box.id = box_id
 				clear(&g_extra.text_box.buffer)
-				b := fmt.tprintf("%.*f", precision, value^)
+				b: string
+				when intrinsics.type_is_float(T) {
+					b = fmt.tprintf("%.*f", precision, f64(value^))
+				} else {
+					b = fmt.tprintf("%d", value^)
+				}
 				append(&g_extra.text_box.buffer, ..transmute([]u8)b)
 			}
 			_, committed := text_box(
@@ -1169,12 +1023,22 @@ spinner_f32 :: proc(
 				id = box_id,
 			)
 			if committed {
-				val, ok := strconv.parse_f32(
-					string(g_extra.text_box.buffer[:]),
-				)
-				if ok {
-					value^ = clamp(val, min_val, max_val)
-					changed = true
+				when intrinsics.type_is_float(T) {
+					val, ok := strconv.parse_f64(
+						string(g_extra.text_box.buffer[:]),
+					)
+					if ok {
+						value^ = clamp(T(val), min_val, max_val)
+						changed = true
+					}
+				} else {
+					val, ok := strconv.parse_i64(
+						string(g_extra.text_box.buffer[:]),
+					)
+					if ok {
+						value^ = clamp(T(val), min_val, max_val)
+						changed = true
+					}
 				}
 				clear(&g_extra.text_box.buffer)
 				g_extra.text_box.id = 0
@@ -1186,11 +1050,20 @@ spinner_f32 :: proc(
 			if !disabled && ui.is_id_held(box_id) {
 				delta := ui.pointer_delta().x
 				if delta != 0 {
-					new_val := clamp(
-						value^ + delta * drag_speed,
-						min_val,
-						max_val,
-					)
+					new_val: T
+					when intrinsics.type_is_float(T) {
+						new_val = clamp(
+							value^ + T(delta * drag_speed),
+							min_val,
+							max_val,
+						)
+					} else {
+						new_val = clamp(
+							value^ + T(math.round(delta * drag_speed)),
+							min_val,
+							max_val,
+						)
+					}
 					if new_val != value^ {
 						value^ = new_val
 						changed = true
@@ -1212,7 +1085,12 @@ spinner_f32 :: proc(
 				child_alignment = {.Center, .Center},
 				id = box_id,
 			) {
-				text_str := fmt.tprintf("%.*f", precision, value^)
+				text_str: string
+				when intrinsics.type_is_float(T) {
+					text_str = fmt.tprintf("%.*f", precision, f64(value^))
+				} else {
+					text_str = fmt.tprintf("%d", value^)
+				}
 				ui.text(
 					text_str,
 					alignment = {.Center, .Center},
@@ -1231,7 +1109,7 @@ spinner_f32 :: proc(
 			disabled = disabled || value^ >= max_val,
 			id = btn_right,
 		) {
-			value^ = min(value^ + step, max_val)
+			value^ = min(value^ + actual_step, max_val)
 			changed = true
 		}
 	}
@@ -1837,4 +1715,356 @@ tooltip :: proc(
 			)
 		}
 	}
+}
+
+//region: scroll_bar
+scroll_bar :: proc(
+	value: ^f32,
+	min_val: f32,
+	max_val: f32,
+	view_size: f32,
+	content_size: f32,
+	dir: Slider_Direction = .Vertical,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{14}},
+	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> bool {
+	assert(value != nil)
+	root_id := ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.ScrollBar]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	f_min := min_val
+	f_max := max_val
+	changed := false
+
+	if !disabled && ui.is_id_focused(root_id) {
+		kstep := (f_max - f_min) * 0.05
+		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
+			value^ = clamp(value^ - kstep, f_min, f_max)
+			changed = true
+		}
+		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
+			value^ = clamp(value^ + kstep, f_min, f_max)
+			changed = true
+		}
+	}
+
+	track_rect, _ := ui.rect_by_id(root_id)
+	track_dim := dir == .Horizontal ? track_rect.width : track_rect.height
+	thumb_dim: f32 = 16
+	if content_size > 0 && view_size > 0 && content_size > view_size {
+		ratio := clamp(view_size / content_size, 0.05, 1.0)
+		thumb_dim = max(
+			f32(16.0),
+			(track_dim > 0 ? track_dim : view_size) * ratio,
+		)
+	} else if track_dim > 0 {
+		thumb_dim = max(f32(16.0), track_dim * 0.2)
+	}
+
+	travel := track_dim - thumb_dim
+	if !disabled && travel > 0 && ui.is_id_held(root_id) {
+		mouse_pos := ui.pointer_position()
+		mouse_track :=
+			(dir == .Horizontal ? (mouse_pos.x - track_rect.x) : (mouse_pos.y - track_rect.y)) -
+			thumb_dim * 0.5
+		norm := clamp(mouse_track / travel, 0.0, 1.0)
+		new_val := f_min + norm * (f_max - f_min)
+		if new_val != value^ {
+			value^ = new_val
+			changed = true
+		}
+	}
+
+	range := math.abs(f_max - f_min)
+	normalized :=
+		range > 0 ? clamp(math.abs(value^ - f_min) / range, 0.0, 1.0) : 0.0
+	child_align :=
+		dir == .Horizontal ? ui.Alignment{normalized, .Center} : ui.Alignment{.Center, normalized}
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_color = style.background[state],
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		child_alignment = child_align,
+		reuse_id = true,
+	) {
+		thumb_id := ui.local_id("thumb")
+		thumb_w := dir == .Horizontal ? ui.fixed(thumb_dim) : ui.grow()
+		thumb_h := dir == .Horizontal ? ui.grow() : ui.fixed(thumb_dim)
+		thumb_bg :=
+			state == .Disabled ? style.background[.Disabled] : (ui.is_id_held(root_id) ? style.border[.Pressed] : style.background[.Active])
+
+		if ui.layout(
+			width = thumb_w,
+			height = thumb_h,
+			background_color = thumb_bg,
+			corner_radius = style.corner_radius,
+			id = thumb_id,
+			pointer_mode = .Passthrough,
+		) {}
+	}
+
+	return changed
+}
+
+//region: list_view
+list_view :: proc(
+	items: []string,
+	active: ^i32,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	item_height: f32 = 24,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> bool {
+	assert(active != nil)
+	root_id := ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.ListView]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+	changed := false
+	focused_index := -1
+
+	handle_nav :: proc(
+		current: int,
+		count: int,
+		active: ^i32,
+		changed: ^bool,
+		focused_index: ^int,
+	) {
+		if ui.is_key_pressed(.Up) && current > 0 {
+			ui.set_focused_id(ui.local_id(current - 1))
+			active^ = i32(current - 1)
+			changed^ = true
+			focused_index^ = current - 1
+		}
+		if ui.is_key_pressed(.Down) && current < count - 1 {
+			ui.set_focused_id(ui.local_id(current + 1))
+			active^ = i32(current + 1)
+			changed^ = true
+			focused_index^ = current + 1
+		}
+		if ui.is_key_pressed(.Home) && count > 0 {
+			ui.set_focused_id(ui.local_id(0))
+			active^ = 0
+			changed^ = true
+			focused_index^ = 0
+		}
+		if ui.is_key_pressed(.End) && count > 0 {
+			ui.set_focused_id(ui.local_id(count - 1))
+			active^ = i32(count - 1)
+			changed^ = true
+			focused_index^ = count - 1
+		}
+	}
+
+	if ui.layout(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		child_gap = 4,
+		padding = {2, 2, 2, 2},
+		background_color = style.background[.Normal],
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		reuse_id = true,
+	) {
+		view_id := ui.local_id("items_view")
+		if ui.layout(
+			width = ui.grow(),
+			height = ui.grow(),
+			layout_direction = .Top_To_Bottom,
+			child_gap = 2,
+			padding = {4, 0, 4, 4},
+			clip = true,
+			scroll = true,
+			id = view_id,
+			pointer_mode = .Passthrough,
+		) {
+			initially_focused := -1
+			for i in 0 ..< len(items) {
+				if ui.is_id_focused(ui.local_id(i)) {
+					initially_focused = i
+					break
+				}
+			}
+
+			if !disabled {
+				if initially_focused >= 0 {
+					handle_nav(
+						initially_focused,
+						len(items),
+						active,
+						&changed,
+						&focused_index,
+					)
+				} else if ui.is_id_focused(root_id) {
+					handle_nav(
+						int(active^),
+						len(items),
+						active,
+						&changed,
+						&focused_index,
+					)
+				}
+			}
+
+			item_style := g_extra.theme.controls[.Button]
+			for item, i in items {
+				index := i32(i)
+				item_id := ui.local_id(i)
+
+				if !disabled {
+					ui.register_focusable(item_id)
+				}
+
+				if !disabled && ui.is_id_focused(item_id) {
+					if ui.is_key_pressed(.Enter) || ui.is_key_pressed(.Space) {
+						if active^ != index {
+							active^ = index
+							changed = true
+						}
+					}
+				}
+
+				is_item_clicked := !disabled && ui.is_id_clicked(item_id)
+				if is_item_clicked {
+					if active^ != index {
+						active^ = index
+						changed = true
+					}
+					ui.set_focused_id(item_id)
+				}
+
+				is_active := (active^ == index)
+				item_state := get_control_state(item_id, disabled, is_active)
+				item_outline := get_control_outline(
+					item_style,
+					!disabled && ui.is_id_focused(item_id),
+				)
+
+				if ui.layout(
+					width = ui.grow(),
+					height = ui.fixed(item_height),
+					background_color = item_style.background[item_state],
+					padding = {8, 8, 2, 2},
+					child_alignment = {.Left, .Center},
+					outline = item_outline,
+					id = item_id,
+				) {
+					ui.text(
+						item,
+						alignment = {.Left, .Center},
+						color = item_style.text[item_state],
+						font_size = g_extra.theme.font_size,
+						font_index = g_extra.theme.font_index,
+					)
+				}
+			}
+		}
+
+		scroll_data := ui.scroll_data_by_id(view_id)
+		if scroll_data.min_offset.y < 0 {
+			bar_id := ui.local_id("scroll_bar")
+			view_rect := ui.rect_by_id(view_id)
+			scroll_y := scroll_data.offset.y
+
+			target_index :=
+				(changed && (focused_index >= 0 ? focused_index : int(active^)) >= 0) ? (focused_index >= 0 ? focused_index : int(active^)) : -1
+
+			if !ui.is_id_held(bar_id) && target_index >= 0 {
+				pad_top: f32 = 4
+				pad_bottom: f32 = 4
+				gap: f32 = 2
+				item_top := pad_top + f32(target_index) * (item_height + gap)
+				item_bottom := item_top + item_height + pad_bottom
+				view_h := view_rect.height
+
+				if item_top - pad_top < -scroll_y {
+					scroll_y = -(item_top - pad_top)
+				} else if item_bottom > -scroll_y + view_h {
+					scroll_y = -(item_bottom - view_h)
+				}
+				scroll_y = clamp(scroll_y, scroll_data.min_offset.y, 0.0)
+				ui.set_scroll_offset_by_id(
+					view_id,
+					{scroll_data.offset.x, scroll_y},
+				)
+			}
+
+			total_content_h := view_rect.height - scroll_data.min_offset.y
+			if scroll_bar(
+				&scroll_y,
+				min_val = 0,
+				max_val = scroll_data.min_offset.y,
+				view_size = view_rect.height,
+				content_size = total_content_h,
+				dir = .Vertical,
+				width = ui.fixed(12),
+				height = ui.grow(),
+				disabled = disabled,
+				id = bar_id,
+			) {
+				ui.set_scroll_offset_by_id(
+					view_id,
+					{scroll_data.offset.x, scroll_y},
+				)
+			}
+		}
+	}
+
+	return changed
+}
+
+list_view_separated :: proc(
+	text: string,
+	delimiter: rune = ';',
+	active: ^i32,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	item_height: f32 = 24,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> bool {
+	delim_str := fmt.tprintf("%c", delimiter)
+	items := strings.split(text, delim_str, context.temp_allocator)
+	return list_view(
+		items = items,
+		active = active,
+		width = width,
+		height = height,
+		item_height = item_height,
+		disabled = disabled,
+		id = id,
+		loc = loc,
+	)
 }

@@ -186,7 +186,7 @@ PANEL_STYLE: Control_Style : {
 	},
 	text = {.Normal ..= .Disabled = LABEL_STYLE.text[.Normal]},
 	border_width = 1,
-	outline = {},
+	outline = DEFAULT_CONTROL_STYLE.outline,
 	corner_radius = {6, 6, 6, 6},
 	padding = {8, 8, 8, 8},
 	overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
@@ -241,7 +241,7 @@ DEFAULT_THEME: Style_Theme : {
 			padding = {4, 4, 2, 2},
 			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
 		},
-		.ListView = DEFAULT_CONTROL_STYLE,
+		.ListView = PANEL_STYLE,
 		.ScrollBar = SLIDER_STYLE,
 		.StatusBar = {
 			border = {.Normal ..= .Disabled = {215, 222, 218, 255}},

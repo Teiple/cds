@@ -288,3 +288,81 @@ status_bar :: proc(
 		}
 	}
 }
+
+//region: scroll_panel
+@(deferred_none = end_scroll_panel)
+scroll_panel :: proc(
+	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	layout_direction: ui.Layout_Direction = .Top_To_Bottom,
+	gap: f32 = 0,
+	padding: Maybe(ui.Padding) = nil,
+	id: Maybe(ui.Id) = nil,
+	loc := #caller_location,
+) -> bool {
+	root_id := ui.push_id(id, loc)
+	wrap_id(root_id)
+	panel_style := g_extra.theme.controls[.Panel]
+	pad := padding.? or_else panel_style.padding
+
+	if ui.begin_layout(
+		width = width,
+		height = height,
+		layout_direction = .Left_To_Right,
+		child_gap = 0,
+		padding = {},
+		background_color = panel_style.background[.Normal],
+		border = {
+			thickness = panel_style.border_width,
+			color = panel_style.border[.Normal],
+		},
+		corner_radius = panel_style.corner_radius,
+		id = root_id,
+	) {
+		view_id := ui.local_id("scroll_view")
+		if ui.begin_layout(
+			width = ui.grow(),
+			height = ui.grow(),
+			layout_direction = layout_direction,
+			child_gap = gap,
+			padding = pad,
+			clip = true,
+			scroll = true,
+			id = view_id,
+		) {
+		}
+	}
+	return true
+}
+
+end_scroll_panel :: proc() {
+	if ui.defer_end_layout() {
+		if ui.defer_end_layout() {
+		}
+
+		view_id := ui.local_id("scroll_view")
+		scroll_data := ui.scroll_data_by_id(view_id)
+
+		if scroll_data.min_offset.y < 0 {
+			view_rect := ui.rect_by_id(view_id)
+			total_content_h := view_rect.height - scroll_data.min_offset.y
+			scroll_y := scroll_data.offset.y
+			if scroll_bar(
+				&scroll_y,
+				min_val = 0,
+				max_val = scroll_data.min_offset.y,
+				view_size = view_rect.height,
+				content_size = total_content_h,
+				dir = .Vertical,
+				width = ui.fixed(12),
+				height = ui.grow(),
+				id = ui.local_id("scroll_bar"),
+			) {
+				ui.set_scroll_offset_by_id(
+					view_id,
+					{scroll_data.offset.x, scroll_y},
+				)
+			}
+		}
+	}
+}

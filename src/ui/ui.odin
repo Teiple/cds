@@ -143,10 +143,9 @@ Input_Event :: struct {
 }
 
 Scroll_Data :: struct #all_or_none {
-	offset:         [2]f32,
-	content_size:   [2]f32,
-	min_offset:     [2]f32,
-	pending_offset: Maybe([2]f32),
+	offset:       [2]f32,
+	content_size: [2]f32,
+	min_offset:   [2]f32,
 }
 
 ClipData :: struct {
@@ -1922,33 +1921,32 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 				}
 			}
 
-			if !ctx.input_event.scroll_captured && layout.config.scroll {
-				ele_rect := ele_get_rect(ele)
+			if layout.config.scroll {
+				content_size: [2]f32 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
+				min_offset: [2]f32 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
 
-				clipped_rect := ele_rect
+				cur_scroll := ctx.input_event.scrolls[ele.id]
+				next_scroll_offset := cur_scroll.offset
 
-				if len(ctx.clip.open_clip_stack) > 0 {
-					clipped_rect = intersect_rect(back(ctx.clip.open_clip_stack), ele_rect)
-				}
-
-				if rect_contains(ctx.input.pointer.position, clipped_rect) {
-					content_size: [2]f32 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
-					min_offset: [2]f32 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
-
-					cur_scroll := ctx.input_event.scrolls[ele.id]
-					pending_offset, is_pending := cur_scroll.pending_offset.?
-					next_scroll_offset := is_pending ? pending_offset : cur_scroll.offset + ctx.input.pointer.scroll * 20.0
-
-					next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
-
-					ctx.input_event.scrolls[ele.id] = {
-						offset         = next_scroll_offset,
-						pending_offset = nil,
-						content_size   = content_size,
-						min_offset     = min_offset,
+				if !ctx.input_event.scroll_captured && ctx.input.pointer.scroll != {0, 0} {
+					ele_rect := ele_get_rect(ele)
+					clipped_rect := ele_rect
+					if len(ctx.clip.open_clip_stack) > 0 {
+						clipped_rect = intersect_rect(back(ctx.clip.open_clip_stack), ele_rect)
 					}
 
-					ctx.input_event.scroll_captured = true
+					if rect_contains(ctx.input.pointer.position, clipped_rect) {
+						next_scroll_offset += ctx.input.pointer.scroll * 20.0
+						ctx.input_event.scroll_captured = true
+					}
+				}
+
+				next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
+
+				ctx.input_event.scrolls[ele.id] = {
+					offset       = next_scroll_offset,
+					content_size = content_size,
+					min_offset   = min_offset,
 				}
 			}
 
@@ -2815,8 +2813,20 @@ current_scroll_data :: proc() -> Scroll_Data {
 	return get_layout_scroll_data(g_ui_builder.current_context^)
 }
 
+scroll_data_by_id :: proc(id: Id) -> Scroll_Data {
+	assert(g_ui_builder.current_context != nil)
+	return g_ui_builder.current_context.input_event.scrolls[id]
+}
+
 set_scroll_offset :: proc(scroll: [2]f32) {
 	set_layout_scroll_offset(g_ui_builder.current_context, scroll)
+}
+
+set_scroll_offset_by_id :: proc(id: Id, scroll: [2]f32) {
+	assert(g_ui_builder.current_context != nil)
+	data := g_ui_builder.current_context.input_event.scrolls[id]
+	data.offset = scroll
+	g_ui_builder.current_context.input_event.scrolls[id] = data
 }
 
 // Internal ultilities
@@ -2824,8 +2834,7 @@ set_scroll_offset :: proc(scroll: [2]f32) {
 set_layout_scroll_offset :: proc(ctx: ^Context, new_scroll: [2]f32) {
 	open_ele := ctx.open_layout_stack[len(ctx.open_layout_stack) - 1]
 	scroll := ctx.input_event.scrolls[ctx.elements[open_ele].id]
-	scroll.pending_offset = new_scroll
-
+	scroll.offset = new_scroll
 	ctx.input_event.scrolls[ctx.elements[open_ele].id] = scroll
 }
 
@@ -2993,9 +3002,19 @@ local_id_enum :: proc(val: $E) -> Id where intrinsics.type_is_enum(E) {
 	return Id(hash.fnv64a(bytes[:], u64(parent_id)))
 }
 
+@(require_results)
+local_id_int :: proc(val: int) -> Id {
+	parent := back(g_ui_builder.current_context.open_layout_stack)
+	parent_id := g_ui_builder.current_context.elements[parent].id
+	val_u64 := u64(val)
+	bytes := transmute([8]u8)val_u64
+	return Id(hash.fnv64a(bytes[:], u64(parent_id)))
+}
+
 local_id :: proc {
 	local_id_string,
 	local_id_enum,
+	local_id_int,
 }
 
 @(require_results)

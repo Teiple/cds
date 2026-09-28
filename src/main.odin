@@ -239,6 +239,23 @@ main :: proc() {
 										100,
 										width = ui.fixed(240),
 									)
+
+									@(static) active_list_item: i32 = 0
+									uie.list_view(
+										{
+											"Hello World",
+											"Bye World",
+											"Hello World",
+											"Bye World",
+											"Hello World",
+											"Bye World",
+											"Hello World",
+											"Bye World",
+											"Hello World",
+											"Bye World",
+										},
+										&active_list_item,
+									)
 								}
 							case .Containers:
 								if uie.vbox(gap = 8) {
@@ -292,21 +309,24 @@ main :: proc() {
 
 									@(static) spin_val: i32 = 5
 									@(static) spin_edit: bool = false
-									uie.spinner_i32(
-										&spin_val,
-										0,
-										20,
-										&spin_edit,
+									uie.spinner(
+										value = &spin_val,
+										min_val = 0,
+										max_val = 20,
+										step = 1,
+										drag_speed = 1,
+										edit_mode = &spin_edit,
 									)
 
 									@(static) spin_fval: f32 = 1.5
 									@(static) spin_fedit: bool = false
-									uie.spinner_f32(
-										&spin_fval,
-										0,
-										10,
-										&spin_fedit,
-										step = 0.25,
+									uie.spinner(
+										value = &spin_fval,
+										min_val = 0,
+										max_val = 10,
+										edit_mode = &spin_fedit,
+										step = 0.001,
+										drag_speed = 0.05,
 										precision = 2,
 									)
 
