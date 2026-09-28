@@ -24,8 +24,9 @@ layout before any of children is drawn
 */
 
 UI_Extra_State :: struct {
-	theme:    Style_Theme,
-	text_box: Text_Box_State,
+	theme:        Style_Theme,
+	text_box:     Text_Box_State,
+	color_picker: Color_Picker_State,
 }
 
 @(private)

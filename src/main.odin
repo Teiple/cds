@@ -395,6 +395,18 @@ main :: proc() {
 										&drop_edit,
 										width = ui.fixed(180),
 									)
+
+									@(static) picked_col: [4]u8 = {
+										200,
+										80,
+										50,
+										255,
+									}
+									uie.color_picker(
+										&picked_col,
+										panel_size = 100,
+										show_alpha = true,
+									)
 								}
 							}
 						}

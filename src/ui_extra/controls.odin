@@ -2744,3 +2744,539 @@ list_view_separated :: proc(
 		loc = loc,
 	)
 }
+
+hsv_to_rgb :: proc(hsv: [3]f32) -> [4]u8 {
+	h := math.mod(hsv.x, 360.0)
+	if h < 0 do h += 360.0
+	s := clamp(hsv.y, 0.0, 1.0)
+	v := clamp(hsv.z, 0.0, 1.0)
+
+	c := v * s
+	x := c * (1.0 - math.abs(math.mod(h / 60.0, 2.0) - 1.0))
+	m := v - c
+
+	r, g, b: f32
+	switch int(h / 60.0) {
+	case 0:
+		r, g, b = c, x, 0
+	case 1:
+		r, g, b = x, c, 0
+	case 2:
+		r, g, b = 0, c, x
+	case 3:
+		r, g, b = 0, x, c
+	case 4:
+		r, g, b = x, 0, c
+	case:
+		r, g, b = c, 0, x
+	}
+
+	return {
+		u8(clamp((r + m) * 255.0, 0, 255)),
+		u8(clamp((g + m) * 255.0, 0, 255)),
+		u8(clamp((b + m) * 255.0, 0, 255)),
+		255,
+	}
+}
+
+hue_to_rgb :: proc(hue: f32) -> [4]u8 {
+	return hsv_to_rgb({hue, 1.0, 1.0})
+}
+
+rgb_to_hsv :: proc(col: [4]u8) -> [3]f32 {
+	r := f32(col.r) / 255.0
+	g := f32(col.g) / 255.0
+	b := f32(col.b) / 255.0
+
+	c_max := max(r, g, b)
+	c_min := min(r, g, b)
+	delta := c_max - c_min
+
+	h: f32 = 0
+	if delta > 0.00001 {
+		if c_max == r {
+			h = 60.0 * math.mod((g - b) / delta, 6.0)
+		} else if c_max == g {
+			h = 60.0 * (((b - r) / delta) + 2.0)
+		} else {
+			h = 60.0 * (((r - g) / delta) + 4.0)
+		}
+		if h < 0 do h += 360.0
+	}
+
+	s: f32 = c_max > 0.00001 ? delta / c_max : 0.0
+	v: f32 = c_max
+
+	return {h, s, v}
+}
+
+Color_Picker_State :: struct {
+	id:  ui.Id,
+	hsv: [3]f32,
+	col: [4]u8,
+}
+
+HUE_BAR_STOPS := []ui.Gradient_Stop {
+	{color = {255, 0, 0, 255}, position = 0.0 / 6.0},
+	{color = {255, 255, 0, 255}, position = 1.0 / 6.0},
+	{color = {0, 255, 0, 255}, position = 2.0 / 6.0},
+	{color = {0, 255, 255, 255}, position = 3.0 / 6.0},
+	{color = {0, 0, 255, 255}, position = 4.0 / 6.0},
+	{color = {255, 0, 255, 255}, position = 5.0 / 6.0},
+	{color = {255, 0, 0, 255}, position = 6.0 / 6.0},
+}
+
+HSV_PANEL_V_STOPS := []ui.Gradient_Stop {
+	{color = {0, 0, 0, 0}, position = 0.0},
+	{color = {0, 0, 0, 255}, position = 1.0},
+}
+
+color_panel_hsv :: proc(
+	color_hsv: ^[3]f32,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(color_hsv != nil)
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.Panel]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	changed := false
+	panel_rect, has_rect := ui.rect_by_id(root_id)
+
+	if !disabled &&
+	   (ui.is_id_held(root_id) || ui.is_id_pressed(root_id)) &&
+	   has_rect {
+		mouse_pos := ui.pointer_position()
+		if panel_rect.width > 0 && panel_rect.height > 0 {
+			new_s := clamp(
+				(mouse_pos.x - panel_rect.x) / panel_rect.width,
+				0.0,
+				1.0,
+			)
+			new_v := clamp(
+				1.0 - (mouse_pos.y - panel_rect.y) / panel_rect.height,
+				0.0,
+				1.0,
+			)
+			if new_s != color_hsv.y || new_v != color_hsv.z {
+				color_hsv.y = new_s
+				color_hsv.z = new_v
+				changed = true
+			}
+		}
+	}
+
+	pure_hue := hue_to_rgb(color_hsv.x)
+
+	h_stops := make([]ui.Gradient_Stop, 2, context.temp_allocator)
+	h_stops[0] = {
+		color    = {255, 255, 255, 255},
+		position = 0.0,
+	}
+	h_stops[1] = {
+		color    = pure_hue,
+		position = 1.0,
+	}
+
+	sel_x := has_rect ? color_hsv.y * panel_rect.width : 0
+	sel_y := has_rect ? (1.0 - color_hsv.z) * panel_rect.height : 0
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_gradient = ui.Gradient {
+			direction = .Horizontal,
+			stops = h_stops,
+		},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		clip = true,
+		reuse_id = true,
+	) {
+		_ = ui.layout(
+			width = ui.grow(),
+			height = ui.grow(),
+			background_gradient = ui.Gradient {
+				direction = .Vertical,
+				stops = HSV_PANEL_V_STOPS,
+			},
+			pointer_mode = .Ignore,
+			float_mode = ui.Float_At_Parent {
+				attach_points = {element = .LeftTop, parent = .LeftTop},
+			},
+		)
+
+		if has_rect {
+			_ = ui.layout(
+				width = ui.fixed(10),
+				height = ui.fixed(10),
+				corner_radius = {5, 5, 5, 5},
+				border = {thickness = 1.5, color = {255, 255, 255, 255}},
+				outline = {thickness = 1, color = {0, 0, 0, 200}, offset = 0},
+				pointer_mode = .Ignore,
+				float_mode = ui.Float_At_Parent {
+					offset = {sel_x, sel_y},
+					attach_points = {
+						element = .CenterCenter,
+						parent = .LeftTop,
+					},
+				},
+			)
+		}
+	}
+
+	return changed
+}
+
+color_bar_hue :: proc(
+	hue: ^f32,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(hue != nil)
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.Slider]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	changed := false
+	bar_rect, has_rect := ui.rect_by_id(root_id)
+
+	if !disabled &&
+	   (ui.is_id_held(root_id) || ui.is_id_pressed(root_id)) &&
+	   has_rect {
+		mouse_pos := ui.pointer_position()
+		if bar_rect.height > 0 {
+			new_h := clamp(
+				(mouse_pos.y - bar_rect.y) / bar_rect.height * 360.0,
+				0.0,
+				360.0,
+			)
+			if new_h >= 360.0 do new_h = 359.9
+			if new_h != hue^ {
+				hue^ = new_h
+				changed = true
+			}
+		}
+	}
+
+	norm_h := clamp(hue^ / 360.0, 0.0, 1.0)
+	sel_y := has_rect ? norm_h * bar_rect.height : 0
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_gradient = ui.Gradient {
+			direction = .Vertical,
+			stops = HUE_BAR_STOPS,
+		},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		clip = true,
+		reuse_id = true,
+	) {
+		if has_rect {
+			_ = ui.layout(
+				width = ui.grow(),
+				height = ui.fixed(4),
+				background_color = {255, 255, 255, 255},
+				border = {thickness = 1, color = {0, 0, 0, 200}},
+				pointer_mode = .Ignore,
+				float_mode = ui.Float_At_Parent {
+					offset = {0, sel_y},
+					attach_points = {
+						element = .CenterCenter,
+						parent = .CenterTop,
+					},
+				},
+			)
+		}
+	}
+
+	return changed
+}
+
+color_bar_alpha :: proc(
+	alpha: ^f32,
+	base_color: [4]u8 = {255, 255, 255, 255},
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(alpha != nil)
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if !disabled {
+		ui.register_focusable(root_id)
+	}
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.Slider]
+	outline := get_control_outline(
+		style,
+		!disabled && ui.is_id_focused(root_id),
+	)
+
+	changed := false
+	bar_rect, has_rect := ui.rect_by_id(root_id)
+
+	if !disabled &&
+	   (ui.is_id_held(root_id) || ui.is_id_pressed(root_id)) &&
+	   has_rect {
+		mouse_pos := ui.pointer_position()
+		if bar_rect.width > 0 {
+			new_a := clamp(
+				(mouse_pos.x - bar_rect.x) / bar_rect.width,
+				0.0,
+				1.0,
+			)
+			if new_a != alpha^ {
+				alpha^ = new_a
+				changed = true
+			}
+		}
+	}
+
+	col_trans := base_color
+	col_trans.a = 0
+	col_opaque := base_color
+	col_opaque.a = 255
+
+	alpha_stops := make([]ui.Gradient_Stop, 2, context.temp_allocator)
+	alpha_stops[0] = {
+		color    = col_trans,
+		position = 0.0,
+	}
+	alpha_stops[1] = {
+		color    = col_opaque,
+		position = 1.0,
+	}
+
+	norm_a := clamp(alpha^, 0.0, 1.0)
+	sel_x := has_rect ? norm_a * bar_rect.width : 0
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_gradient = ui.Gradient {
+			direction = .Horizontal,
+			stops = alpha_stops,
+		},
+		border = {thickness = style.border_width, color = style.border[state]},
+		outline = outline,
+		corner_radius = style.corner_radius,
+		clip = true,
+		reuse_id = true,
+	) {
+		if has_rect {
+			_ = ui.layout(
+				width = ui.fixed(4),
+				height = ui.grow(),
+				background_color = {255, 255, 255, 255},
+				border = {thickness = 1, color = {0, 0, 0, 200}},
+				pointer_mode = .Ignore,
+				float_mode = ui.Float_At_Parent {
+					offset = {sel_x, 0},
+					attach_points = {
+						element = .CenterCenter,
+						parent = .LeftCenter,
+					},
+				},
+			)
+		}
+	}
+
+	return changed
+}
+
+color_picker_hsv :: proc(
+	color_hsv: ^[3]f32,
+	alpha: ^f32 = nil,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	panel_size: f32 = 140,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(color_hsv != nil)
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	changed := false
+	total_w := panel_size + 16 + 8
+
+	if ui.layout(
+		width = width,
+		height = height,
+		layout_direction = .Top_To_Bottom,
+		child_gap = 8,
+		reuse_id = true,
+	) {
+		if ui.layout(
+			width = ui.fit(),
+			height = ui.fit(),
+			layout_direction = .Left_To_Right,
+			child_gap = 8,
+		) {
+			if color_panel_hsv(
+				color_hsv,
+				width = ui.fixed(panel_size),
+				height = ui.fixed(panel_size),
+				disabled = disabled,
+			) {
+				changed = true
+			}
+
+			if color_bar_hue(
+				&color_hsv.x,
+				width = ui.fixed(16),
+				height = ui.fixed(panel_size),
+				disabled = disabled,
+			) {
+				changed = true
+			}
+		}
+
+		if alpha != nil {
+			base_col := hsv_to_rgb(color_hsv^)
+			if color_bar_alpha(
+				alpha,
+				base_color = base_col,
+				width = ui.fixed(total_w),
+				height = ui.fixed(14),
+				disabled = disabled,
+			) {
+				changed = true
+			}
+		}
+	}
+
+	return changed
+}
+
+color_picker :: proc(
+	color: ^[4]u8,
+	show_alpha: bool = false,
+	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	panel_size: f32 = 140,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	assert(color != nil)
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	if g_extra.color_picker.id != root_id ||
+	   g_extra.color_picker.col != color^ {
+		g_extra.color_picker.id = root_id
+		prev_hue := g_extra.color_picker.hsv.x
+		hsv := rgb_to_hsv(color^)
+		if hsv.y > 0.001 && hsv.z > 0.001 {
+			g_extra.color_picker.hsv = hsv
+		} else {
+			g_extra.color_picker.hsv = {prev_hue, hsv.y, hsv.z}
+		}
+		g_extra.color_picker.col = color^
+	}
+
+	changed := false
+	total_w := panel_size + 16 + 8
+
+	if ui.layout(
+		width = width,
+		height = height,
+		layout_direction = .Top_To_Bottom,
+		child_gap = 8,
+		reuse_id = true,
+	) {
+		if ui.layout(
+			width = ui.fit(),
+			height = ui.fit(),
+			layout_direction = .Left_To_Right,
+			child_gap = 8,
+		) {
+			if color_panel_hsv(
+				&g_extra.color_picker.hsv,
+				width = ui.fixed(panel_size),
+				height = ui.fixed(panel_size),
+				disabled = disabled,
+			) {
+				rgb := hsv_to_rgb(g_extra.color_picker.hsv)
+				rgb.a = color.a
+				color^ = rgb
+				g_extra.color_picker.col = rgb
+				changed = true
+			}
+
+			if color_bar_hue(
+				&g_extra.color_picker.hsv.x,
+				width = ui.fixed(16),
+				height = ui.fixed(panel_size),
+				disabled = disabled,
+			) {
+				rgb := hsv_to_rgb(g_extra.color_picker.hsv)
+				rgb.a = color.a
+				color^ = rgb
+				g_extra.color_picker.col = rgb
+				changed = true
+			}
+		}
+
+		if show_alpha {
+			alpha_val := f32(color.a) / 255.0
+			base_col := hsv_to_rgb(g_extra.color_picker.hsv)
+			if color_bar_alpha(
+				&alpha_val,
+				base_color = base_col,
+				width = ui.fixed(total_w),
+				height = ui.fixed(14),
+				disabled = disabled,
+			) {
+				color.a = u8(clamp(math.round(alpha_val * 255.0), 0, 255))
+				g_extra.color_picker.col = color^
+				changed = true
+			}
+		}
+	}
+
+	return changed
+}
