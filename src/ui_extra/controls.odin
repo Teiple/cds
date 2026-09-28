@@ -457,6 +457,8 @@ text_box :: proc(
 	edit_mode: ^bool,
 	max_len: int = 256,
 	blink_rate: int = 120,
+	password: bool = false,
+	password_char: rune = '*',
 	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
 	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
 	disabled: bool = false,
@@ -534,8 +536,18 @@ text_box :: proc(
 					bounds.x -
 					style.padding.left +
 					g_extra.text_box.scroll_offset_x
+				sample_str: string
+				if password {
+					sample_str = strings.repeat(
+						fmt.tprintf("%c", password_char),
+						len(g_extra.text_box.buffer),
+						context.temp_allocator,
+					)
+				} else {
+					sample_str = string(g_extra.text_box.buffer[:])
+				}
 				char_idx := ui.get_char_index_at_x(
-					string(g_extra.text_box.buffer[:]),
+					sample_str,
 					click_local_x,
 					g_extra.theme.font_size,
 					g_extra.theme.font_index,
@@ -845,8 +857,20 @@ text_box :: proc(
 			g_extra.text_box.cursor_pos >= 0 &&
 			g_extra.text_box.cursor_pos <= len(g_extra.text_box.buffer),
 		)
+		prefix_str: string
+		if password {
+			prefix_str = strings.repeat(
+				fmt.tprintf("%c", password_char),
+				g_extra.text_box.cursor_pos,
+				context.temp_allocator,
+			)
+		} else {
+			prefix_str = string(
+				g_extra.text_box.buffer[:g_extra.text_box.cursor_pos],
+			)
+		}
 		cursor_x = ui.measure_text(
-			string(g_extra.text_box.buffer[:g_extra.text_box.cursor_pos]),
+			prefix_str,
 			g_extra.theme.font_size,
 			g_extra.theme.font_index,
 		)
@@ -877,8 +901,18 @@ text_box :: proc(
 		corner_radius = style.corner_radius,
 		reuse_id = true,
 	) {
-		text_str :=
+		raw_str :=
 			is_editing ? string(g_extra.text_box.buffer[:]) : string(buffer^[:])
+		text_str: string
+		if password {
+			text_str = strings.repeat(
+				fmt.tprintf("%c", password_char),
+				len(raw_str),
+				context.temp_allocator,
+			)
+		} else {
+			text_str = raw_str
+		}
 		if is_editing {
 			sel_range := [2]int {
 				g_extra.text_box.select_start,
@@ -2720,31 +2754,6 @@ list_view :: proc(
 	return changed
 }
 
-list_view_separated :: proc(
-	text: string,
-	delimiter: rune = ';',
-	active: ^i32,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	item_height: f32 = 24,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
-	delim_str := fmt.tprintf("%c", delimiter)
-	items := strings.split(text, delim_str, context.temp_allocator)
-	return list_view(
-		items = items,
-		active = active,
-		width = width,
-		height = height,
-		item_height = item_height,
-		disabled = disabled,
-		id = id,
-		loc = loc,
-	)
-}
-
 hsv_to_rgb :: proc(hsv: [3]f32) -> [4]u8 {
 	h := math.mod(hsv.x, 360.0)
 	if h < 0 do h += 360.0
@@ -3279,4 +3288,337 @@ color_picker :: proc(
 	}
 
 	return changed
+}
+
+dummy_rec :: proc(
+	text: string = "",
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{80}},
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.Panel]
+
+	clicked := !disabled && ui.is_id_clicked(root_id)
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_color = style.background[state],
+		border = {thickness = style.border_width, color = style.border[state]},
+		corner_radius = style.corner_radius,
+		child_alignment = {.Center, .Center},
+		padding = {4, 4, 4, 4},
+		reuse_id = true,
+	) {
+		if len(text) > 0 {
+			ui.text(
+				text,
+				alignment = {.Center, .Center},
+				color = style.text[state],
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
+			)
+		}
+	}
+
+	return clicked
+}
+
+grid :: proc(
+	spacing: f32 = 16,
+	subdivs: int = 1,
+	mouse_cell: ^[2]int = nil,
+	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	color: Maybe([4]u8) = nil,
+	disabled: bool = false,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> bool {
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	state := get_control_state(root_id, disabled)
+	style := g_extra.theme.controls[.Default]
+	line_col := color.? or_else style.border[.Normal]
+
+	bounds, has_bounds := ui.rect_by_id(root_id)
+	clicked := false
+
+	if has_bounds && mouse_cell != nil {
+		mouse_cell^ = {-1, -1}
+		if !disabled && ui.is_id_hovered(root_id) {
+			mouse_pos := ui.pointer_position()
+			if spacing > 0 {
+				cell_x := int(math.floor((mouse_pos.x - bounds.x) / spacing))
+				cell_y := int(math.floor((mouse_pos.y - bounds.y) / spacing))
+				mouse_cell^ = {cell_x, cell_y}
+			}
+			if ui.is_id_clicked(root_id) {
+				clicked = true
+			}
+		}
+	}
+
+	if ui.layout(
+		width = width,
+		height = height,
+		background_color = {0, 0, 0, 0},
+		border = {thickness = style.border_width, color = style.border[state]},
+		clip = true,
+		reuse_id = true,
+	) {
+		if has_bounds && spacing > 0 && subdivs > 0 {
+			step := spacing / f32(subdivs)
+			if step >= 1 {
+				sub_col := line_col
+				sub_col.a = u8(f32(sub_col.a) * 0.3)
+
+				num_v := int(bounds.width / step) + 1
+				for i in 1 ..< num_v {
+					x_offset := f32(i) * step
+					if x_offset >= bounds.width do break
+					is_main := (i % subdivs) == 0
+					_ = ui.layout(
+						width = ui.fixed(1),
+						height = ui.grow(),
+						background_color = is_main ? line_col : sub_col,
+						pointer_mode = .Ignore,
+						float_mode = ui.Float_At_Parent {
+							offset = {x_offset, 0},
+							attach_points = {
+								element = .LeftTop,
+								parent = .LeftTop,
+							},
+						},
+					)
+				}
+
+				num_h := int(bounds.height / step) + 1
+				for i in 1 ..< num_h {
+					y_offset := f32(i) * step
+					if y_offset >= bounds.height do break
+					is_main := (i % subdivs) == 0
+					_ = ui.layout(
+						width = ui.grow(),
+						height = ui.fixed(1),
+						background_color = is_main ? line_col : sub_col,
+						pointer_mode = .Ignore,
+						float_mode = ui.Float_At_Parent {
+							offset = {0, y_offset},
+							attach_points = {
+								element = .LeftTop,
+								parent = .LeftTop,
+							},
+						},
+					)
+				}
+			}
+		}
+	}
+
+	return clicked
+}
+
+message_box :: proc(
+	open: ^bool,
+	title: string,
+	message: string,
+	buttons: []string = {"OK"},
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{320}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	z_index: i32 = 1000,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> int {
+	if open != nil && !open^ {
+		return -1
+	}
+
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	result := -1
+	closed := false
+
+	if ui.layout(
+		width = ui.grow(),
+		height = ui.grow(),
+		background_color = {0, 0, 0, 128},
+		pointer_mode = .Capture,
+		float_mode = ui.Float_At_Root {
+			attach_points = {element = .CenterCenter, parent = .CenterCenter},
+			z_index = z_index,
+		},
+		child_alignment = {.Center, .Center},
+		reuse_id = true,
+	) {
+		if window_box(
+			title = title,
+			closed = &closed,
+			width = width,
+			height = height,
+			padding = {16, 16, 16, 16},
+			gap = 16,
+			id = ui.local_id("dialog"),
+		) {
+			ui.text(
+				message,
+				alignment = {.Center, .Center},
+				color = g_extra.theme.controls[.Label].text[.Normal],
+				font_size = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
+			)
+
+			if ui.layout(
+				width = ui.grow(),
+				height = ui.fit(),
+				layout_direction = .Left_To_Right,
+				child_gap = 8,
+				child_alignment = {.Center, .Center},
+			) {
+				for btn_text, i in buttons {
+					btn_id := ui.local_id(i)
+					if button(
+						btn_text,
+						width = ui.grow(),
+						height = ui.fixed(28),
+						id = btn_id,
+					) {
+						result = i + 1
+						if open != nil do open^ = false
+					}
+				}
+			}
+		}
+
+		if closed {
+			result = 0
+			if open != nil do open^ = false
+		}
+	}
+
+	return result
+}
+
+text_input_box :: proc(
+	open: ^bool,
+	title: string,
+	message: string,
+	text_buffer: ^[dynamic]u8,
+	edit_mode: ^bool,
+	buttons: []string = {"OK", "Cancel"},
+	password: bool = false,
+	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{340}},
+	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	z_index: i32 = 1000,
+	id: Maybe(ui.Id) = nil,
+	reuse_id: bool = false,
+	loc := #caller_location,
+) -> int {
+	if open != nil && !open^ {
+		return -1
+	}
+
+	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
+	wrap_id(root_id)
+
+	result := -1
+	closed := false
+	input_id := ui.local_id("input")
+
+	if ui.layout(
+		width = ui.grow(),
+		height = ui.grow(),
+		background_color = {0, 0, 0, 128},
+		pointer_mode = .Capture,
+		float_mode = ui.Float_At_Root {
+			attach_points = {element = .CenterCenter, parent = .CenterCenter},
+			z_index = z_index,
+		},
+		child_alignment = {.Center, .Center},
+		reuse_id = true,
+	) {
+		if window_box(
+			title = title,
+			closed = &closed,
+			width = width,
+			height = height,
+			padding = {16, 16, 16, 16},
+			gap = 12,
+			id = ui.local_id("dialog"),
+		) {
+			if len(message) > 0 {
+				ui.text(
+					message,
+					alignment = {.Left, .Center},
+					color = g_extra.theme.controls[.Label].text[.Normal],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+			}
+
+			_, committed := text_box(
+				text_buffer,
+				edit_mode,
+				password = password,
+				width = ui.grow(),
+				height = ui.fixed(28),
+				id = input_id,
+			)
+			if committed && len(buttons) > 0 {
+				result = 1
+				if open != nil do open^ = false
+			}
+
+			if ui.layout(
+				width = ui.grow(),
+				height = ui.fit(),
+				layout_direction = .Left_To_Right,
+				child_gap = 8,
+				child_alignment = {.Center, .Center},
+			) {
+				for btn_text, i in buttons {
+					btn_id := ui.local_id(i)
+					if button(
+						btn_text,
+						width = ui.grow(),
+						height = ui.fixed(28),
+						id = btn_id,
+					) {
+						if g_extra.text_box.id == input_id {
+							clear(text_buffer)
+							append(text_buffer, ..g_extra.text_box.buffer[:])
+							clear(&g_extra.text_box.buffer)
+							g_extra.text_box.id = 0
+							if edit_mode != nil do edit_mode^ = false
+						}
+						result = i + 1
+						if open != nil do open^ = false
+					}
+				}
+			}
+		}
+
+		if closed {
+			if g_extra.text_box.id == input_id {
+				clear(&g_extra.text_box.buffer)
+				g_extra.text_box.id = 0
+				if edit_mode != nil do edit_mode^ = false
+			}
+			result = 0
+			if open != nil do open^ = false
+		}
+	}
+
+	return result
 }

@@ -317,7 +317,7 @@ scroll_panel :: proc(
 			color = panel_style.border[.Normal],
 		},
 		corner_radius = panel_style.corner_radius,
-		id = root_id,
+		reuse_id = true,
 	) {
 		view_id := ui.local_id("scroll_view")
 		if ui.begin_layout(

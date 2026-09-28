@@ -118,6 +118,7 @@ main :: proc() {
 							Controls,
 							Containers,
 							Pickers,
+							Dialogs,
 						}
 
 						@(static) active_tab: Tab = .Controls
@@ -126,6 +127,7 @@ main :: proc() {
 							.Controls   = "Controls",
 							.Containers = "Containers",
 							.Pickers    = "Pickers",
+							.Dialogs    = "Dialogs & Grid",
 						}
 
 						if ui.layout(
@@ -281,11 +283,16 @@ main :: proc() {
 										}
 									}
 
+									uie.dummy_rec(
+										"Placeholder Dummy Rectangle",
+										width = ui.fixed(320),
+										height = ui.fixed(40),
+									)
+
 									uie.status_bar(
 										"Ready - Sokol Odin UI Showcase",
 									)
 								}
-
 
 							case .Pickers:
 								if uie.vbox(gap = 8) {
@@ -304,6 +311,25 @@ main :: proc() {
 									uie.text_box(
 										&text_buf,
 										&text_edit,
+										width = ui.fixed(200),
+									)
+
+									@(static) pass_buf: [dynamic]u8
+									@(static) pass_buf_inited: bool = false
+									@(static) pass_edit: bool = false
+									if !pass_buf_inited {
+										pass_buf = make([dynamic]u8, 0, 64)
+										init_pass := "secret123"
+										append(
+											&pass_buf,
+											..transmute([]u8)init_pass,
+										)
+										pass_buf_inited = true
+									}
+									uie.text_box(
+										&pass_buf,
+										&pass_edit,
+										password = true,
 										width = ui.fixed(200),
 									)
 
@@ -406,6 +432,127 @@ main :: proc() {
 										&picked_col,
 										panel_size = 100,
 										show_alpha = true,
+									)
+								}
+
+							case .Dialogs:
+								if uie.vbox(gap = 10) {
+									@(static) show_msg_box: bool = false
+									@(static) msg_result_text: string = "None"
+									if uie.button(
+										"Open Message Box",
+										width = ui.fixed(200),
+									) {
+										show_msg_box = true
+									}
+
+									res := uie.message_box(
+										&show_msg_box,
+										title = "Confirm Action",
+										message = "Do you want to save changes before exiting?",
+										buttons = []string {
+											"Save",
+											"Discard",
+											"Cancel",
+										},
+									)
+									if res >= 0 {
+										switch res {
+										case 0:
+											msg_result_text = "Closed / Dismissed"
+										case 1:
+											msg_result_text = "Clicked: Save"
+										case 2:
+											msg_result_text = "Clicked: Discard"
+										case 3:
+											msg_result_text = "Clicked: Cancel"
+										}
+									}
+
+									uie.label(
+										fmt.tprintf(
+											"Message box result: %s",
+											msg_result_text,
+										),
+									)
+
+									uie.line()
+
+									@(static) show_input_box: bool = false
+									@(static) input_result_buf: [128]u8
+									@(static) input_result_len: int = 0
+									@(static) dialog_buf: [dynamic]u8
+									@(static) dialog_buf_inited: bool = false
+									@(static) dialog_edit: bool = false
+									if !dialog_buf_inited {
+										dialog_buf = make([dynamic]u8, 0, 64)
+										init_d := "secretpass"
+										append(
+											&dialog_buf,
+											..transmute([]u8)init_d,
+										)
+										dialog_buf_inited = true
+									}
+
+									if uie.button(
+										"Open Password Prompt",
+										width = ui.fixed(200),
+									) {
+										show_input_box = true
+										dialog_edit = true
+									}
+
+									input_res := uie.text_input_box(
+										&show_input_box,
+										title = "Authentication",
+										message = "Please enter your password:",
+										text_buffer = &dialog_buf,
+										edit_mode = &dialog_edit,
+										buttons = {"Submit", "Cancel"},
+										password = true,
+									)
+									if input_res >= 0 {
+										if input_res == 1 {
+											str := fmt.bprintf(
+												input_result_buf[:],
+												"Submitted: %s",
+												string(dialog_buf[:]),
+											)
+											input_result_len = len(str)
+										} else {
+											str := fmt.bprintf(
+												input_result_buf[:],
+												"Cancelled",
+											)
+											input_result_len = len(str)
+										}
+									}
+
+									display_result :=
+										input_result_len > 0 ? string(input_result_buf[:input_result_len]) : "None"
+									uie.label(
+										fmt.tprintf(
+											"Input dialog result: %s",
+											display_result,
+										),
+									)
+
+									uie.line("Interactive Grid")
+
+									@(static) grid_cell: [2]int = {-1, -1}
+									_ = uie.grid(
+										spacing = 24,
+										subdivs = 2,
+										mouse_cell = &grid_cell,
+										width = ui.fixed(320),
+										height = ui.fixed(100),
+									)
+									uie.label(
+										fmt.tprintf(
+											"Hovered Cell: (%d, %d)",
+											grid_cell.x,
+											grid_cell.y,
+										),
 									)
 								}
 							}
