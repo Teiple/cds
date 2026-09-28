@@ -10,11 +10,11 @@ import "core:strings"
 
 //region: label
 label :: proc(
-	text: string,
-	alignment: ui.Alignment = {.Left, .Center},
-	color: Maybe([4]u8) = nil,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	text      : string,
+	alignment : ui.Alignment = {.Left, .Center},
+	color     : Maybe([4]u8) = nil,
+	id        : Maybe(ui.Id) = nil,
+	loc       : = #caller_location,
 ) {
 	c := color.? or_else g_extra.theme.controls[.Label].text[.Normal]
 	ui.text(
@@ -30,12 +30,12 @@ label :: proc(
 
 //region: button
 button :: proc(
-	label: string,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	label     : string,
+	width     : ui.Sizing_Axis  = {mode = ui.Fit_Size{}},
+	height    : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled  : bool = false,
+	id        : Maybe(ui.Id) = nil,
+	loc       : = #caller_location,
 ) -> bool {
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
@@ -54,21 +54,21 @@ button :: proc(
 	)
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Center, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		padding          = style.padding,
+		child_alignment  = {.Center, .Center},
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		ui.text(
 			label,
-			alignment = {.Center, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
+			alignment  = {.Center, .Center},
+			color      = style.text[state],
+			font_size  = g_extra.theme.font_size,
 			font_index = g_extra.theme.font_index,
 		)
 	}
@@ -78,10 +78,10 @@ button :: proc(
 
 //region: label_button
 label_button :: proc(
-	text: string,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	text     : string,
+	disabled : bool = false,
+	id       : Maybe(ui.Id) = nil,
+	loc      : = #caller_location,
 ) -> bool {
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
@@ -100,18 +100,18 @@ label_button :: proc(
 	)
 
 	if ui.layout(
-		width = ui.fit(),
-		height = ui.fit(),
-		padding = style.padding,
+		width           = ui.fit(),
+		height          = ui.fit(),
+		padding         = style.padding,
 		child_alignment = {.Left, .Center},
-		outline = outline,
-		reuse_id = true,
+		outline         = outline,
+		reuse_id        = true,
 	) {
 		ui.text(
 			text,
-			alignment = {.Left, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
+			alignment  = {.Left, .Center},
+			color      = style.text[state],
+			font_size  = g_extra.theme.font_size,
 			font_index = g_extra.theme.font_index,
 		)
 	}
@@ -121,13 +121,13 @@ label_button :: proc(
 
 //region: toggle
 toggle :: proc(
-	label: string,
-	active: ^bool,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	label    : string,
+	active   : ^bool,
+	width    : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height   : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled : bool = false,
+	id       : Maybe(ui.Id) = nil,
+	loc      : = #caller_location,
 ) -> bool {
 	assert(active != nil)
 	root_id := ui.push_id(id, loc)
@@ -150,15 +150,15 @@ toggle :: proc(
 	)
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Center, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		padding          = style.padding,
+		child_alignment  = {.Center, .Center},
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		ui.text(
 			label,
@@ -174,13 +174,13 @@ toggle :: proc(
 
 //region: toggle_group
 toggle_group :: proc(
-	options: $O/[$E]string,
-	active_option: ^E,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	options       : $O/[$E]string,
+	active_option : ^E,
+	width         : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height        : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled      : bool = false,
+	id            : Maybe(ui.Id) = nil,
+	loc           : = #caller_location,
 ) -> bool where intrinsics.type_is_enum(E) &&
 	len(E) > 0 {
 	assert(active_option != nil)
@@ -266,279 +266,6 @@ toggle_group :: proc(
 	return changed
 }
 
-toggle_slider_slice :: proc(
-	options: []string,
-	active: ^int,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> bool {
-	assert(active != nil)
-	if len(options) == 0 do return false
-
-	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	if !disabled {
-		ui.register_focusable(root_id)
-	}
-
-	state := get_control_state(root_id, disabled)
-	style_track := g_extra.theme.controls[.Slider]
-	style_thumb := g_extra.theme.controls[.Toggle]
-	outline := get_control_outline(
-		style_track,
-		!disabled && ui.is_id_focused(root_id),
-	)
-
-	changed := false
-	n := len(options)
-
-	if !disabled && ui.is_id_focused(root_id) {
-		if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
-			if active^ > 0 {
-				active^ -= 1
-				changed = true
-			}
-		}
-		if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
-			if active^ < n - 1 {
-				active^ += 1
-				changed = true
-			}
-		}
-	}
-
-	bounds, has_bounds := ui.rect_by_id(root_id)
-
-	if !disabled &&
-	   (ui.is_id_clicked(root_id) || ui.is_id_held(root_id)) &&
-	   has_bounds &&
-	   bounds.width > 0 {
-		mouse_pos := ui.pointer_position()
-		slot_w := bounds.width / f32(n)
-		slot := int(clamp((mouse_pos.x - bounds.x) / slot_w, 0, f32(n - 1)))
-		if slot != active^ {
-			active^ = slot
-			changed = true
-		}
-	}
-
-	active^ = clamp(active^, 0, n - 1)
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = style_track.background[state],
-		border = {
-			thickness = style_track.border_width,
-			color = style_track.border[state],
-		},
-		outline = outline,
-		corner_radius = style_track.corner_radius,
-		layout_direction = .Left_To_Right,
-		padding = {2, 2, 2, 2},
-		child_gap = 2,
-		reuse_id = true,
-	) {
-		for opt_text, i in options {
-			is_active := (i == active^)
-			slot_id := ui.local_id(i)
-
-			if is_active {
-				if ui.layout(
-					width = ui.grow(),
-					height = ui.grow(),
-					background_color = style_thumb.background[get_this_control_state(active = true)],
-					border = {
-						thickness = style_thumb.border_width,
-						color = style_thumb.border[state],
-					},
-					corner_radius = style_thumb.corner_radius,
-					child_alignment = {.Center, .Center},
-					pointer_mode = .Ignore,
-					id = slot_id,
-				) {
-					ui.text(
-						opt_text,
-						alignment = {.Center, .Center},
-						color = style_thumb.text[.Active],
-						font_size = g_extra.theme.font_size,
-						font_index = g_extra.theme.font_index,
-					)
-				}
-			} else {
-				if ui.layout(
-					width = ui.grow(),
-					height = ui.grow(),
-					background_color = {0, 0, 0, 0},
-					child_alignment = {.Center, .Center},
-					pointer_mode = .Ignore,
-					id = slot_id,
-				) {
-					ui.text(
-						opt_text,
-						alignment = {.Center, .Center},
-						color = style_track.text[state],
-						font_size = g_extra.theme.font_size,
-						font_index = g_extra.theme.font_index,
-					)
-				}
-			}
-		}
-	}
-
-	return changed
-}
-
-toggle_slider_enum :: proc(
-	options: $O/[$E]string,
-	active: ^E,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> bool where intrinsics.type_is_enum(E) &&
-	len(E) > 0 {
-	assert(active != nil)
-	opts := make([]string, len(E), context.temp_allocator)
-	idx := 0
-	active_idx := 0
-	for iter := enum_iter_start(E); opt in enum_iter_next(&iter) {
-		opts[idx] = options[opt]
-		if opt == active^ {
-			active_idx = idx
-		}
-		idx += 1
-	}
-
-	changed := toggle_slider_slice(
-		options = opts,
-		active = &active_idx,
-		width = width,
-		height = height,
-		disabled = disabled,
-		id = id,
-		reuse_id = reuse_id,
-		loc = loc,
-	)
-	if changed {
-		idx = 0
-		for iter := enum_iter_start(E); opt in enum_iter_next(&iter) {
-			if idx == active_idx {
-				active^ = opt
-				break
-			}
-			idx += 1
-		}
-	}
-	return changed
-}
-
-toggle_slider :: proc {
-	toggle_slider_slice,
-	toggle_slider_enum,
-}
-
-//region: tab_bar
-tab_bar :: proc(
-	tabs: $O/[$E]string,
-	active_tab: ^E,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
-) -> bool {
-	assert(active_tab != nil)
-	root_id := ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	next_active := active_tab^
-	next_focus: ui.Id = 0
-	changed := false
-
-	if ui.layout(
-		width = width,
-		height = height,
-		layout_direction = .Left_To_Right,
-		child_gap = 2,
-		padding = {},
-		reuse_id = true,
-	) {
-		for iter := enum_iter_start(E); tab in enum_iter_next(&iter) {
-			is_active := (active_tab^ == tab)
-			tab_id := ui.local_id(tab)
-
-			if !disabled {
-				ui.register_focusable(tab_id)
-			}
-
-			state := get_control_state(tab_id, disabled, is_active)
-			style := g_extra.theme.controls[.TabBar]
-
-			outline := get_control_outline(
-				style,
-				!disabled && ui.is_id_focused(tab_id),
-			)
-
-			if !disabled && ui.is_id_focused(tab_id) {
-				if ui.is_key_pressed(.Left) || ui.is_key_pressed(.Up) {
-					next_active = enum_prev(active_tab^)
-					next_focus = ui.local_id(next_active)
-				}
-				if ui.is_key_pressed(.Right) || ui.is_key_pressed(.Down) {
-					next_active = enum_next(active_tab^)
-					next_focus = ui.local_id(next_active)
-				}
-			}
-
-			if ui.layout(
-				width = ui.grow(),
-				height = ui.grow(),
-				background_color = style.background[state],
-				padding = style.padding,
-				child_alignment = {.Center, .Center},
-				border = {
-					thickness = style.border_width,
-					color = style.border[state],
-				},
-				outline = outline,
-				corner_radius = style.corner_radius,
-				id = tab_id,
-			) {
-				ui.text(
-					tabs[tab],
-					alignment = {.Center, .Center},
-					color = style.text[state],
-					font_size = g_extra.theme.font_size,
-					font_index = g_extra.theme.font_index,
-				)
-			}
-
-			if !disabled && ui.is_id_clicked(tab_id) {
-				next_active = tab
-			}
-		}
-	}
-
-	if next_focus != 0 {
-		ui.set_focused_id(next_focus)
-	}
-
-	if next_active != active_tab^ {
-		active_tab^ = next_active
-		changed = true
-	}
-
-	return changed
-}
-
 //region: checkbox
 checkbox :: proc(
 	label: string,
@@ -570,47 +297,47 @@ checkbox :: proc(
 	)
 
 	if ui.layout(
-		width = ui.fit(),
-		height = ui.fit(),
+		width            = ui.fit(),
+		height           = ui.fit(),
 		layout_direction = .Left_To_Right,
-		child_gap = 8,
-		child_alignment = {.Left, .Center},
-		padding = {2, 2, 2, 2},
-		outline = outline,
-		reuse_id = true,
+		child_gap        = 8,
+		child_alignment  = {.Left, .Center},
+		padding          = {2, 2, 2, 2},
+		outline          = outline,
+		reuse_id         = true,
 	) {
 		box_id := ui.local_id("box")
 		box_state := get_control_state(box_id, disabled, checked^)
 		if ui.layout(
-			width = ui.fixed(18),
-			height = ui.fixed(18),
-			border = {
+			width           = ui.fixed(18),
+			height          = ui.fixed(18),
+			border          = {
 				thickness = style.border_width,
-				color = style.border[box_state],
+				color     = style.border[box_state],
 			},
-			corner_radius = style.corner_radius,
-			padding = {2, 2, 2, 2},
+			corner_radius   = style.corner_radius,
+			padding         = {2, 2, 2, 2},
 			child_alignment = {.Center, .Center},
-			pointer_mode = .Passthrough,
-			id = box_id,
+			pointer_mode    = .Passthrough,
+			id              = box_id,
 		) {
 			if checked^ {
 				if ui.layout(
-					width = ui.fixed(14),
-					height = ui.fixed(14),
+					width            = ui.fixed(14),
+					height           = ui.fixed(14),
 					background_color = style.background[.Active],
-					corner_radius = {2, 2, 2, 2},
-					pointer_mode = .Passthrough,
-					id = ui.local_id("check"),
+					corner_radius    = {2, 2, 2, 2},
+					pointer_mode     = .Passthrough,
+					id               = ui.local_id("check"),
 				) {}
 			}
 		}
 		if len(label) > 0 {
 			ui.text(
 				label,
-				alignment = {.Left, .Center},
-				color = style.text[state],
-				font_size = g_extra.theme.font_size,
+				alignment  = {.Left, .Center},
+				color      = style.text[state],
+				font_size  = g_extra.theme.font_size,
 				font_index = g_extra.theme.font_index,
 			)
 		}
@@ -632,18 +359,18 @@ Text_Box_State :: struct {
 }
 
 text_box :: proc(
-	buffer: ^[dynamic]u8,
-	edit_mode: ^bool,
-	max_len: int = 256,
-	blink_rate: int = 120,
-	password: bool = false,
+	buffer       : ^[dynamic]u8,
+	edit_mode    : ^bool,
+	max_len      : int = 256,
+	blink_rate   : int = 120,
+	password     : bool = false,
 	password_char: rune = '*',
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	width        : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height       : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled     : bool = false,
+	id           : Maybe(ui.Id) = nil,
+	reuse_id     : bool = false,
+	loc          : = #caller_location,
 ) -> (
 	changed: bool,
 	committed: bool,
@@ -659,9 +386,9 @@ text_box :: proc(
 	}
 
 	is_editing := edit_mode^
-	state := get_control_state(root_id, disabled, is_editing)
-	style := g_extra.theme.controls[.Text_Box]
-	outline := get_control_outline(
+	state      := get_control_state(root_id, disabled, is_editing)
+	style      := g_extra.theme.controls[.Text_Box]
+	outline    := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
 	)
@@ -1164,17 +891,17 @@ find_cursor_row_col :: proc(
 }
 
 text_box_multi :: proc(
-	buffer: ^[dynamic]u8,
-	edit_mode: ^bool,
-	max_len: int = 4096,
-	blink_rate: int = 120,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{240}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
-	line_spacing: f32 = 4,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	buffer       : ^[dynamic]u8,
+	edit_mode    : ^bool,
+	max_len      : int = 4096,
+	blink_rate   : int = 120,
+	width        : ui.Sizing_Axis = {mode = ui.Fixed_Size{240}},
+	height       : ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
+	line_spacing : f32 = 4,
+	disabled     : bool = false,
+	id           : Maybe(ui.Id) = nil,
+	reuse_id     : bool = false,
+	loc          : = #caller_location,
 ) -> (
 	changed: bool,
 	committed: bool,
@@ -1190,16 +917,17 @@ text_box_multi :: proc(
 	}
 
 	is_editing := edit_mode^
-	state := get_control_state(root_id, disabled, is_editing)
-	style := g_extra.theme.controls[.Text_Box]
-	outline := get_control_outline(
+	state      := get_control_state(root_id, disabled, is_editing)
+	style      := g_extra.theme.controls[.Text_Box]
+	outline    := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
 	)
 
-	text_str :=
-		is_editing && g_extra.text_box.id == root_id ? string(g_extra.text_box.buffer[:]) : string(buffer^[:])
+	text_str := is_editing && g_extra.text_box.id == root_id ? string(g_extra.text_box.buffer[:]) : string(buffer^[:])
+	
 	ranges := make([dynamic][2]int, context.temp_allocator)
+	
 	get_line_ranges(text_str, &ranges)
 
 	if !disabled && ui.is_id_pressed(root_id) {
@@ -1801,21 +1529,22 @@ text_box_multi :: proc(
 
 //region: spinner
 spinner :: proc(
-	value: ^$T,
-	min_val: T,
-	max_val: T,
-	edit_mode: ^bool,
-	step: T,
-	drag_speed: f32,
-	precision: int = 2,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value      : ^$T,
+	min_val    : T,
+	max_val    : T,
+	edit_mode  : ^bool,
+	step       : T,
+	drag_speed : f32,
+	precision  : int = 2,
+	width      : ui.Sizing_Axis = {mode = ui.Fixed_Size{120}},
+	height     : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled   : bool = false,
+	id         : Maybe(ui.Id) = nil,
+	loc        : = #caller_location,
 ) -> bool where intrinsics.type_is_numeric(T) {
 	assert(value != nil)
 	assert(edit_mode != nil)
+	
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -1831,6 +1560,7 @@ spinner :: proc(
 	changed := false
 
 	actual_step: T = step
+
 	when intrinsics.type_is_float(T) {
 		if actual_step == 0 do actual_step = 0.1
 	} else {
@@ -1853,13 +1583,13 @@ spinner :: proc(
 	}
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		layout_direction = .Left_To_Right,
-		child_gap = 2,
-		padding = {},
-		outline = outline,
-		reuse_id = true,
+		child_gap        = 2,
+		padding          = {},
+		outline          = outline,
+		reuse_id         = true,
 	) {
 		btn_left := ui.local_id("dec")
 		if button(
@@ -1905,11 +1635,11 @@ spinner :: proc(
 			_, committed := text_box(
 				&g_extra.text_box.buffer,
 				edit_mode,
-				max_len = 16,
-				width = ui.grow(),
-				height = ui.grow(),
+				max_len  = 16,
+				width    = ui.grow(),
+				height   = ui.grow(),
 				disabled = disabled,
-				id = box_id,
+				id       = box_id,
 			)
 			if committed {
 				when intrinsics.type_is_float(T) {
@@ -1962,17 +1692,17 @@ spinner :: proc(
 
 			box_state := get_control_state(box_id, disabled)
 			if ui.layout(
-				width = ui.grow(),
-				height = ui.grow(),
+				width            = ui.grow(),
+				height           = ui.grow(),
 				background_color = style.background[box_state],
-				border = {
+				border           = {
 					thickness = style.border_width,
-					color = style.border[box_state],
+					color     = style.border[box_state],
 				},
-				corner_radius = style.corner_radius,
-				padding = {4, 4, 2, 2},
+				corner_radius   = style.corner_radius,
+				padding         = {4, 4, 2, 2},
 				child_alignment = {.Center, .Center},
-				id = box_id,
+				id              = box_id,
 			) {
 				text_str: string
 				when intrinsics.type_is_float(T) {
@@ -1982,9 +1712,9 @@ spinner :: proc(
 				}
 				ui.text(
 					text_str,
-					alignment = {.Center, .Center},
-					color = style.text[box_state],
-					font_size = g_extra.theme.font_size,
+					alignment  = {.Center, .Center},
+					color      = style.text[box_state],
+					font_size  = g_extra.theme.font_size,
 					font_index = g_extra.theme.font_index,
 				)
 			}
@@ -1993,12 +1723,12 @@ spinner :: proc(
 		btn_right := ui.local_id("inc")
 		if button(
 			">",
-			width = ui.fixed(24),
-			height = ui.grow(),
-			disabled = disabled || value^ >= max_val,
-			id = btn_right,
+			width     = ui.fixed(24),
+			height    = ui.grow(),
+			disabled  = disabled || value^ >= max_val,
+			id        = btn_right,
 		) {
-			value^ = min(value^ + actual_step, max_val)
+			value^  = min(value^ + actual_step, max_val)
 			changed = true
 		}
 	}
@@ -2008,15 +1738,15 @@ spinner :: proc(
 
 //region: value_box
 value_box :: proc(
-	value: ^int,
-	min_val: int,
-	max_val: int,
-	edit_mode: ^bool,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{80}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value     : ^int,
+	min_val   : int,
+	max_val   : int,
+	edit_mode : ^bool,
+	width     : ui.Sizing_Axis = {mode = ui.Fixed_Size{80}},
+	height    : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled  : bool = false,
+	id        : Maybe(ui.Id) = nil,
+	loc       : = #caller_location,
 ) -> bool {
 	assert(value != nil)
 	assert(edit_mode != nil)
@@ -2029,9 +1759,9 @@ value_box :: proc(
 	}
 
 	is_editing := edit_mode^
-	state := get_control_state(root_id, disabled, is_editing)
-	style := g_extra.theme.controls[.Value_Box]
-	outline := get_control_outline(
+	state      := get_control_state(root_id, disabled, is_editing)
+	style      := g_extra.theme.controls[.Value_Box]
+	outline    := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
 	)
@@ -2050,8 +1780,8 @@ value_box :: proc(
 		if g_extra.text_box.id != root_id {
 			g_extra.text_box.id = root_id
 			clear(&g_extra.text_box.buffer)
-			b := fmt.tprintf("%d", value^)
-			append(&g_extra.text_box.buffer, ..transmute([]u8)b)
+			buffer := fmt.tprintf("%d", value^)
+			append(&g_extra.text_box.buffer, ..transmute([]u8)buffer)
 		}
 		_, committed := text_box(
 			&g_extra.text_box.buffer,
@@ -2093,22 +1823,22 @@ value_box :: proc(
 	}
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Center, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		padding          = style.padding,
+		child_alignment  = {.Center, .Center},
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		text_str := fmt.tprintf("%d", value^)
 		ui.text(
 			text_str,
-			alignment = {.Center, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
+			alignment  = {.Center, .Center},
+			color      = style.text[state],
+			font_size  = g_extra.theme.font_size,
 			font_index = g_extra.theme.font_index,
 		)
 	}
@@ -2134,8 +1864,8 @@ combo_box :: proc(
 		ui.register_focusable(root_id)
 	}
 
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.ComboBox]
+	state   := get_control_state(root_id, disabled)
+	style   := g_extra.theme.controls[.ComboBox]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
@@ -2161,21 +1891,21 @@ combo_box :: proc(
 	label_str := options[active_option^]
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Left, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		padding          = style.padding,
+		child_alignment  = {.Left, .Center},
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		ui.text(
 			label_str,
-			alignment = {.Left, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
+			alignment  = {.Left, .Center},
+			color      = style.text[state],
+			font_size  = g_extra.theme.font_size,
 			font_index = g_extra.theme.font_index,
 		)
 	}
@@ -2185,15 +1915,15 @@ combo_box :: proc(
 
 //region: dropdown_box
 dropdown_box :: proc(
-	options: $O/[$E]string,
-	active_option: ^E,
-	edit_mode: ^bool,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled: bool = false,
-	z_index: i32 = 500,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	options       : $O/[$E]string,
+	active_option : ^E,
+	edit_mode     : ^bool,
+	width         : ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height        : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled      : bool = false,
+	z_index       : i32 = 500,
+	id            : Maybe(ui.Id) = nil,
+	loc           : = #caller_location,
 ) -> bool where intrinsics.type_is_enum(E) {
 	assert(active_option != nil)
 	assert(edit_mode != nil)
@@ -2209,7 +1939,7 @@ dropdown_box :: proc(
 		edit_mode^ = !edit_mode^
 	}
 
-	style := g_extra.theme.controls[.DropdownBox]
+	style   := g_extra.theme.controls[.DropdownBox]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
@@ -2252,21 +1982,21 @@ dropdown_box :: proc(
 	label_str := options[active_option^]
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		padding = style.padding,
-		child_alignment = {.Left, .Center},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		padding          = style.padding,
+		child_alignment  = {.Left, .Center},
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		ui.text(
 			label_str,
-			alignment = {.Left, .Center},
-			color = style.text[state],
-			font_size = g_extra.theme.font_size,
+			alignment  = {.Left, .Center},
+			color      = style.text[state],
+			font_size  = g_extra.theme.font_size,
 			font_index = g_extra.theme.font_index,
 		)
 
@@ -2278,21 +2008,21 @@ dropdown_box :: proc(
 			}
 
 			if ui.layout(
-				width = ui.grow(),
-				height = ui.fit(),
+				width            = ui.grow(),
+				height           = ui.fit(),
 				layout_direction = .Top_To_Bottom,
-				padding = {2, 2, 2, 2},
-				child_gap = 1,
+				padding          = {2, 2, 2, 2},
+				child_gap        = 1,
 				background_color = g_extra.theme.controls[.Panel].background[.Normal],
-				border = {
+				border           = {
 					thickness = style.border_width,
-					color = style.border[.Hovered],
+					color     = style.border[.Hovered],
 				},
 				corner_radius = style.corner_radius,
-				float_mode = ui.Float_At_Parent {
-					offset = {0, 2},
+				float_mode    = ui.Float_At_Parent {
+					offset        = {0, 2},
 					attach_points = {element = .LeftTop, parent = .LeftBottom},
-					z_index = z_index,
+					z_index       = z_index,
 				},
 				id = popup_id,
 			) {
@@ -2301,18 +2031,18 @@ dropdown_box :: proc(
 					is_selected := (active_option^ == opt)
 					opt_state := get_control_state(opt_id, false, is_selected)
 					if ui.layout(
-						width = ui.grow(),
-						height = ui.fit(),
+						width            = ui.grow(),
+						height           = ui.fit(),
 						background_color = style.background[get_this_control_state(active = is_selected)],
-						padding = {6, 6, 2, 2},
-						child_alignment = {.Left, .Center},
-						id = opt_id,
+						padding          = {6, 6, 2, 2},
+						child_alignment  = {.Left, .Center},
+						id               = opt_id,
 					) {
 						ui.text(
 							options[opt],
-							alignment = {.Left, .Center},
-							color = style.text[opt_state],
-							font_size = g_extra.theme.font_size,
+							alignment  = {.Left, .Center},
+							color      = style.text[opt_state],
+							font_size  = g_extra.theme.font_size,
 							font_index = g_extra.theme.font_index,
 						)
 					}
@@ -2337,16 +2067,16 @@ Slider_Direction :: enum {
 }
 
 slider_impl :: proc(
-	value: ^$T,
-	min_val: T,
-	max_val: T,
-	step: T,
-	dir: Slider_Direction,
-	width: ui.Sizing_Axis,
-	height: ui.Sizing_Axis,
-	disabled: bool,
-	id: Maybe(ui.Id),
-	loc: runtime.Source_Code_Location,
+	value    : ^$T,
+	min_val  : T,
+	max_val  : T,
+	step     : T,
+	dir      : Slider_Direction,
+	width    : ui.Sizing_Axis,
+	height   : ui.Sizing_Axis,
+	disabled : bool,
+	id       : Maybe(ui.Id),
+	loc      : runtime.Source_Code_Location,
 ) -> bool where intrinsics.type_is_numeric(T) {
 	assert(value != nil)
 	root_id := ui.push_id(id, loc)
@@ -2363,9 +2093,9 @@ slider_impl :: proc(
 		!disabled && ui.is_id_focused(root_id),
 	)
 
-	f_min := f32(min_val)
-	f_max := f32(max_val)
-	f_val := f32(value^)
+	f_min  := f32(min_val)
+	f_max  := f32(max_val)
+	f_val  := f32(value^)
 	f_step := f32(step)
 	changed := false
 
@@ -2399,15 +2129,15 @@ slider_impl :: proc(
 		dir == .Horizontal ? ui.Alignment{normalized, .Center} : ui.Alignment{.Center, 1.0 - normalized}
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		padding = {2, 2, 2, 2},
-		child_alignment = child_align,
-		reuse_id = true,
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		padding          = {2, 2, 2, 2},
+		child_alignment  = child_align,
+		reuse_id         = true,
 	) {
 		thumb_id := ui.local_id("thumb")
 
@@ -2475,15 +2205,15 @@ slider_impl :: proc(
 }
 
 slider_h :: proc(
-	value: ^$T,
-	min_val: T,
-	max_val: T,
-	step: T,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value    : ^$T,
+	min_val  : T,
+	max_val  : T,
+	step     : T,
+	width    : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height   : ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
+	disabled : bool = false,
+	id       : Maybe(ui.Id) = nil,
+	loc      : = #caller_location,
 ) -> bool where intrinsics.type_is_numeric(T) {
 	return slider_impl(
 		value,
@@ -2500,15 +2230,15 @@ slider_h :: proc(
 }
 
 slider_v :: proc(
-	value: ^$T,
-	min_val: T,
-	max_val: T,
-	step: T,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value    : ^$T,
+	min_val  : T,
+	max_val  : T,
+	step     : T,
+	width    : ui.Sizing_Axis = {mode = ui.Fixed_Size{22}},
+	height   : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	disabled : bool = false,
+	id       : Maybe(ui.Id) = nil,
+	loc      : = #caller_location,
 ) -> bool where intrinsics.type_is_numeric(T) {
 	return slider_impl(
 		value,
@@ -2526,80 +2256,81 @@ slider_v :: proc(
 
 //region: progress_bar
 progress_bar :: proc(
-	value: f32,
-	min_val: f32 = 0,
-	max_val: f32 = 1,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value   : f32,
+	min_val : f32 = 0,
+	max_val : f32 = 1,
+	width   : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height  : ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+	id      : Maybe(ui.Id) = nil,
+	loc     : = #caller_location,
 ) {
+	assert(max_val - min_val > 0)
+
 	root_id := ui.push_id(id, loc)
 	wrap_id(root_id)
 
 	style := g_extra.theme.controls[.Slider]
-	normalized :=
-		max_val > min_val ? clamp((value - min_val) / (max_val - min_val), 0, 1) : 0
+	normalized := (value - min_val) / (max_val - min_val)
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[.Normal],
-		border = {
+		border           = {
 			thickness = style.border_width,
-			color = style.border[.Normal],
+			color     = style.border[.Normal],
 		},
-		corner_radius = style.corner_radius,
-		padding = {1, 1, 1, 1},
+		corner_radius   = style.corner_radius,
+		padding         = {1, 1, 1, 1},
 		child_alignment = {.Left, .Center},
-		reuse_id = true,
+		reuse_id        = true,
 	) {
 		fill_id := ui.local_id("fill")
 		if ui.layout(
-			width = ui.percent(normalized),
-			height = ui.grow(),
+			width            = ui.percent(normalized),
+			height           = ui.grow(),
 			background_color = style.background[.Active],
-			corner_radius = {2, 2, 2, 2},
-			id = fill_id,
+			corner_radius    = {2, 2, 2, 2},
+			id               = fill_id,
 		) {}
 	}
 }
 
 //region: tooltip
 tooltip :: proc(
-	target_id: ui.Id,
-	content: string,
-	offset: [2]f32 = {4, 0},
-	z_index: i32 = 1000,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	target_id : ui.Id,
+	content   : string,
+	offset    : [2]f32 = {4, 0},
+	z_index   : i32 = 1000,
+	id        : Maybe(ui.Id) = nil,
+	loc       : = #caller_location,
 ) {
 	if ui.is_id_hovered(target_id) {
 		style := g_extra.theme.controls[.Panel]
 		if ui.layout(
-			width = ui.fit(),
-			height = ui.fit(),
+			width            = ui.fit(),
+			height           = ui.fit(),
 			background_color = style.background[.Normal],
-			border = {
+			border           = {
 				thickness = style.border_width,
-				color = style.border[.Hovered],
+				color    = style.border[.Hovered],
 			},
-			padding = ui.pad_all(6),
+			padding       = ui.pad_all(6),
 			corner_radius = ui.corner_radius_all(4),
-			pointer_mode = .Ignore,
-			float_mode = ui.Float_At_Id {
-				attach_id = target_id,
-				offset = offset,
+			pointer_mode  = .Ignore,
+			float_mode    = ui.Float_At_Id {
+				attach_id     = target_id,
+				offset        = offset,
 				attach_points = {element = .LeftCenter, parent = .RightCenter},
-				z_index = z_index,
+				z_index       = z_index,
 			},
-			id = id,
+			id  = id,
 			loc = loc,
 		) {
 			ui.text(
 				content,
-				color = style.text[.Normal],
-				font_size = g_extra.theme.font_size,
+				color      = style.text[.Normal],
+				font_size  = g_extra.theme.font_size,
 				font_index = g_extra.theme.font_index,
 			)
 		}
@@ -2608,17 +2339,17 @@ tooltip :: proc(
 
 //region: scroll_bar
 scroll_bar :: proc(
-	value: ^f32,
-	min_val: f32,
-	max_val: f32,
-	view_size: f32,
-	content_size: f32,
-	dir: Slider_Direction = .Vertical,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{14}},
-	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	value        : ^f32,
+	min_val      : f32,
+	max_val      : f32,
+	view_size    : f32,
+	content_size : f32,
+	dir          : Slider_Direction = .Vertical,
+	width        : ui.Sizing_Axis = {mode = ui.Fixed_Size{14}},
+	height       : ui.Sizing_Axis = {mode = ui.Grow_Size{}},
+	disabled     : bool = false,
+	id           : Maybe(ui.Id) = nil,
+	loc          : = #caller_location,
 ) -> bool {
 	assert(value != nil)
 	root_id := ui.push_id(id, loc)
@@ -2628,8 +2359,8 @@ scroll_bar :: proc(
 		ui.register_focusable(root_id)
 	}
 
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.ScrollBar]
+	state   := get_control_state(root_id, disabled)
+	style   := g_extra.theme.controls[.ScrollBar]
 	outline := get_control_outline(
 		style,
 		!disabled && ui.is_id_focused(root_id),
@@ -2651,9 +2382,10 @@ scroll_bar :: proc(
 		}
 	}
 
-	track_rect, _ := ui.rect_by_id(root_id)
+	track_rect := ui.rect_by_id(root_id)
 	track_dim := dir == .Horizontal ? track_rect.width : track_rect.height
 	thumb_dim: f32 = 16
+	
 	if content_size > 0 && view_size > 0 && content_size > view_size {
 		ratio := clamp(view_size / content_size, 0.05, 1.0)
 		thumb_dim = max(
@@ -2667,9 +2399,15 @@ scroll_bar :: proc(
 	travel := track_dim - thumb_dim
 	if !disabled && travel > 0 && ui.is_id_held(root_id) {
 		mouse_pos := ui.pointer_position()
-		mouse_track :=
-			(dir == .Horizontal ? (mouse_pos.x - track_rect.x) : (mouse_pos.y - track_rect.y)) -
-			thumb_dim * 0.5
+		mouse_track := (
+			(
+				dir == .Horizontal
+				? (mouse_pos.x - track_rect.x)
+				: (mouse_pos.y - track_rect.y)
+			)
+			- thumb_dim * 0.5
+		)
+
 		norm := clamp(mouse_track / travel, 0.0, 1.0)
 		new_val := f_min + norm * (f_max - f_min)
 		if new_val != value^ {
@@ -2685,14 +2423,14 @@ scroll_bar :: proc(
 		dir == .Horizontal ? ui.Alignment{normalized, .Center} : ui.Alignment{.Center, normalized}
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		child_alignment = child_align,
-		reuse_id = true,
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		child_alignment  = child_align,
+		reuse_id         = true,
 	) {
 		thumb_id := ui.local_id("thumb")
 		thumb_w := dir == .Horizontal ? ui.fixed(thumb_dim) : ui.grow()
@@ -2701,12 +2439,12 @@ scroll_bar :: proc(
 			state == .Disabled ? style.background[.Disabled] : (ui.is_id_held(root_id) ? style.border[.Pressed] : style.background[.Active])
 
 		if ui.layout(
-			width = thumb_w,
-			height = thumb_h,
+			width            = thumb_w,
+			height           = thumb_h,
 			background_color = thumb_bg,
-			corner_radius = style.corner_radius,
-			id = thumb_id,
-			pointer_mode = .Passthrough,
+			corner_radius    = style.corner_radius,
+			id               = thumb_id,
+			pointer_mode     = .Passthrough,
 		) {}
 	}
 
@@ -2715,14 +2453,14 @@ scroll_bar :: proc(
 
 //region: list_view
 list_view :: proc(
-	items: []string,
-	active: ^i32,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	item_height: f32 = 24,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	loc := #caller_location,
+	items       : []string,
+	active      : ^i32,
+	width       : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height      : ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	item_height : f32 = 24,
+	disabled    : bool = false,
+	id          : Maybe(ui.Id) = nil,
+	loc         : = #caller_location,
 ) -> bool {
 	assert(active != nil)
 	root_id := ui.push_id(id, loc)
@@ -2775,28 +2513,28 @@ list_view :: proc(
 	}
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		layout_direction = .Left_To_Right,
-		child_gap = 4,
-		padding = {2, 2, 2, 2},
+		child_gap        = 4,
+		padding          = {2, 2, 2, 2},
 		background_color = style.background[.Normal],
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
-		corner_radius = style.corner_radius,
-		reuse_id = true,
+		border           = {thickness = style.border_width, color = style.border[state]},
+		outline          = outline,
+		corner_radius    = style.corner_radius,
+		reuse_id         = true,
 	) {
 		view_id := ui.local_id("items_view")
 		if ui.layout(
-			width = ui.grow(),
-			height = ui.grow(),
+			width            = ui.grow(),
+			height           = ui.grow(),
 			layout_direction = .Top_To_Bottom,
-			child_gap = 2,
-			padding = {4, 0, 4, 4},
-			clip = true,
-			scroll = true,
-			id = view_id,
-			pointer_mode = .Passthrough,
+			child_gap        = 2,
+			padding          = {4, 0, 4, 4},
+			clip             = true,
+			scroll           = true,
+			id               = view_id,
+			pointer_mode     = .Passthrough,
 		) {
 			initially_focused := -1
 			for i in 0 ..< len(items) {
@@ -2853,27 +2591,27 @@ list_view :: proc(
 					ui.set_focused_id(item_id)
 				}
 
-				is_active := (active^ == index)
-				item_state := get_control_state(item_id, disabled, is_active)
+				is_active    := (active^ == index)
+				item_state   := get_control_state(item_id, disabled, is_active)
 				item_outline := get_control_outline(
 					item_style,
 					!disabled && ui.is_id_focused(item_id),
 				)
 
 				if ui.layout(
-					width = ui.grow(),
-					height = ui.fixed(item_height),
+					width            = ui.grow(),
+					height           = ui.fixed(item_height),
 					background_color = item_style.background[item_state],
-					padding = {8, 8, 2, 2},
-					child_alignment = {.Left, .Center},
-					outline = item_outline,
-					id = item_id,
+					padding          = {8, 8, 2, 2},
+					child_alignment  = {.Left, .Center},
+					outline          = item_outline,
+					id               = item_id,
 				) {
 					ui.text(
 						item,
-						alignment = {.Left, .Center},
-						color = item_style.text[item_state],
-						font_size = g_extra.theme.font_size,
+						alignment  = {.Left, .Center},
+						color      = item_style.text[item_state],
+						font_size  = g_extra.theme.font_size,
 						font_index = g_extra.theme.font_index,
 					)
 				}
@@ -2912,15 +2650,15 @@ list_view :: proc(
 			total_content_h := view_rect.height - scroll_data.min_offset.y
 			if scroll_bar(
 				&scroll_y,
-				min_val = 0,
-				max_val = scroll_data.min_offset.y,
-				view_size = view_rect.height,
+				min_val      = 0,
+				max_val      = scroll_data.min_offset.y,
+				view_size    = view_rect.height,
 				content_size = total_content_h,
-				dir = .Vertical,
-				width = ui.fixed(12),
-				height = ui.grow(),
-				disabled = disabled,
-				id = bar_id,
+				dir          = .Vertical,
+				width        = ui.fixed(12),
+				height       = ui.grow(),
+				disabled     = disabled,
+				id           = bar_id,
 			) {
 				ui.set_scroll_offset_by_id(
 					view_id,
@@ -3085,17 +2823,17 @@ color_panel_hsv :: proc(
 	sel_y := has_rect ? (1.0 - color_hsv.z) * panel_rect.height : 0
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width               = width,
+		height              = height,
 		background_gradient = ui.Gradient {
 			direction = .Horizontal,
-			stops = h_stops,
+			stops     = h_stops,
 		},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
+		border        = {thickness = style.border_width, color = style.border[state]},
+		outline       = outline,
 		corner_radius = style.corner_radius,
-		clip = true,
-		reuse_id = true,
+		clip          = true,
+		reuse_id      = true,
 	) {
 		_ = ui.layout(
 			width = ui.grow(),
@@ -3112,17 +2850,17 @@ color_panel_hsv :: proc(
 
 		if has_rect {
 			_ = ui.layout(
-				width = ui.fixed(10),
-				height = ui.fixed(10),
+				width         = ui.fixed(10),
+				height        = ui.fixed(10),
 				corner_radius = {5, 5, 5, 5},
-				border = {thickness = 1.5, color = {255, 255, 255, 255}},
-				outline = {thickness = 1, color = {0, 0, 0, 200}, offset = 0},
-				pointer_mode = .Ignore,
-				float_mode = ui.Float_At_Parent {
-					offset = {sel_x, sel_y},
+				border        = {thickness = 1.5, color = {255, 255, 255, 255}},
+				outline       = {thickness = 1, color = {0, 0, 0, 200}, offset = 0},
+				pointer_mode  = .Ignore,
+				float_mode    = ui.Float_At_Parent {
+					offset        = {sel_x, sel_y},
 					attach_points = {
 						element = .CenterCenter,
-						parent = .LeftTop,
+						parent  = .LeftTop,
 					},
 				},
 			)
@@ -3133,13 +2871,13 @@ color_panel_hsv :: proc(
 }
 
 color_bar_hue :: proc(
-	hue: ^f32,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	hue      : ^f32,
+	width    : ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+	height   : ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	disabled : bool = false,
+	id       : Maybe(ui.Id) = nil,
+	reuse_id : bool = false,
+	loc      : = #caller_location,
 ) -> bool {
 	assert(hue != nil)
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
@@ -3181,11 +2919,11 @@ color_bar_hue :: proc(
 	sel_y := has_rect ? norm_h * bar_rect.height : 0
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width               = width,
+		height              = height,
 		background_gradient = ui.Gradient {
 			direction = .Vertical,
-			stops = HUE_BAR_STOPS,
+			stops     = HUE_BAR_STOPS,
 		},
 		border = {thickness = style.border_width, color = style.border[state]},
 		outline = outline,
@@ -3195,16 +2933,16 @@ color_bar_hue :: proc(
 	) {
 		if has_rect {
 			_ = ui.layout(
-				width = ui.grow(),
-				height = ui.fixed(4),
+				width            = ui.grow(),
+				height           = ui.fixed(4),
 				background_color = {255, 255, 255, 255},
-				border = {thickness = 1, color = {0, 0, 0, 200}},
-				pointer_mode = .Ignore,
-				float_mode = ui.Float_At_Parent {
-					offset = {0, sel_y},
+				border           = {thickness = 1, color = {0, 0, 0, 200}},
+				pointer_mode     = .Ignore,
+				float_mode       = ui.Float_At_Parent {
+					offset        = {0, sel_y},
 					attach_points = {
 						element = .CenterCenter,
-						parent = .CenterTop,
+						parent  = .CenterTop,
 					},
 				},
 			)
@@ -3215,14 +2953,14 @@ color_bar_hue :: proc(
 }
 
 color_bar_alpha :: proc(
-	alpha: ^f32,
-	base_color: [4]u8 = {255, 255, 255, 255},
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	alpha      : ^f32,
+	base_color : [4]u8 = {255, 255, 255, 255},
+	width      : ui.Sizing_Axis = {mode = ui.Fixed_Size{140}},
+	height     : ui.Sizing_Axis = {mode = ui.Fixed_Size{16}},
+	disabled   : bool = false,
+	id         : Maybe(ui.Id) = nil,
+	reuse_id   : bool = false,
+	loc        : = #caller_location,
 ) -> bool {
 	assert(alpha != nil)
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
@@ -3278,30 +3016,30 @@ color_bar_alpha :: proc(
 	sel_x := has_rect ? norm_a * bar_rect.width : 0
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width               = width,
+		height              = height,
 		background_gradient = ui.Gradient {
 			direction = .Horizontal,
-			stops = alpha_stops,
+			stops    = alpha_stops,
 		},
-		border = {thickness = style.border_width, color = style.border[state]},
-		outline = outline,
+		border        = {thickness = style.border_width, color = style.border[state]},
+		outline       = outline,
 		corner_radius = style.corner_radius,
-		clip = true,
-		reuse_id = true,
+		clip          = true,
+		reuse_id      = true,
 	) {
 		if has_rect {
 			_ = ui.layout(
-				width = ui.fixed(4),
-				height = ui.grow(),
+				width            = ui.fixed(4),
+				height           = ui.grow(),
 				background_color = {255, 255, 255, 255},
-				border = {thickness = 1, color = {0, 0, 0, 200}},
-				pointer_mode = .Ignore,
-				float_mode = ui.Float_At_Parent {
-					offset = {sel_x, 0},
+				border           = {thickness = 1, color = {0, 0, 0, 200}},
+				pointer_mode     = .Ignore,
+				float_mode       = ui.Float_At_Parent {
+					offset        = {sel_x, 0},
 					attach_points = {
-						element = .CenterCenter,
-						parent = .LeftCenter,
+						element    = .CenterCenter,
+						parent     = .LeftCenter,
 					},
 				},
 			)
@@ -3312,15 +3050,15 @@ color_bar_alpha :: proc(
 }
 
 color_picker_hsv :: proc(
-	color_hsv: ^[3]f32,
-	alpha: ^f32 = nil,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	panel_size: f32 = 140,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	color_hsv  : ^[3]f32,
+	alpha      : ^f32 = nil,
+	width      : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height     : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	panel_size : f32 = 140,
+	disabled   : bool = false,
+	id         : Maybe(ui.Id) = nil,
+	reuse_id   : bool = false,
+	loc        : = #caller_location,
 ) -> bool {
 	assert(color_hsv != nil)
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
@@ -3330,22 +3068,22 @@ color_picker_hsv :: proc(
 	total_w := panel_size + 16 + 8
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		layout_direction = .Top_To_Bottom,
-		child_gap = 8,
-		reuse_id = true,
+		child_gap        = 8,
+		reuse_id         = true,
 	) {
 		if ui.layout(
-			width = ui.fit(),
-			height = ui.fit(),
+			width            = ui.fit(),
+			height           = ui.fit(),
 			layout_direction = .Left_To_Right,
-			child_gap = 8,
+			child_gap        = 8,
 		) {
 			if color_panel_hsv(
 				color_hsv,
-				width = ui.fixed(panel_size),
-				height = ui.fixed(panel_size),
+				width    = ui.fixed(panel_size),
+				height   = ui.fixed(panel_size),
 				disabled = disabled,
 			) {
 				changed = true
@@ -3353,8 +3091,8 @@ color_picker_hsv :: proc(
 
 			if color_bar_hue(
 				&color_hsv.x,
-				width = ui.fixed(16),
-				height = ui.fixed(panel_size),
+				width    = ui.fixed(16),
+				height   = ui.fixed(panel_size),
 				disabled = disabled,
 			) {
 				changed = true
@@ -3379,17 +3117,18 @@ color_picker_hsv :: proc(
 }
 
 color_picker :: proc(
-	color: ^[4]u8,
-	show_alpha: bool = false,
-	width: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	panel_size: f32 = 140,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
+	color      : ^[4]u8,
+	show_alpha : bool = false,
+	width      : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	height     : ui.Sizing_Axis = {mode = ui.Fit_Size{}},
+	panel_size : f32 = 140,
+	disabled   : bool = false,
+	id         : Maybe(ui.Id) = nil,
+	reuse_id   : bool = false,
+	loc        : = #caller_location,
 ) -> bool {
 	assert(color != nil)
+	
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
@@ -3410,22 +3149,22 @@ color_picker :: proc(
 	total_w := panel_size + 16 + 8
 
 	if ui.layout(
-		width = width,
-		height = height,
+		width            = width,
+		height           = height,
 		layout_direction = .Top_To_Bottom,
-		child_gap = 8,
-		reuse_id = true,
+		child_gap        = 8,
+		reuse_id         = true,
 	) {
 		if ui.layout(
-			width = ui.fit(),
-			height = ui.fit(),
+			width            = ui.fit(),
+			height           = ui.fit(),
 			layout_direction = .Left_To_Right,
-			child_gap = 8,
+			child_gap        = 8,
 		) {
 			if color_panel_hsv(
 				&g_extra.color_picker.hsv,
-				width = ui.fixed(panel_size),
-				height = ui.fixed(panel_size),
+				width    = ui.fixed(panel_size),
+				height   = ui.fixed(panel_size),
 				disabled = disabled,
 			) {
 				rgb := hsv_to_rgb(g_extra.color_picker.hsv)
@@ -3437,8 +3176,8 @@ color_picker :: proc(
 
 			if color_bar_hue(
 				&g_extra.color_picker.hsv.x,
-				width = ui.fixed(16),
-				height = ui.fixed(panel_size),
+				width    = ui.fixed(16),
+				height   = ui.fixed(panel_size),
 				disabled = disabled,
 			) {
 				rgb := hsv_to_rgb(g_extra.color_picker.hsv)
@@ -3455,9 +3194,9 @@ color_picker :: proc(
 			if color_bar_alpha(
 				&alpha_val,
 				base_color = base_col,
-				width = ui.fixed(total_w),
-				height = ui.fixed(14),
-				disabled = disabled,
+				width      = ui.fixed(total_w),
+				height     = ui.fixed(14),
+				disabled   = disabled,
 			) {
 				color.a = u8(clamp(math.round(alpha_val * 255.0), 0, 255))
 				g_extra.color_picker.col = color^
@@ -3469,144 +3208,7 @@ color_picker :: proc(
 	return changed
 }
 
-dummy_rec :: proc(
-	text: string = "",
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height: ui.Sizing_Axis = {mode = ui.Fixed_Size{80}},
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> bool {
-	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.Panel]
-
-	clicked := !disabled && ui.is_id_clicked(root_id)
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = style.background[state],
-		border = {thickness = style.border_width, color = style.border[state]},
-		corner_radius = style.corner_radius,
-		child_alignment = {.Center, .Center},
-		padding = {4, 4, 4, 4},
-		reuse_id = true,
-	) {
-		if len(text) > 0 {
-			ui.text(
-				text,
-				alignment = {.Center, .Center},
-				color = style.text[state],
-				font_size = g_extra.theme.font_size,
-				font_index = g_extra.theme.font_index,
-			)
-		}
-	}
-
-	return clicked
-}
-
-grid :: proc(
-	spacing: f32 = 16,
-	subdivs: int = 1,
-	mouse_cell: ^[2]int = nil,
-	width: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	height: ui.Sizing_Axis = {mode = ui.Grow_Size{}},
-	color: Maybe([4]u8) = nil,
-	disabled: bool = false,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> bool {
-	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	state := get_control_state(root_id, disabled)
-	style := g_extra.theme.controls[.Default]
-	line_col := color.? or_else style.border[.Normal]
-
-	bounds, has_bounds := ui.rect_by_id(root_id)
-	clicked := false
-
-	if has_bounds && mouse_cell != nil {
-		mouse_cell^ = {-1, -1}
-		if !disabled && ui.is_id_hovered(root_id) {
-			mouse_pos := ui.pointer_position()
-			if spacing > 0 {
-				cell_x := int(math.floor((mouse_pos.x - bounds.x) / spacing))
-				cell_y := int(math.floor((mouse_pos.y - bounds.y) / spacing))
-				mouse_cell^ = {cell_x, cell_y}
-			}
-			if ui.is_id_clicked(root_id) {
-				clicked = true
-			}
-		}
-	}
-
-	if ui.layout(
-		width = width,
-		height = height,
-		background_color = {0, 0, 0, 0},
-		border = {thickness = style.border_width, color = style.border[state]},
-		clip = true,
-		reuse_id = true,
-	) {
-		if has_bounds && spacing > 0 && subdivs > 0 {
-			step := spacing / f32(subdivs)
-			if step >= 1 {
-				sub_col := line_col
-				sub_col.a = u8(f32(sub_col.a) * 0.3)
-
-				num_v := int(bounds.width / step) + 1
-				for i in 1 ..< num_v {
-					x_offset := f32(i) * step
-					if x_offset >= bounds.width do break
-					is_main := (i % subdivs) == 0
-					_ = ui.layout(
-						width = ui.fixed(1),
-						height = ui.grow(),
-						background_color = is_main ? line_col : sub_col,
-						pointer_mode = .Ignore,
-						float_mode = ui.Float_At_Parent {
-							offset = {x_offset, 0},
-							attach_points = {
-								element = .LeftTop,
-								parent = .LeftTop,
-							},
-						},
-					)
-				}
-
-				num_h := int(bounds.height / step) + 1
-				for i in 1 ..< num_h {
-					y_offset := f32(i) * step
-					if y_offset >= bounds.height do break
-					is_main := (i % subdivs) == 0
-					_ = ui.layout(
-						width = ui.grow(),
-						height = ui.fixed(1),
-						background_color = is_main ? line_col : sub_col,
-						pointer_mode = .Ignore,
-						float_mode = ui.Float_At_Parent {
-							offset = {0, y_offset},
-							attach_points = {
-								element = .LeftTop,
-								parent = .LeftTop,
-							},
-						},
-					)
-				}
-			}
-		}
-	}
-
-	return clicked
-}
-
+// region: message box
 message_box :: proc(
 	open: ^bool,
 	title: string,
@@ -3633,48 +3235,48 @@ message_box :: proc(
 	closed := false
 
 	if ui.layout(
-		width = ui.grow(),
-		height = ui.grow(),
+		width            = ui.grow(),
+		height           = ui.grow(),
 		background_color = {0, 0, 0, 128},
-		pointer_mode = .Capture,
-		float_mode = ui.Float_At_Root {
+		pointer_mode     = .Capture,
+		float_mode       = ui.Float_At_Root {
 			attach_points = {element = .CenterCenter, parent = .CenterCenter},
-			z_index = z_index,
+			z_index       = z_index,
 		},
 		child_alignment = {.Center, .Center},
-		reuse_id = true,
+		reuse_id        = true,
 	) {
 		if window_box(
-			title = title,
-			closed = &closed,
-			width = width,
-			height = height,
+			title   = title,
+			closed  = &closed,
+			width   = width,
+			height  = height,
 			padding = {16, 16, 16, 16},
-			gap = 16,
-			id = ui.local_id("dialog"),
+			gap     = 16,
+			id      = ui.local_id("dialog"),
 		) {
 			ui.text(
 				message,
-				alignment = {.Center, .Center},
-				color = g_extra.theme.controls[.Label].text[.Normal],
-				font_size = g_extra.theme.font_size,
+				alignment  = {.Center, .Center},
+				color      = g_extra.theme.controls[.Label].text[.Normal],
+				font_size  = g_extra.theme.font_size,
 				font_index = g_extra.theme.font_index,
 			)
 
 			if ui.layout(
-				width = ui.grow(),
-				height = ui.fit(),
+				width            = ui.grow(),
+				height           = ui.fit(),
 				layout_direction = .Left_To_Right,
-				child_gap = 8,
-				child_alignment = {.Center, .Center},
+				child_gap        = 8,
+				child_alignment  = {.Center, .Center},
 			) {
 				for btn_text, i in buttons {
 					btn_id := ui.local_id(i)
 					if button(
 						btn_text,
-						width = ui.grow(),
+						width  = ui.grow(),
 						height = ui.fixed(28),
-						id = btn_id,
+						id     = btn_id,
 					) {
 						result = i + 1
 						if open != nil do open^ = false
@@ -3684,126 +3286,6 @@ message_box :: proc(
 		}
 
 		if closed {
-			result = 0
-			if open != nil do open^ = false
-		}
-	}
-
-	return result
-}
-
-text_input_box :: proc(
-	open: ^bool,
-	title: string,
-	message: string,
-	text_buffer: ^[dynamic]u8,
-	edit_mode: ^bool,
-	buttons: []string = {"OK", "Cancel"},
-	password: bool = false,
-	width: ui.Sizing_Axis = {mode = ui.Fixed_Size{340}},
-	height: ui.Sizing_Axis = {mode = ui.Fit_Size{}},
-	z_index: i32 = 1000,
-	id: Maybe(ui.Id) = nil,
-	reuse_id: bool = false,
-	loc := #caller_location,
-) -> int {
-	if open != nil && !open^ {
-		return -1
-	}
-
-	ui.push_focus_scope()
-	defer ui.pop_focus_scope()
-
-	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
-	wrap_id(root_id)
-
-	result := -1
-	closed := false
-	input_id := ui.local_id("input")
-
-	if edit_mode != nil && ui.is_id_focused(input_id) && !edit_mode^ {
-		edit_mode^ = true
-	}
-
-	if ui.layout(
-		width = ui.grow(),
-		height = ui.grow(),
-		background_color = {0, 0, 0, 128},
-		pointer_mode = .Capture,
-		float_mode = ui.Float_At_Root {
-			attach_points = {element = .CenterCenter, parent = .CenterCenter},
-			z_index = z_index,
-		},
-		child_alignment = {.Center, .Center},
-		reuse_id = true,
-	) {
-		if window_box(
-			title = title,
-			closed = &closed,
-			width = width,
-			height = height,
-			padding = {16, 16, 16, 16},
-			gap = 12,
-			id = ui.local_id("dialog"),
-		) {
-			if len(message) > 0 {
-				ui.text(
-					message,
-					alignment = {.Left, .Center},
-					color = g_extra.theme.controls[.Label].text[.Normal],
-					font_size = g_extra.theme.font_size,
-					font_index = g_extra.theme.font_index,
-				)
-			}
-
-			_, committed := text_box(
-				text_buffer,
-				edit_mode,
-				password = password,
-				width = ui.grow(),
-				height = ui.fixed(28),
-				id = input_id,
-			)
-			if committed && len(buttons) > 0 {
-				result = 1
-				if open != nil do open^ = false
-			}
-
-			if ui.layout(
-				width = ui.grow(),
-				height = ui.fit(),
-				layout_direction = .Left_To_Right,
-				child_gap = 8,
-				child_alignment = {.Center, .Center},
-			) {
-				for btn_text, i in buttons {
-					btn_id := ui.local_id(i)
-					if button(
-						btn_text,
-						width = ui.grow(),
-						height = ui.fixed(28),
-						id = btn_id,
-					) {
-						if g_extra.text_box.id == input_id {
-							clear(text_buffer)
-							append(text_buffer, ..g_extra.text_box.buffer[:])
-							clear(&g_extra.text_box.buffer)
-							g_extra.text_box.id = 0
-							if edit_mode != nil do edit_mode^ = false
-						}
-						result = i + 1
-						if open != nil do open^ = false
-					}
-				}
-			}
-		}
-
-		if closed {
-			if g_extra.text_box.id == input_id {
-				clear(&g_extra.text_box.buffer)
-				g_extra.text_box.id = 0
-				if edit_mode != nil do edit_mode^ = false
-			}
 			result = 0
 			if open != nil do open^ = false
 		}
