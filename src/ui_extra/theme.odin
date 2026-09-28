@@ -261,9 +261,9 @@ DEFAULT_THEME: Style_Theme : {
 			text = {.Normal ..= .Disabled = {255, 255, 255, 255}},
 			border_width = 1,
 			outline = {},
-			corner_radius = {4, 4, 0, 0},
-			padding = {8, 4, 4, 4},
+			corner_radius = PANEL_STYLE.corner_radius,
+			padding = PANEL_STYLE.padding,
 			overlay_color = DEFAULT_CONTROL_STYLE.overlay_color,
-		},
+		}
 	},
 }

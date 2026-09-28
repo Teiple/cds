@@ -3220,10 +3220,58 @@ message_box :: proc(
 	id       : Maybe(ui.Id) = nil,
 	reuse_id : bool = false,
 	loc      : = #caller_location,
-) -> i32 {
+) -> (
+	pressed_button_index : i32,
+	is_button_pressed    : bool,
+) {
+	message_box_button :: proc(
+		label         : string,
+		id            : ui.Id,
+		corner_radius : ui.Corner_Radius,
+		disabled      : bool = false,
+	) -> bool {
+		button_id := ui.push_id(id)
+		wrap_id(button_id)
+
+		if !disabled {
+			ui.register_focusable(button_id)
+		}
+
+		state := get_control_state(button_id, disabled)
+		style := g_extra.theme.controls[.Label_Button]
+
+		clicked := !disabled && ui.is_id_clicked(button_id)
+		outline := get_control_outline(
+			style,
+			!disabled && ui.is_id_focused(button_id),
+		)
+
+		if ui.layout(
+			width            = ui.grow(),
+			height           = ui.grow(),
+			background_color = style.background[state],
+			padding          = style.padding,
+			child_alignment  = {.Center, .Center},
+			border           = {thickness = style.border_width, color = style.border[state]},
+			outline          = outline,
+			corner_radius    = corner_radius,
+			reuse_id         = true,
+		) {
+			ui.text(
+				label,
+				alignment  = {.Center, .Center},
+				color      = style.text[state],
+				font_size  = g_extra.theme.font_size,
+				font_index = g_extra.theme.font_index,
+			)
+		}
+
+		return clicked
+	}
+
 	assert(open != nil)
 
-	if !open^ do return -1
+	if !open^ do return
 
 	ui.push_focus_scope()
 	defer ui.pop_focus_scope()
@@ -3231,14 +3279,10 @@ message_box :: proc(
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
 
-	result : i32 = -1
-	closed := false
-
 	if ui.layout(
 		width            = ui.grow(),
 		height           = ui.grow(),
-		background_color = {0, 0, 0, 128},
-		pointer_mode     = .Capture,
+		background_color = {0, 0, 0, 50},
 		float_mode       = ui.Float_At_Root {
 			attach_points = {element = .CenterCenter, parent = .CenterCenter},
 			z_index       = z_index,
@@ -3246,54 +3290,139 @@ message_box :: proc(
 		child_alignment = {.Center, .Center},
 		reuse_id        = true,
 	) {
-		if window_box(
-			title   = title,
-			closed  = &closed,
-			width   = width,
-			height  = height,
-			padding = {16, 16, 16, 16},
-			gap     = 16,
-			id      = ui.local_id("dialog"),
+		window_box_style := g_extra.theme.controls[.WindowBox]
+		panel_style := g_extra.theme.controls[.Panel]
+
+		if ui.layout(
+			width = width,
+			height = height,
+			layout_direction = .Top_To_Bottom,
+			child_gap = 0,
+			padding = {},
+			background_color = panel_style.background[.Normal],
+			border = {
+				thickness = panel_style.border_width,
+				color = panel_style.border[.Normal],
+			},
+			corner_radius = window_box_style.corner_radius,
 		) {
-			ui.text(
-				message,
-				alignment  = {.Center, .Center},
-				color      = g_extra.theme.controls[.Label].text[.Normal],
-				font_size  = g_extra.theme.font_size,
-				font_index = g_extra.theme.font_index,
-			)
-
-			uie.line()
-
+			// Title
 			if ui.layout(
 				width            = ui.grow(),
-				height           = ui.fit(),
+				height           = ui.fixed(28),
 				layout_direction = .Left_To_Right,
-				child_gap        = 8,
-				child_alignment  = {.Center, .Center},
+				padding          = {8, 4, 4, 4},
+				child_alignment  = {.Left, .Center},
+				background_color = window_box_style.background[.Normal],
+				corner_radius    = {
+					top_left      = window_box_style.corner_radius.top_left,
+					top_right     = window_box_style.corner_radius.top_right,
+					bottom_left   = 0,
+					bottom_right  = 0,
+				},
+				id               = ui.local_id("title_bar"),
+			) {
+				ui.text(
+					title,
+					color = window_box_style.text[.Normal],
+					font_size = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+					alignment = {.Left, .Center},
+				)
+
+			}
+
+			// Message
+			if ui.layout(
+				width   = ui.grow(),
+				height  = ui.fit(),
+				padding = {8, 8, 16, 16} 
+			) {
+				ui.text(
+					message,
+					alignment  = {.Center, .Center},
+					color      = g_extra.theme.controls[.Label].text[.Normal],
+					font_size  = g_extra.theme.font_size,
+					font_index = g_extra.theme.font_index,
+				)
+			}
+
+			h_line()
+
+			// Buttons
+			if ui.layout(
+				width            = ui.grow(),
+				height           = ui.fixed(28),
+				padding          = {},
+				layout_direction = .Left_To_Right,
 			) {
 				for btn_text, i in buttons {
 					btn_id := ui.local_id(i)
 					
 					index := i32(i)
-					if button(
-						btn_text,
-						width  = ui.grow(),
-						height = ui.fixed(28),
-						id     = btn_id,
+					corner_radius : ui.Corner_Radius
+
+					if i == 0 {
+						corner_radius = {
+							top_left     = 0,
+							top_right    = 0,
+							bottom_left  = window_box_style.corner_radius.bottom_left,
+							bottom_right = len(buttons) == 1 ? window_box_style.corner_radius.bottom_right : 0,
+						}
+					} else if i == len(buttons) - 1{
+						corner_radius = {
+							top_left     = 0,
+							top_right    = 0,
+							bottom_left  = len(buttons) == 1 ? window_box_style.corner_radius.bottom_left : 0,
+							bottom_right = window_box_style.corner_radius.bottom_right,
+						}
+					} else {
+						corner_radius = {0, 0, 0, 0}
+					}
+
+					if message_box_button(
+						label         = btn_text,
+						corner_radius = corner_radius,
+						id            = btn_id
 					) {
-						result = index + 1
-						open^ = false
+						is_button_pressed    = true
+						pressed_button_index = index
+						open^                = false
+					}
+
+					if i != len(buttons) - 1 {
+						v_line()
 					}
 				}
 			}
 		}
-
-		if closed {
-			result = -1
-			open^  = false 
-		}
 	}
+	
+	return 
+}
 
-	return result
+
+// region: lines
+h_line :: proc(
+	loc : = #caller_location
+) {
+	if ui.layout(
+		width            = ui.grow(),
+		height           = ui.fixed(1),
+		padding          = {},
+		background_color = g_extra.theme.controls[.Default].border[.Normal],
+		loc              = loc
+	){}
+}
+
+v_line :: proc(
+	loc : = #caller_location
+) {
+	if ui.layout(
+		width            = ui.fixed(1),
+		height           = ui.grow(1),
+		padding          = {},
+		background_color = g_extra.theme.controls[.Default].border[.Normal],
+		loc              = loc,
+	){}
 }
