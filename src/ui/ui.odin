@@ -1378,6 +1378,8 @@ make_context :: proc(
 		event()
 	}
 
+	assert(len(fonts) > 0)
+
 	fonts_copy := make([]Font, len(fonts))
 	copy(fonts_copy, fonts)
 

@@ -5,6 +5,7 @@ import "../ui"
 import "core:math"
 import "core:math/linalg"
 import stbtt "vendor:stb/truetype"
+import "core:fmt"
 
 ARC_SEGMENTS :: 12
 
@@ -132,20 +133,21 @@ make_fonts :: proc(
 		alpha_bitmap := make([]u8, atlas_w * atlas_h)
 		defer delete(alpha_bitmap)
 
+		// only use visible ASCII character range
 		chardata: [96]stbtt.bakedchar
 		stbtt.BakeFontBitmap(
-			raw_data(desc.ttf),
-			0,
-			desc.base_size,
-			raw_data(alpha_bitmap),
-			i32(atlas_w),
-			i32(atlas_h),
-			32,
-			96,
-			raw_data(chardata[:]),
+			data         = raw_data(desc.ttf),
+			offset       = 0,
+			pixel_height = desc.base_size,
+			pixels       = raw_data(alpha_bitmap),
+			pw           = i32(atlas_w),
+			ph           = i32(atlas_h),
+			first_char   = 32,
+			num_chars    = 96,
+			chardata     = raw_data(chardata[:]),
 		)
 
-		rgba_pixels := make([]u8, atlas_w * atlas_h * 4)
+		rgba_pixels := make([]u8, atlas_w * atlas_h * 4) // 4 color channels rgba
 		defer delete(rgba_pixels)
 
 		for px, idx in alpha_bitmap {
@@ -156,16 +158,22 @@ make_fonts :: proc(
 		}
 
 		font_image := sg.make_image({
-			width = i32(atlas_w),
-			height = i32(atlas_h),
+			width        = i32(atlas_w),
+			height       = i32(atlas_h),
 			pixel_format = .RGBA8,
-			data = {
+			data         = {
 				mip_levels = {
-					0 = {ptr = raw_data(rgba_pixels), size = len(rgba_pixels)},
+					0 = {
+						ptr = raw_data(rgba_pixels),
+						size = len(rgba_pixels)
+					},
 				},
 			},
 		})
-		font_view := sg.make_view({texture = {image = font_image}})
+
+		font_view := sg.make_view({
+			texture = {image = font_image}
+		})
 
 		append(
 			&r.fonts,
@@ -178,10 +186,12 @@ make_fonts :: proc(
 			},
 		)
 
+		// Convert to ui.Font
 		fonts_out[i] = ui.Font {
 			base_size = desc.base_size,
 			spacing   = desc.spacing,
 		}
+
 		for g in 0 ..< 96 {
 			fonts_out[i].glyphs[g].xadvance = chardata[g].xadvance
 		}
@@ -986,9 +996,9 @@ render :: proc(
 ) {
 	to_screen_rect :: proc(rec: ui.Rect, dest: ui.Rect, s: f32) -> ui.Rect {
 		return {
-			x = dest.x + rec.x * s,
-			y = dest.y + rec.y * s,
-			width = rec.width * s,
+			x      = dest.x + rec.x * s,
+			y      = dest.y + rec.y * s,
+			width  = rec.width * s,
 			height = rec.height * s,
 		}
 	}
@@ -998,7 +1008,7 @@ render :: proc(
 	clear(&r.batches)
 	clear(&r.scissor_stack)
 
-	base_scissor := dest_rect
+	base_scissor := ui.Rect{0, 0, base_size.x, base_size.y}
 	append(&r.scissor_stack, base_scissor)
 
 	set_active_batch(r, r.white_view, base_scissor)
@@ -1007,8 +1017,7 @@ render :: proc(
 		switch c in cmd {
 		case ui.Push_Clip_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			screen_clip := to_screen_rect(c.rect, dest_rect, scale)
-			intersected, ok := ui.intersect_rect(cur, screen_clip)
+			intersected, ok := ui.intersect_rect(cur, c.rect)
 			if !ok do intersected = ui.Rect{}
 			append(&r.scissor_stack, intersected)
 			set_active_batch(
@@ -1025,7 +1034,7 @@ render :: proc(
 
 		case ui.Rect_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
+			if _, ok := ui.intersect_rect(cur, c.rect); !ok do break
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_filled(r, c.rect, c.color, c.corner_radius)
 			if c.border.thickness > 0 {
@@ -1040,7 +1049,7 @@ render :: proc(
 
 		case ui.Gradient_Rect_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
+			if _, ok := ui.intersect_rect(cur, c.rect); !ok do break
 			set_active_batch(r, r.white_view, cur)
 			render_rounded_rect_gradient(
 				r,
@@ -1060,7 +1069,7 @@ render :: proc(
 
 		case ui.Image_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.dest, dest_rect, scale)); !ok do break
+			if _, ok := ui.intersect_rect(cur, c.dest); !ok do break
 			view := r.white_view
 			if c.texture != 0 {
 				view = sg.View {
@@ -1072,10 +1081,10 @@ render :: proc(
 
 		case ui.Text_Command:
 			cur := r.scissor_stack[len(r.scissor_stack) - 1]
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c.rect, dest_rect, scale)); !ok do break
+			if _, ok := ui.intersect_rect(cur, c.rect); !ok do break
 
 			font_idx := int(c.font)
-			assert(font_idx < len(r.fonts))
+			assert(font_idx < len(r.fonts), fmt.tprintln(font_idx, len(r.fonts)))
 			font_obj := &r.fonts[font_idx]
 			set_active_batch(r, font_obj.view, cur)
 			scale_font :=
@@ -1086,11 +1095,9 @@ render :: proc(
 			line_y := pen_y
 
 			for line in c.lines {
-				line_screen_y0 :=
-					dest_rect.y + (line_y - c.font_size * 0.78) * scale
-				line_screen_y1 := line_screen_y0 + c.font_size * scale
-				if line_screen_y1 >= cur.y &&
-				   line_screen_y0 <= cur.y + cur.height {
+				line_y0 := line_y - c.font_size * 0.78
+				line_y1 := line_y0 + c.font_size
+				if line_y1 >= cur.y && line_y0 <= cur.y + cur.height {
 					draw_text_line(
 						r,
 						font_obj,
@@ -1110,7 +1117,7 @@ render :: proc(
 			// Ensure minimal width so scissor intersection does not fail when text content is empty and cursor needs to be drawn
 			c_rect := c.rect
 			c_rect.width = max(c_rect.width, 2)
-			if _, ok := ui.intersect_rect(cur, to_screen_rect(c_rect, dest_rect, scale)); !ok do break
+			if _, ok := ui.intersect_rect(cur, c_rect); !ok do break
 
 			font_idx := int(c.font)
 			assert(font_idx < len(r.fonts))
@@ -1318,11 +1325,12 @@ render :: proc(
 		}
 		sg.apply_bindings(bindings)
 
+		screen_scissor := to_screen_rect(b.scissor, dest_rect, scale)
 		sg.apply_scissor_rectf(
-			b.scissor.x,
-			b.scissor.y,
-			b.scissor.width,
-			b.scissor.height,
+			screen_scissor.x,
+			screen_scissor.y,
+			screen_scissor.width,
+			screen_scissor.height,
 			true,
 		)
 		sg.draw(b.element_base, b.num_elements, 1)

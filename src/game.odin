@@ -10,18 +10,17 @@ import ui_sokol "ui_sokol"
 g_odin_ctx := runtime.default_context()
 
 Game_State :: struct {
-	// Drawing
-	meshes:        [dynamic]Mesh,
-	renderer:      Renderer,
-	frame_time:    Game_Frame_Time,
-	camera:        Camera,
-	viewport:      Viewport,
-	ui:            struct {
-		ctx:      ui.Context,
-		renderer: ui_sokol.Renderer,
+	entry_point : runtime.Source_Code_Location,
+	entry_dir   : string,
+	meshes      : [dynamic]Mesh,
+	renderer    : Renderer,
+	frame_time  : Game_Frame_Time,
+	camera      : Camera,
+	viewport    : Viewport,
+	ui          : struct {
+		ctx      : ui.Context,
+		renderer : ui_sokol.Renderer,
 	},
-	demo:          Ui_Demo_State,
-	button_clicks: int,
 }
 
 g_state: Game_State
@@ -49,11 +48,10 @@ update_input_event :: proc(event: sapp.Event) {
 
 compute_mvp :: proc(
 	fovy_degrees: f32,
-	rotate_x_degrees, rotate_y_degrees: f32,
 ) -> matrix[4, 4]f32 {
 	proj := linalg.matrix4_perspective_f32(
 		fovy = math.to_radians_f32(fovy_degrees),
-		aspect = 960.0 / 540.0,
+		aspect = viewport_get_aspect(g_state.viewport),
 		near = 0.01,
 		far = 100,
 	)
@@ -65,9 +63,6 @@ compute_mvp :: proc(
 	)
 
 	view_proj := proj * view
-	rxm := linalg.matrix4_rotate_f32(rotate_x_degrees, {1, 0, 0})
-	rym := linalg.matrix4_rotate_f32(rotate_y_degrees, {0, 1, 0})
 
-	model := rxm * rym
-	return view_proj * model
+	return view_proj
 }
