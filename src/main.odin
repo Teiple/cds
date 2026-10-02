@@ -9,16 +9,11 @@ import "base:runtime"
 import "core:os"
 
 import "ui"
+import aud "audio"
 import uie "ui_extra"
-import "ui_sokol"
+import uir "ui_sokol"
 import "core:fmt"
 
-Display_Mode :: enum {
-	Unlit,
-	Wireframe,
-}
-
-current_display_mode: Display_Mode
 
 
 main :: proc() {
@@ -44,9 +39,15 @@ main :: proc() {
 			})
 
 			viewport_init(&g_state.viewport, base_size= {960, 540})
-			ui_sokol.init(&g_state.ui.renderer)
+			
+			uir.init(&g_state.ui.renderer)
+			aud.init(&g_state.audio)
 
-			fonts := ui_sokol.make_fonts(
+			for file, id in sound_files {
+				aud.make_sound(&g_state.audio, id, file)
+			}
+
+			fonts := uir.make_fonts(
 				&g_state.ui.renderer,
 				{
 					0 = {
@@ -70,8 +71,8 @@ main :: proc() {
 			g_state.ui.ctx = ui.make_context(
 				fonts         = fonts,
 				entry_dir     = g_state.entry_dir,
-				get_clipboard = ui_sokol.sokol_get_clipboard,
-				set_clipboard = ui_sokol.sokol_set_clipboard,
+				get_clipboard = uir.sokol_get_clipboard,
+				set_clipboard = uir.sokol_set_clipboard,
 			)
 
 			g_state.camera = {
@@ -111,7 +112,7 @@ main :: proc() {
 				{
 					// UI Render (deferred)
 					defer {
-						ui_sokol.render(
+						uir.render(
 							&g_state.ui.renderer,
 							&g_state.ui.ctx,
 							g_state.viewport.base_size,
@@ -143,6 +144,21 @@ main :: proc() {
 								alignment  = {.Center, .Center},
 							)
 						}
+
+						if ui.layout(
+							width      = ui.fixed(100),
+							height     = ui.fixed(32),
+							float_mode = ui.Float_At_Root{
+								attach_points = {
+									element    = .CenterCenter,
+									parent     = .CenterCenter,
+								}	
+							},
+						) {
+							if uie.button("Press to play sound!") {
+								aud.play_sound(&g_state.audio, Sound_Id.Fire_Primary)
+							}
+						}
 					}
 				}
 			}
@@ -158,9 +174,10 @@ main :: proc() {
 			}
 			delete(g_state.meshes)
 
-			ui_sokol.destroy(&g_state.ui.renderer)
+			uir.destroy(&g_state.ui.renderer)
 			ui.delete_context(g_state.ui.ctx)
 			uie.destroy()
+			aud.destroy(&g_state.audio)
 
 			sg.shutdown()
 		},

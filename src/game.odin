@@ -5,9 +5,24 @@ import "core:math"
 import linalg "core:math/linalg"
 import sapp "sokol/app"
 import ui "ui"
+import aud "audio"
 import ui_sokol "ui_sokol"
 
 g_odin_ctx := runtime.default_context()
+
+Sound_Id :: enum {
+	Fire_Primary,
+	Fire_Secondary,
+}
+
+sound_files : [Sound_Id][]byte = {
+	.Fire_Primary   = #load("../assets/sounds/fire_primary.mp3"),
+	.Fire_Secondary = #load("../assets/sounds/fire_secondary.mp3"),
+}
+
+Music_Id :: enum {
+	Arena,
+}
 
 Game_State :: struct {
 	entry_point : runtime.Source_Code_Location,
@@ -17,6 +32,7 @@ Game_State :: struct {
 	frame_time  : Game_Frame_Time,
 	camera      : Camera,
 	viewport    : Viewport,
+	audio       : aud.Context(Sound_Id, Music_Id),
 	ui          : struct {
 		ctx      : ui.Context,
 		renderer : ui_sokol.Renderer,
