@@ -370,6 +370,8 @@ text_box :: proc(
 	disabled     : bool = false,
 	id           : Maybe(ui.Id) = nil,
 	reuse_id     : bool = false,
+	font_index   : Maybe(i32) = nil,
+	font_size    : Maybe(f32) = nil,
 	loc          : = #caller_location,
 ) -> (
 	changed: bool,
@@ -377,6 +379,9 @@ text_box :: proc(
 ) {
 	assert(buffer != nil)
 	assert(edit_mode != nil)
+
+	font_index := font_index == nil ? g_extra.theme.font_index : font_index.?
+	font_size  := font_size  == nil ?  g_extra.theme.font_size : font_size.?
 
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
@@ -455,8 +460,8 @@ text_box :: proc(
 				char_idx := ui.get_char_index_at_x(
 					sample_str,
 					click_local_x,
-					g_extra.theme.font_size,
-					g_extra.theme.font_index,
+					font_size,
+					font_index,
 				)
 				if ui.is_id_pressed(root_id) {
 					g_extra.text_box.cursor_pos = char_idx
@@ -777,8 +782,8 @@ text_box :: proc(
 		}
 		cursor_x = ui.measure_text(
 			prefix_str,
-			g_extra.theme.font_size,
-			g_extra.theme.font_index,
+			font_size,
+			font_index,
 		)
 
 		if usable_w > 0 {
@@ -819,31 +824,32 @@ text_box :: proc(
 		} else {
 			text_str = raw_str
 		}
+
 		if is_editing {
 			sel_range := [2]int {
 				g_extra.text_box.select_start,
 				g_extra.text_box.select_start + g_extra.text_box.select_length,
 			}
 			ui.text_edit(
-				content = text_str,
-				font_index = g_extra.theme.font_index,
-				font_size = g_extra.theme.font_size,
-				color = style.text[state],
-				alignment = {.Left, .Center},
+				content         = text_str,
+				font_index      = font_index,
+				font_size       = font_size,
+				color           = style.text[state],
+				alignment       = {.Left, .Center},
 				selection_range = sel_range,
 				selection_color = style.overlay_color,
-				cursor_index = g_extra.text_box.cursor_pos,
-				cursor_visible = cursor_visible,
-				cursor_color = style.text[state],
-				scroll_offset = {g_extra.text_box.scroll_offset_x, 0},
+				cursor_index    = g_extra.text_box.cursor_pos,
+				cursor_visible  = cursor_visible,
+				cursor_color    = style.text[state],
+				scroll_offset   = {g_extra.text_box.scroll_offset_x, 0},
 			)
 		} else {
 			ui.text(
 				text_str,
-				alignment = {.Left, .Center},
-				color = style.text[state],
-				font_size = g_extra.theme.font_size,
-				font_index = g_extra.theme.font_index,
+				alignment  = {.Left, .Center},
+				color      = style.text[state],
+				font_size  = font_size,
+				font_index = font_index,
 			)
 		}
 	}
@@ -901,6 +907,8 @@ text_box_multi :: proc(
 	disabled     : bool = false,
 	id           : Maybe(ui.Id) = nil,
 	reuse_id     : bool = false,
+	font_index   : Maybe(i32) = nil,
+	font_size    : Maybe(f32) = nil,
 	loc          : = #caller_location,
 ) -> (
 	changed: bool,
@@ -908,6 +916,9 @@ text_box_multi :: proc(
 ) {
 	assert(buffer != nil)
 	assert(edit_mode != nil)
+
+	font_index := font_index == nil ? g_extra.theme.font_index : font_index.? 
+	font_size  := font_size  == nil ? g_extra.theme.font_size  : font_size.?
 
 	root_id := reuse_id ? ui.last_id() : ui.push_id(id, loc)
 	wrap_id(root_id)
@@ -955,7 +966,7 @@ text_box_multi :: proc(
 		}
 	}
 
-	line_h := g_extra.theme.font_size + line_spacing
+	line_h := font_size + line_spacing
 
 	cursor_moved := false
 
@@ -1007,8 +1018,8 @@ text_box_multi :: proc(
 				char_idx := ui.get_char_index_at_x(
 					line_slice,
 					local_x,
-					g_extra.theme.font_size,
-					g_extra.theme.font_index,
+					font_size,
+					font_index,
 				)
 				new_pos := target_r[0] + char_idx
 
@@ -1474,38 +1485,38 @@ text_box_multi :: proc(
 				g_extra.text_box.select_start + g_extra.text_box.select_length,
 			}
 			ui.text_edit(
-				content = text_str,
-				font_index = g_extra.theme.font_index,
-				font_size = g_extra.theme.font_size,
-				color = style.text[state],
-				line_spacing = line_spacing,
-				alignment = {.Left, .Top},
+				content         = text_str,
+				font_index      = font_index,
+				font_size       = font_size,
+				color           = style.text[state],
+				line_spacing    = line_spacing,
+				alignment       = {.Left, .Top},
 				selection_range = sel_range,
 				selection_color = style.overlay_color,
-				cursor_index = g_extra.text_box.cursor_pos,
-				cursor_visible = cursor_visible,
-				cursor_color = style.text[state],
-				scroll_offset = {
+				cursor_index    = g_extra.text_box.cursor_pos,
+				cursor_visible  = cursor_visible,
+				cursor_color    = style.text[state],
+				scroll_offset   = {
 					g_extra.text_box.scroll_offset_x,
 					g_extra.text_box.scroll_offset_y,
 				},
 				multiline = true,
-				wrap = false,
+				wrap      = false,
 			)
 		} else {
 			ui.text_edit(
-				content = text_str,
-				font_index = g_extra.theme.font_index,
-				font_size = g_extra.theme.font_size,
-				color = style.text[state],
-				line_spacing = line_spacing,
-				alignment = {.Left, .Top},
+				content       = text_str,
+				font_index    = font_index,
+				font_size     = font_size,
+				color         = style.text[state],
+				line_spacing  = line_spacing,
+				alignment     = {.Left, .Top},
 				scroll_offset = {
 					g_extra.text_box.scroll_offset_x,
 					g_extra.text_box.scroll_offset_y,
 				},
 				multiline = true,
-				wrap = false,
+				wrap      = false,
 			)
 		}
 

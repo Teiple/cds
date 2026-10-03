@@ -6,7 +6,7 @@ import linalg "core:math/linalg"
 import sapp "sokol/app"
 import ui "ui"
 import aud "audio"
-import ui_sokol "ui_sokol"
+import uis "ui_sokol"
 
 g_odin_ctx := runtime.default_context()
 
@@ -25,18 +25,21 @@ Music_Id :: enum {
 }
 
 Game_State :: struct {
-	entry_point : runtime.Source_Code_Location,
-	entry_dir   : string,
-	meshes      : [dynamic]Mesh,
-	renderer    : Renderer,
-	frame_time  : Game_Frame_Time,
-	camera      : Camera,
-	viewport    : Viewport,
-	audio       : aud.Context(Sound_Id, Music_Id),
-	ui          : struct {
-		ctx      : ui.Context,
-		renderer : ui_sokol.Renderer,
+	entry_point      : runtime.Source_Code_Location,
+	entry_dir        : string,
+	primitive_meshes : [dynamic]Mesh,
+	models           : [dynamic]Model,
+	renderer         : Renderer,
+	frame_time       : Game_Frame_Time,
+	camera           : Camera,
+	free_cam         : Free_Camera,
+	viewport         : Viewport,
+	audio            : aud.Context(Sound_Id, Music_Id),
+	ui               : struct {
+		ctx           : ui.Context,
+		renderer      : uis.Renderer,
 	},
+	console          : Console,
 }
 
 g_state: Game_State
@@ -46,20 +49,21 @@ screen_to_ui :: proc(pos: [2]f32, user_data: rawptr) -> [2]f32 {
 	return viewport_screen_to_virtual(vp^, pos)
 }
 
-update_input_event :: proc(event: sapp.Event) {
-	ev := event
+update_input_event :: proc(ev: sapp.Event) {
 	#partial switch ev.type {
 	case .KEY_DOWN:
 		if ev.key_code == .ESCAPE {
 			sapp.quit()
 		}
 	}
-	ui_sokol.handle_event(
+	uis.handle_event(
 		&g_state.ui.ctx.input,
-		&ev,
+		ev,
 		screen_to_ui,
 		&g_state.viewport,
 	)
+	free_camera_handle_event(&g_state.free_cam, &g_state.camera, ev)
+	console_update_event(&g_state.console, ev)
 }
 
 compute_mvp :: proc(

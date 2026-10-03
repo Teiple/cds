@@ -6,7 +6,7 @@ import "core:strings"
 
 handle_event :: proc(
 	input: ^ui.Input,
-	event: ^sapp.Event,
+	ev: sapp.Event,
 	screen_to_ui: proc(pos: [2]f32, user_data: rawptr) -> [2]f32 = nil,
 	user_data: rawptr = nil,
 ) {
@@ -77,46 +77,46 @@ handle_event :: proc(
 		}
 	}
 
-	update_modifiers(input, event.modifiers)
+	update_modifiers(input, ev.modifiers)
 
-	#partial switch event.type {
+	#partial switch ev.type {
 	case .CHAR:
-		if event.char_code >= 32 && event.char_code != 127 {
-			append(&input.keyboard.characters, rune(event.char_code))
+		if ev.char_code >= 32 && ev.char_code != 127 {
+			append(&input.keyboard.characters, rune(ev.char_code))
 		}
 	case .KEY_DOWN:
-		k := map_key(event.key_code)
+		k := map_key(ev.key_code)
 		if k != .Invalid {
 			input.keyboard.keys[k] = .Pressed
 		}
 	case .KEY_UP:
-		k := map_key(event.key_code)
+		k := map_key(ev.key_code)
 		if k != .Invalid {
 			input.keyboard.keys[k] = .Released
 		}
 	case .MOUSE_MOVE:
 		prev := input.pointer.position
-		pos := map_pos({event.mouse_x, event.mouse_y}, screen_to_ui, user_data)
+		pos := map_pos({ev.mouse_x, ev.mouse_y}, screen_to_ui, user_data)
 		input.pointer.kind = .Mouse
 		input.pointer.is_valid = true
 		input.pointer.position = pos
 		input.pointer.delta = pos - prev
 	case .MOUSE_DOWN:
-		if event.mouse_button == .LEFT {
+		if ev.mouse_button == .LEFT {
 			input.pointer.kind = .Mouse
 			input.pointer.is_valid = true
 			input.pointer.state = .Pressed
 		}
 	case .MOUSE_UP:
-		if event.mouse_button == .LEFT {
+		if ev.mouse_button == .LEFT {
 			input.pointer.kind = .Mouse
 			input.pointer.state = .Released
 		}
 	case .MOUSE_SCROLL:
-		input.pointer.scroll = {event.scroll_x, event.scroll_y}
+		input.pointer.scroll = {ev.scroll_x, ev.scroll_y}
 	case .TOUCHES_BEGAN:
-		if event.num_touches > 0 {
-			t := event.touches[0]
+		if ev.num_touches > 0 {
+			t := ev.touches[0]
 			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui, user_data)
 			input.pointer.kind = .Touch
 			input.pointer.is_valid = true
@@ -125,8 +125,8 @@ handle_event :: proc(
 			input.pointer.delta = {0, 0}
 		}
 	case .TOUCHES_MOVED:
-		if event.num_touches > 0 {
-			t := event.touches[0]
+		if ev.num_touches > 0 {
+			t := ev.touches[0]
 			prev := input.pointer.position
 			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui, user_data)
 			input.pointer.kind = .Touch

@@ -133,7 +133,7 @@ draw_mesh_by_buffers :: proc(
 ) {
 	sg.apply_pipeline(g_state.renderer.pipelines[pip_type])
 
-	model :=
+	model_matrix :=
 		linalg.matrix4_translate_f32(position) *
 		linalg.matrix4_from_quaternion(rotation)
 
@@ -141,7 +141,7 @@ draw_mesh_by_buffers :: proc(
 		mvp = camera_view_projection_matrix(
 			g_state.camera,
 			g_state.viewport,
-		) * model,
+		) * model_matrix,
 	}
 	sg.apply_uniforms(
 		shaders.UB_vs_params,
@@ -156,25 +156,13 @@ draw_mesh_by_buffers :: proc(
 	sg.draw(0, index_count, 1)
 }
 
-mesh_generate_line_indices :: proc(
-	tri_indices: []u16,
-	allocator := context.temp_allocator,
-) -> []u16 {
-	tri_count := len(tri_indices) / 3
-	line_indices := make([]u16, tri_count * 6, allocator)
-
-	for i in 0 ..< tri_count {
-		i0 := tri_indices[i * 3 + 0]
-		i1 := tri_indices[i * 3 + 1]
-		i2 := tri_indices[i * 3 + 2]
-
-		line_indices[i * 6 + 0] = i0
-		line_indices[i * 6 + 1] = i1
-		line_indices[i * 6 + 2] = i1
-		line_indices[i * 6 + 3] = i2
-		line_indices[i * 6 + 4] = i2
-		line_indices[i * 6 + 5] = i0
+draw_model :: proc(
+	model    : Model,
+	position : [3]f32 = {0, 0, 0},
+	rotation : quaternion128 = linalg.QUATERNIONF32_IDENTITY,
+) {
+	for mesh in model.meshes {
+		// per mesh transform is not yet supported
+		draw_mesh(mesh, position, rotation)
 	}
-
-	return line_indices
 }
