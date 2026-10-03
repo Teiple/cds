@@ -6,6 +6,7 @@ import "core:math"
 import "core:math/linalg"
 import stbtt "vendor:stb/truetype"
 import "core:fmt"
+import "core:c"
 
 ARC_SEGMENTS :: 12
 
@@ -174,6 +175,18 @@ make_fonts :: proc(
 		font_view := sg.make_view({
 			texture = {image = font_image}
 		})
+
+		font_info: stbtt.fontinfo
+		ascent, descent, line_gap: c.int
+		if stbtt.InitFont(&font_info, raw_data(desc.ttf), 0) {
+			stbtt.GetFontVMetrics(&font_info, &ascent, &descent, &line_gap)
+		}
+		scale := stbtt.ScaleForPixelHeight(&font_info, desc.base_size)
+		font_ascent := f32(ascent) * scale
+
+		for g in 0 ..< 96 {
+			chardata[g].yoff += font_ascent
+		}
 
 		append(
 			&r.fonts,
@@ -1084,18 +1097,23 @@ render :: proc(
 			if _, ok := ui.intersect_rect(cur, c.rect); !ok do break
 
 			font_idx := int(c.font)
-			assert(font_idx < len(r.fonts), fmt.tprintln(font_idx, len(r.fonts)))
+			
+			assert(font_idx < len(r.fonts))
+
 			font_obj := &r.fonts[font_idx]
 			set_active_batch(r, font_obj.view, cur)
-			scale_font :=
-				font_obj.base_size > 0 ? (c.font_size / font_obj.base_size) : 1.0
+
+			assert(font_obj.base_size > 0)
+
+			scale_font := c.font_size / font_obj.base_size
+			
 			pen_x := c.rect.x
-			pen_y := c.rect.y + c.font_size * 0.78
+			pen_y := c.rect.y
 
 			line_y := pen_y
 
 			for line in c.lines {
-				line_y0 := line_y - c.font_size * 0.78
+				line_y0 := line_y
 				line_y1 := line_y0 + c.font_size
 				if line_y1 >= cur.y && line_y0 <= cur.y + cur.height {
 					draw_text_line(
@@ -1194,11 +1212,7 @@ render :: proc(
 			set_active_batch(r, font_obj.view, cur)
 			for line, i in c.lines {
 				pen_x := c.rect.x - c.scroll_offset.x
-				pen_y :=
-					c.rect.y -
-					c.scroll_offset.y +
-					f32(i) * line_h +
-					c.font_size * 0.78
+				pen_y := c.rect.y - c.scroll_offset.y + f32(i) * line_h
 				draw_text_line(
 					r,
 					font_obj,
@@ -1243,9 +1257,9 @@ render :: proc(
 							r,
 							{
 								x = cur_x,
-								y = cur_y + 1,
+								y = cur_y,
 								width = 1.5,
-								height = max(0, c.font_size + 2),
+								height = c.font_size,
 							},
 							c.cursor_color,
 							{0, 0, 0, 0},
@@ -1262,9 +1276,9 @@ render :: proc(
 						r,
 						{
 							x = c.rect.x - c.scroll_offset.x,
-							y = c.rect.y - c.scroll_offset.y + 1,
-							width = 1.5,
-							height = max(0, c.font_size + 2),
+							y = c.rect.y - c.scroll_offset.y,
+							width = 2,
+							height = c.font_size,
 						},
 						c.cursor_color,
 						{0, 0, 0, 0},
@@ -1273,6 +1287,8 @@ render :: proc(
 			}
 		}
 	}
+
+	ui.input_end_frame(&ctx.input)
 
 	if len(r.indices) == 0 do return
 

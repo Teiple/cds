@@ -2,7 +2,6 @@ package ui
 
 import "base:intrinsics"
 import "base:runtime"
-import "core:fmt"
 import "core:hash"
 import "core:math"
 import "core:unicode/utf8"
@@ -124,24 +123,24 @@ Input :: struct {
 }
 
 Input_Event :: struct {
-	pointer_captured:  bool,
-	scroll_captured:   bool,
-	scroll_depth:      int,
-	pressed_float_id:  Id,
-	hovered_float_id:  Id,
-	keyboard_captured: bool,
-	pressed_once:      bool,
-	hovered_elements:  [dynamic]Id,
-	pressed_elements:  [dynamic]Id,
-	held_elements:     [dynamic]Id,
-	unheld_elements:   [dynamic]Id,
-	released_elements: [dynamic]Id,
-	clicked_elements:  [dynamic]Id,
-	scrolls:           map[Id]Scroll_Data,
-	focusables:        [dynamic]Id,
-	focused_id:        Id,
-	focus_scopes:      [dynamic]i32,
-	active_focus_trap: Maybe([2]i32),
+	pointer_captured  : bool,
+	scroll_captured   : bool,
+	scroll_depth      : int,
+	pressed_float_id  : Id,
+	hovered_float_id  : Id,
+	keyboard_captured : bool,
+	pressed_once      : bool,
+	hovered_elements  : [dynamic]Id,
+	pressed_elements  : [dynamic]Id,
+	held_elements     : [dynamic]Id,
+	unheld_elements   : [dynamic]Id,
+	released_elements : [dynamic]Id,
+	clicked_elements  : [dynamic]Id,
+	scrolls           : map[Id]Scroll_Data,
+	focusables        : [dynamic]Id,
+	focused_id        : Id,
+	focus_scopes      : [dynamic]i32,
+	active_focus_trap :  Maybe([2]i32),
 }
 
 Scroll_Data :: struct #all_or_none {

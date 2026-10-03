@@ -49,9 +49,9 @@ update_input_event :: proc(ev: sapp.Event) {
 			sapp.quit()
 		}
 	}
-	         ui_update_input_event(ev)
-	free_camera_update_input_event(ev)
-	    console_update_input_event(ev)
+	// free_camera_update_input_event(ev)
+	console_update_input_event(ev)
+	ui_update_input_event(ev)
 }
 
 compute_mvp :: proc(

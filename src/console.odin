@@ -6,12 +6,14 @@ import ui "ui"
 import uie "ui_extra"
 
 Console_Command :: struct {
-	description: string,
-	proc_call:   proc(args: []string),
+	description : string,
+	proc_call   :   proc(args: []string),
 }
 
 Console :: struct {
 	open                : bool,
+	open_next_frame     : bool,
+   edit_mode           : bool,
 	input_buffer        : [dynamic]u8,
 	history             : [dynamic]string,
 	commands            : map[string]Console_Command,
@@ -27,17 +29,29 @@ console_init :: proc() {
 
 console_update_input_event :: proc(ev : sapp.Event) {
    console := &g_state.console
-
+   
    if ev.type == .KEY_DOWN && ev.key_code == .GRAVE_ACCENT {
-      console.open = !console.open 
-   }  
+      if !console.open {
+         console.open_next_frame = true
+      } else {
+         console.open = false
+      }
+      
+      console.edit_mode = console.open
+   }
 }
-
 
 console_update_ui :: proc() {   
    console := &g_state.console
    
-   if !console.open do return
+   if !console.open {
+      if console.open_next_frame {
+         console.open            = true
+         console.edit_mode       = true
+         console.open_next_frame = false
+      }
+      return
+   }
    
    // command panel
    if ui.layout(
@@ -49,14 +63,29 @@ console_update_ui :: proc() {
             parent  = .LeftTop,
          },
       },
+      padding          = ui.pad_all(4), 
+      background_color = uie.hsva_to_rgba({140, 0.5, 0.5, 0.5}),
+      layout_direction = .Top_To_Bottom,
    ) {
-      // command text box
-      if _, commited := uie.text_box(
+      // command history
+      if ui.layout(
+         width            = ui.grow(),
+         height           = ui.grow(),
+         background_color = uie.hsva_to_rgba({0, 0, 0, 0.25}),
+         corner_radius    = ui.corner_radius_all(2), 
+      ) {
+      }
+      // command text box 
+      // as long as console is open the cmd box is always in edit mode
+      edit_mode := true
+      changed, commited := uie.text_box(
          &console.input_buffer,
-         &console.open,
+         &edit_mode,
          width       = ui.grow(),
-         font_index  = 1,
-      ); commited {
+         font_index  = FONT_INDEX_MONO,
+      )
+
+      if commited {
          console_match_and_run_cmd(string(console.input_buffer[:]))
          clear(&console.input_buffer)
       }
@@ -73,7 +102,7 @@ console_update_ui :: proc() {
          },
       },
       padding          = ui.pad_all(8),
-      background_color = uie.hsva_to_rgba({0, 0, 0.5, 0.5})
+      background_color = uie.hsva_to_rgba({140, 0, 0.5, 1.0})
    ) {
       ui.text(
          fmt.tprintf("FPS:% 4.f", g_state.frame_time.average_fps),

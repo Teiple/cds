@@ -1,24 +1,17 @@
 package game
 
-import "core:math"
-import "core:math/linalg"
 import sapp "sokol/app"
 import sg "sokol/gfx"
 import sglue "sokol/glue"
 import slog "sokol/log"
-import gltf "glTF2"
 
 import "base:runtime"
 import "core:os"
 
-import "ui"
 import aud "audio"
-import uie "ui_extra"
-import uis "ui_sokol"
-import "core:fmt"
 
-SCREEN_BASE_WIDTH  :: 960 
-SCREEN_BASE_HEIGHT :: 540 
+SCREEN_BASE_WIDTH  :: 800 
+SCREEN_BASE_HEIGHT :: 480 
 
 main :: proc() {	
 	debug_track_allocator_init()

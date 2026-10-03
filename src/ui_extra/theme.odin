@@ -171,17 +171,17 @@ LABEL_STYLE: Control_Style : {
 
 PANEL_STYLE: Control_Style : {
 	border = {
-		.Normal = {215, 222, 218, 255},
-		.Hovered = {215, 222, 218, 255},
-		.Pressed = {215, 222, 218, 255},
-		.Active = {215, 222, 218, 255},
+		.Normal   = {215, 222, 218, 255},
+		.Hovered  = {215, 222, 218, 255},
+		.Pressed  = {215, 222, 218, 255},
+		.Active   = {215, 222, 218, 255},
 		.Disabled = {225, 230, 227, 255},
 	},
 	background = {
-		.Normal = {246, 248, 246, 255},
-		.Hovered = {246, 248, 246, 255},
-		.Pressed = {246, 248, 246, 255},
-		.Active = {246, 248, 246, 255},
+		.Normal   = {246, 248, 246, 255},
+		.Hovered  = {246, 248, 246, 255},
+		.Pressed  = {246, 248, 246, 255},
+		.Active   = {246, 248, 246, 255},
 		.Disabled = {242, 244, 242, 255},
 	},
 	text = {.Normal ..= .Disabled = LABEL_STYLE.text[.Normal]},

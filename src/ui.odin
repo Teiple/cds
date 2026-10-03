@@ -5,10 +5,8 @@ import uie "ui_extra"
 import uis "ui_sokol"
 import sapp "sokol/app"
 
-Font :: enum {
-   Default = 0,
-   Mono    = 1,
-}
+FONT_INDEX_DEFAULT :: 0 
+FONT_INDEX_MONO    :: 1 
 
 Game_UI :: struct {
    ctx      : ui.Context,
@@ -23,11 +21,11 @@ ui_init :: proc() {
    fonts := uis.make_fonts(
       &g_state.ui.renderer,
       {
-         Font.Default = {
+         FONT_INDEX_DEFAULT = {
             ttf       = #load("../assets/fonts/NotoSans_SemiCondensed-SemiBold.ttf"),
             base_size = 16,
          },
-         Font.Mono    = {
+         FONT_INDEX_MONO    = {
             ttf       = #load("../assets/fonts/NotoSans_Mono.ttf"),
             base_size = 16,
          }
@@ -85,3 +83,6 @@ ui_destroy :: proc() {
    ui .destroy(game_ui.ctx)
 }
 
+ui_clear_input :: proc() {
+   clear(&g_state.ui.ctx.input.keyboard.characters)
+}
