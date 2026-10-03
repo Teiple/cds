@@ -26,11 +26,11 @@ Viewport :: struct {
 }
 
 viewport_init :: proc(
-	vp: ^Viewport,
 	base_size: [2]f32,
 	bg_color: [4]u8 = {245, 245, 245, 255},
 	bars_color: [4]u8 = {0, 0, 0, 255},
 ) {
+	vp := &g_state.viewport
 	vp.base_size = base_size
 	vp.vmouse_position = base_size * 0.5
 	vp.bg_color = bg_color
@@ -89,7 +89,8 @@ viewport_init :: proc(
 	vp.bg_bindings.views[shaders.VIEW_tex] = vp.white_view
 }
 
-viewport_destroy :: proc(vp: ^Viewport) {
+viewport_destroy :: proc() {
+	vp := &g_state.viewport
 	sg.destroy_view(vp.white_view)
 	sg.destroy_image(vp.white_image)
 	sg.destroy_sampler(vp.bg_bindings.samplers[shaders.SMP_smp])
@@ -98,11 +99,12 @@ viewport_destroy :: proc(vp: ^Viewport) {
 	sg.destroy_pipeline(vp.bg_pipeline)
 }
 
-viewport_update :: proc(vp: ^Viewport, window_size: [2]f32) {
+viewport_update :: proc(window_size: [2]f32) {
 	if window_size.x <= 0 || window_size.y <= 0 {
 		return
 	}
 
+	vp := &g_state.viewport
 	vp.scale = min(
 		window_size.x / vp.base_size.x,
 		window_size.y / vp.base_size.y,
@@ -118,7 +120,8 @@ viewport_update :: proc(vp: ^Viewport, window_size: [2]f32) {
 	}
 }
 
-viewport_begin :: proc(vp: Viewport) {
+viewport_begin :: proc() {
+	vp := &g_state.viewport
 	sg.begin_pass({
 		action = {
 			colors = {
@@ -136,7 +139,7 @@ viewport_begin :: proc(vp: Viewport) {
 		swapchain = sglue.swapchain(),
 	})
 
-	viewport_apply(vp)
+	viewport_apply()
 
 	bg_vs_params: shaders.Vs_Params = {
 		mvp = linalg.MATRIX4F32_IDENTITY,
@@ -150,12 +153,13 @@ viewport_begin :: proc(vp: Viewport) {
 	sg.draw(0, 6, 1)
 }
 
-viewport_end :: proc(vp: Viewport) {
+viewport_end :: proc() {
 	sg.end_pass()
 	sg.commit()
 }
 
-viewport_apply :: proc(vp: Viewport) {
+viewport_apply :: proc() {
+	vp := &g_state.viewport
 	sg.apply_viewportf(
 		vp.dest_rect.x,
 		vp.dest_rect.y,
@@ -174,7 +178,8 @@ viewport_apply :: proc(vp: Viewport) {
 
 viewport_apply_hardware :: viewport_apply
 
-viewport_handle_mouse_delta :: proc(vp: ^Viewport, delta: [2]f32) {
+viewport_handle_mouse_delta :: proc(delta: [2]f32) {
+	vp := &g_state.viewport
 	if vp.scale <= 0 {
 		return
 	}
@@ -185,9 +190,9 @@ viewport_handle_mouse_delta :: proc(vp: ^Viewport, delta: [2]f32) {
 }
 
 viewport_screen_to_virtual :: proc(
-	vp: Viewport,
 	screen_pos: [2]f32,
 ) -> [2]f32 {
+	vp := &g_state.viewport
 	if vp.scale <= 0 {
 		return {}
 	}
@@ -197,10 +202,10 @@ viewport_screen_to_virtual :: proc(
 	return vpos
 }
 
-viewport_get_mouse_position :: proc(vp: Viewport) -> [2]f32 {
-	return vp.vmouse_position
+viewport_get_mouse_position :: proc() -> [2]f32 {
+	return g_state.viewport.vmouse_position
 }
 
-viewport_get_aspect :: proc(vp: Viewport) -> f32 {
-	return vp.base_size.x / vp.base_size.y
+viewport_get_aspect :: proc() -> f32 {
+	return g_state.viewport.base_size.x / g_state.viewport.base_size.y
 }

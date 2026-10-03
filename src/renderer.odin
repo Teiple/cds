@@ -140,7 +140,6 @@ draw_mesh_by_buffers :: proc(
 	vs_params: shaders.Vs_Params = {
 		mvp = camera_view_projection_matrix(
 			g_state.camera,
-			g_state.viewport,
 		) * model_matrix,
 	}
 	sg.apply_uniforms(

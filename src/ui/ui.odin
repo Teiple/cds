@@ -464,7 +464,7 @@ Float_Attach_Points :: struct {
 Float_Config :: struct {
 	attach_points: Float_Attach_Points,
 	offset:        [2]f32,
-	z_index:       i32,
+	z_index:       Maybe(i32),
 }
 
 Anchor_Point :: enum {
@@ -1366,14 +1366,15 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 	}
 }
 
-make_context :: proc(
+init :: proc(
+	ctx : ^Context,
 	pointer: Pointer_Config = {texture_id = 0, size = 16, offset = {0, 0}},
 	fonts: []Font = {},
 	entry_dir: string = "",
 	get_clipboard: Clipboard_Get_Proc = nil,
 	set_clipboard: Clipboard_Set_Proc = nil,
 	clipboard_user_data: rawptr = nil,
-) -> Context {
+) {
 	for event in g_ui_builder.context_events.on_make {
 		event()
 	}
@@ -1383,7 +1384,7 @@ make_context :: proc(
 	fonts_copy := make([]Font, len(fonts))
 	copy(fonts_copy, fonts)
 
-	return Context {
+	ctx^ = {
 		elements = make([dynamic]Element, 0, 5),
 		open_layout_stack = make([dynamic]Index, 0, 5),
 		render_commands = make([dynamic]Render_Command, 0, 5),
@@ -1417,7 +1418,7 @@ make_context :: proc(
 	}
 }
 
-delete_context :: proc(ctx: Context) {
+destroy :: proc(ctx: Context) {
 	for event in g_ui_builder.context_events.on_delete {
 		event()
 	}
@@ -1445,7 +1446,9 @@ delete_context :: proc(ctx: Context) {
 	delete(ctx.bounds)
 }
 
-@(require_results, deferred_in_out = end)
+begin_no_defer := begin
+
+@(require_results, deferred_in = end)
 begin :: proc(ctx: ^Context, canvas_size: [2]f32) -> bool {
 	g_ui_builder.current_context = ctx
 	for p in g_ui_builder.context_events.on_begin do p()
@@ -1471,9 +1474,7 @@ begin :: proc(ctx: ^Context, canvas_size: [2]f32) -> bool {
 	return true
 }
 
-end :: proc(ctx: ^Context, _: [2]f32, ok: bool) {
-	if !ok do return
-
+end :: proc(ctx: ^Context, _: [2]f32) {
 	// close root
 	close_layout(ctx)
 
@@ -2373,11 +2374,11 @@ get_float_z_index :: proc(float: Float_Mode) -> i32 {
 	case Float_None:
 		panic("Element doesn't float")
 	case Float_At_Parent:
-		return float_type.z_index
+		return float_type.z_index.? or_else 0
 	case Float_At_Id:
-		return float_type.z_index
+		return float_type.z_index.? or_else 0
 	case Float_At_Root:
-		return float_type.z_index
+		return float_type.z_index.? or_else 0
 	}
 	return 0
 }

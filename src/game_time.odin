@@ -12,7 +12,9 @@ Game_Frame_Time :: struct {
 	average_fps:          f32,
 }
 
-game_time_update :: proc(frame_time: ^Game_Frame_Time, dt: f32) {
+game_time_update :: proc(dt: f32) {
+	frame_time := &g_state.frame_time
+	
 	frame_time.time += dt
 
 	// Fps counter

@@ -35,19 +35,12 @@ Game_State :: struct {
 	free_cam         : Free_Camera,
 	viewport         : Viewport,
 	audio            : aud.Context(Sound_Id, Music_Id),
-	ui               : struct {
-		ctx           : ui.Context,
-		renderer      : uis.Renderer,
-	},
+	ui               : Game_UI,
 	console          : Console,
 }
 
 g_state: Game_State
 
-screen_to_ui :: proc(pos: [2]f32, user_data: rawptr) -> [2]f32 {
-	vp := cast(^Viewport)user_data
-	return viewport_screen_to_virtual(vp^, pos)
-}
 
 update_input_event :: proc(ev: sapp.Event) {
 	#partial switch ev.type {
@@ -56,14 +49,9 @@ update_input_event :: proc(ev: sapp.Event) {
 			sapp.quit()
 		}
 	}
-	uis.handle_event(
-		&g_state.ui.ctx.input,
-		ev,
-		screen_to_ui,
-		&g_state.viewport,
-	)
-	free_camera_handle_event(&g_state.free_cam, &g_state.camera, ev)
-	console_update_event(&g_state.console, ev)
+	         ui_update_input_event(ev)
+	free_camera_update_input_event(ev)
+	    console_update_input_event(ev)
 }
 
 compute_mvp :: proc(
@@ -71,7 +59,7 @@ compute_mvp :: proc(
 ) -> matrix[4, 4]f32 {
 	proj := linalg.matrix4_perspective_f32(
 		fovy = math.to_radians_f32(fovy_degrees),
-		aspect = viewport_get_aspect(g_state.viewport),
+		aspect = viewport_get_aspect(),
 		near = 0.01,
 		far = 100,
 	)
@@ -85,4 +73,8 @@ compute_mvp :: proc(
 	view_proj := proj * view
 
 	return view_proj
+}
+
+game_quit :: proc() {
+	sapp.quit()
 }

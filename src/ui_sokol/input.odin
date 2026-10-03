@@ -7,16 +7,14 @@ import "core:strings"
 handle_event :: proc(
 	input: ^ui.Input,
 	ev: sapp.Event,
-	screen_to_ui: proc(pos: [2]f32, user_data: rawptr) -> [2]f32 = nil,
-	user_data: rawptr = nil,
+	screen_to_ui: proc(pos: [2]f32) -> [2]f32 = nil,
 ) {
 	map_pos :: proc(
 		pos: [2]f32,
-		screen_to_ui: proc(pos: [2]f32, user_data: rawptr) -> [2]f32,
-		user_data: rawptr,
+		screen_to_ui: proc(pos: [2]f32) -> [2]f32,
 	) -> [2]f32 {
 		if screen_to_ui != nil {
-			return screen_to_ui(pos, user_data)
+			return screen_to_ui(pos)
 		}
 		return pos
 	}
@@ -96,7 +94,7 @@ handle_event :: proc(
 		}
 	case .MOUSE_MOVE:
 		prev := input.pointer.position
-		pos := map_pos({ev.mouse_x, ev.mouse_y}, screen_to_ui, user_data)
+		pos := map_pos({ev.mouse_x, ev.mouse_y}, screen_to_ui)
 		input.pointer.kind = .Mouse
 		input.pointer.is_valid = true
 		input.pointer.position = pos
@@ -117,7 +115,7 @@ handle_event :: proc(
 	case .TOUCHES_BEGAN:
 		if ev.num_touches > 0 {
 			t := ev.touches[0]
-			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui, user_data)
+			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui)
 			input.pointer.kind = .Touch
 			input.pointer.is_valid = true
 			input.pointer.position = pos
@@ -128,7 +126,7 @@ handle_event :: proc(
 		if ev.num_touches > 0 {
 			t := ev.touches[0]
 			prev := input.pointer.position
-			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui, user_data)
+			pos := map_pos({t.pos_x, t.pos_y}, screen_to_ui)
 			input.pointer.kind = .Touch
 			input.pointer.is_valid = true
 			input.pointer.position = pos
