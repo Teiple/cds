@@ -1,5 +1,6 @@
 package game
 
+import "core:fmt"
 import "base:runtime"
 import "core:math"
 import linalg "core:math/linalg"
@@ -37,21 +38,31 @@ Game_State :: struct {
 	audio            : aud.Context(Sound_Id, Music_Id),
 	ui               : Game_UI,
 	console          : Console,
+	debug_drawer     : Debug_Drawer,
+	mouse            : Mouse_Input,
 }
 
 g_state: Game_State
 
 
 update_input_event :: proc(ev: sapp.Event) {
-	#partial switch ev.type {
-	case .KEY_DOWN:
-		if ev.key_code == .ESCAPE {
-			sapp.quit()
-		}
-	}
-	free_camera_update_input_event(ev)
 	console_update_input_event(ev)
 	ui_update_input_event(ev)
+	
+	// 3D only receives input if UI didn't consume it
+	if ui_is_capturing_input() {
+		mouse_set_locked(false)
+
+		mouse_reset_input()
+		freecam_reset_input()
+		return
+	}
+
+	mouse_set_locked(true)
+	
+	mouse_update_input_event(ev)
+	freecam_update_input_event(ev)
+	
 }
 
 compute_mvp :: proc(

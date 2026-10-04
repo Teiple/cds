@@ -2045,18 +2045,19 @@ travel_tree_reverse :: proc(
 
 root_layout :: proc(screen_size: [2]f32) -> Element {
 	return Element {
-		id = 0,
-		position = {0, 0},
-		size = {screen_size.x, screen_size.y},
-		limits = {},
+		id         = 0,
+		position   = {0, 0},
+		size       = {screen_size.x, screen_size.y},
+		limits     = {},
 		attributes = Layout_Attributes {
-			config = Layout_Config {
-				child_gap = 2,
-				width = Fixed_Size{screen_size.x},
-				height = Fixed_Size{screen_size.y},
+			config  = Layout_Config {
+				child_gap        = 2,
+				width            = Fixed_Size{screen_size.x},
+				height           = Fixed_Size{screen_size.y},
 				layout_direction = .Top_To_Bottom,
-				padding = pad_all(2),
+				padding          = pad_all(2),
 				background_color = {},
+				pointer_mode     = .Passthrough,
 			},
 		},
 	}
@@ -2902,6 +2903,11 @@ capture_keyboard :: proc() {
 is_keyboard_captured :: proc() -> bool {
 	assert(g_ui_builder.current_context != nil)
 	return g_ui_builder.current_context.input_event.keyboard_captured
+}
+
+is_pointer_captured :: proc() -> bool {
+	assert(g_ui_builder.current_context != nil)
+	return g_ui_builder.current_context.input_event.pointer_captured
 }
 
 current_scroll_data :: proc() -> Scroll_Data {

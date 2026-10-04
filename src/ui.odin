@@ -53,6 +53,10 @@ ui_update_input_event :: proc(ev : sapp.Event) {
 	)
 }
 
+ui_is_capturing_input :: proc() -> bool {
+   return ui.is_keyboard_captured() || ui.is_pointer_captured()
+}
+
 @(require_results, deferred_none = ui_end_draw)
 ui_draw :: proc() -> bool {
    game_ui  := &g_state.ui

@@ -1,6 +1,5 @@
 package game
 
-import "core:fmt"
 import "core:math"
 import "core:math/linalg"
 import sapp "sokol/app"
@@ -41,7 +40,7 @@ Free_Camera :: struct {
 	move_dir:     [3]f32,
 }
 
-free_camera_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
+freecam_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
 	g_state.freecam = {
 		speed = speed,
 		sensitivity = sensitivity,
@@ -50,7 +49,7 @@ free_camera_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
 	}
 }
 
-free_camera_update_input_event :: proc(ev: sapp.Event) {
+freecam_update_input_event :: proc(ev: sapp.Event) {
 	freecam := &g_state.freecam
 	camera  := &g_state.camera
 
@@ -83,7 +82,12 @@ free_camera_update_input_event :: proc(ev: sapp.Event) {
 	}
 }
 
-free_camera_update :: proc(dt: f32) {
+freecam_reset_input :: proc() {
+	freecam := &g_state.freecam
+	freecam.move_dir = {0, 0, 0}
+}
+
+freecam_update :: proc(dt: f32) {
 	freecam := g_state.freecam
 	camera   := &g_state.camera
 	
