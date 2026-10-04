@@ -52,7 +52,7 @@ CONSOLE_COMMANDS :: [?]Console_Command {
       proc_call   = proc(args : []string) {
          if len(args) < 1 do return
 
-         g_state.freecam.enabled = args[0] != "0" 
+         freecam_set_enabled(args[0] != "0")
       }
    },
    {
@@ -176,7 +176,6 @@ console_update_ui :: proc() {
                clear(&console.input_buffer)
                
                append(&console.input_buffer, ..transmute([]u8)selected_cmd.name)
-               append(&console.input_buffer, ' ')
                
                uie.text_box_set_text(string(console.input_buffer[:]))
                

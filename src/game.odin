@@ -1,6 +1,5 @@
 package game
 
-import "core:fmt"
 import "core:os"
 import "base:runtime"
 import "core:math"
@@ -22,12 +21,16 @@ Game_State :: struct {
 	frame_time       : Frame_Time,
 	camera           : Camera,
 	freecam          : Free_Camera,
+	follow_cam       : Follow_Camera,
 	viewport         : Viewport,
 	audio            : Audio,
 	ui               : Game_UI,
 	console          : Console,
 	debug_drawer     : Debug_Drawer,
 	mouse            : Mouse_Input,
+	physics          : Physics,
+	player           : Player,
+	environment      : Environment,
 }
 
 g_state: Game_State
@@ -43,25 +46,34 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 
 	viewport_init(base_size = {SCREEN_BASE_WIDTH, SCREEN_BASE_HEIGHT})
 	freecam_init()
+	follow_camera_init(offset = {0, 0.2, 3.5})
 
 	ui_init()
 	audio_init()
+	physics_init()
 
 	g_state.camera = {
 		fovy_degrees = 60,
-		position     = {0, 0.5, 2.0},
-		target       = {0, 0, 0},
+		position     = {0, 1.0, 3.5},
+		target       = {0, 1.0, 0},
 		up           = {0, 1, 0},
 	}
 
 	renderer_init(&g_state.renderer)
 	debug_drawer_init(&g_state.debug_drawer)
 
-	append(&g_state.models, model_load_from_memory(#load("../assets/models/pistol.glb")))
+	g_state.environment = environment_init()
+	g_state.player = player_init({0, 1.5, 0})
+
+	mouse_set_locked(true)
 }
 
 game_destroy :: proc() {
 	viewport_destroy()
+
+	player_destroy(&g_state.player)
+	environment_destroy(&g_state.environment)
+	physics_destroy()
 
 	for &mesh in g_state.primitive_meshes {
 		mesh_destroy(&mesh)
@@ -98,28 +110,23 @@ game_frame :: proc() {
 
 game_update :: proc(dt: f32) {
 	frame_time_update(dt)
-	freecam_update(dt)
+	physics_update(dt)
 
-	if is_mouse_pressed(.Left) {
-		fmt.println("Mouse Left Pressed at virtual pos:", mouse_position(), "screen pos:", g_state.mouse.screen_pos)
-	}
-	if is_mouse_pressed(.Right) {
-		fmt.println("Mouse Right Pressed at virtual pos:", mouse_position())
+	if g_state.freecam.enabled {
+		freecam_update(dt)
+	} else {
+		player_update(&g_state.player, dt)
+		follow_camera_update(player_get_position(g_state.player), dt)
 	}
 
 	viewport_update({sapp.widthf(), sapp.heightf()})
 }
 
 game_draw :: proc() {
-	for model in g_state.models {
-		model_draw(model)
-	}
+	player_draw(g_state.player)
 
-	debug_draw_grid(slices = 10, spacing = 0.5, color = {80, 80, 80, 255})
-	debug_draw_box(center = {-0.6, 0.2, 0}, size = {0.3, 0.3, 0.3}, color = {255, 100, 100, 255})
-	debug_draw_sphere(center = {0.6, 0.2, 0}, radius = 0.2, color = {100, 255, 100, 255})
-	debug_draw_ray(origin = {0, 0, 0}, dir = {0, 1, 0}, length = 0.5, color = {100, 100, 255, 255})
-
+	debug_draw_grid(slices = 20, spacing = 1.0, color = {50, 50, 50, 255})
+	physics_debug_render()
 	debug_render(&g_state.debug_drawer)
 
 	if ui_draw() {
@@ -133,38 +140,15 @@ game_update_input_event :: proc(ev: sapp.Event) {
 	
 	// 3D only receives input if UI didn't consume it
 	if ui_is_capturing_input() {
-		mouse_set_locked(false)
-
 		mouse_reset_input()
 		freecam_reset_input()
 		return
 	}
 
-	mouse_set_locked(true)
-	
 	mouse_update_input_event(ev)
-	freecam_update_input_event(ev)
-}
-
-compute_mvp :: proc(
-	fovy_degrees: f32,
-) -> matrix[4, 4]f32 {
-	proj := linalg.matrix4_perspective_f32(
-		fovy = math.to_radians_f32(fovy_degrees),
-		aspect = viewport_get_aspect(),
-		near = 0.01,
-		far = 100,
-	)
-
-	view := linalg.matrix4_look_at_f32(
-		eye = {0.0, 1.5, 6.0},
-		centre = {0, 0, 0},
-		up = {0.0, 1.0, 0.0},
-	)
-
-	view_proj := proj * view
-
-	return view_proj
+	if g_state.freecam.enabled {
+		freecam_update_input_event(ev)
+	}
 }
 
 game_quit :: proc() {

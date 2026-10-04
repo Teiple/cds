@@ -209,3 +209,25 @@ viewport_get_mouse_position :: proc() -> [2]f32 {
 viewport_get_aspect :: proc() -> f32 {
 	return g_state.viewport.base_size.x / g_state.viewport.base_size.y
 }
+
+viewport_get_mouse_world_position_on_zplane :: proc(z_plane: f32 = 0) -> [3]f32 {
+	vmouse := viewport_get_mouse_position()
+	ndc_x := (vmouse.x / g_state.viewport.base_size.x) * 2.0 - 1.0
+	ndc_y := 1.0 - (vmouse.y / g_state.viewport.base_size.y) * 2.0
+
+	inv_vp := linalg.matrix4_inverse(camera_view_projection_matrix())
+
+	near_clip := inv_vp * [4]f32{ndc_x, ndc_y, -1.0, 1.0}
+	far_clip  := inv_vp * [4]f32{ndc_x, ndc_y, 1.0, 1.0}
+
+	p_near := near_clip.xyz / near_clip.w
+	p_far  := far_clip.xyz / far_clip.w
+
+	ray_dir := linalg.normalize(p_far - p_near)
+	if abs(ray_dir.z) < 0.0001 {
+		return p_near
+	}
+
+	t := (z_plane - p_near.z) / ray_dir.z
+	return p_near + ray_dir * t
+}

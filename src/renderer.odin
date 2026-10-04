@@ -7,6 +7,7 @@ import sg "sokol/gfx"
 Pipeline_Type :: enum {
 	Unlit_Triangles,
 	Unlit_Lines,
+	Skinned_Triangles,
 }
 
 Renderer :: struct {
@@ -55,6 +56,37 @@ renderer_init :: proc(r: ^Renderer) {
 				}
 				pip_desc.cull_mode = .BACK
 			}
+		case .Skinned_Triangles:
+			{
+				pip_desc.shader = sg.make_shader(shaders.skinned_shader_desc(sg.query_backend()))
+				pip_desc.primitive_type = .TRIANGLES
+				pip_desc.depth = {
+					compare       = .LESS_EQUAL,
+					write_enabled = true,
+				}
+				pip_desc.cull_mode = .BACK
+				pip_desc.layout = {
+					attrs = {
+						shaders.ATTR_skinned_pos = {buffer_index = 0, format = .FLOAT3},
+						shaders.ATTR_skinned_color0 = {
+							buffer_index = 0,
+							format = .UBYTE4N,
+						},
+						shaders.ATTR_skinned_texcoord0 = {
+							buffer_index = 0,
+							format = .SHORT2N,
+						},
+						shaders.ATTR_skinned_joints = {
+							buffer_index = 0,
+							format = .FLOAT4,
+						},
+						shaders.ATTR_skinned_weights = {
+							buffer_index = 0,
+							format = .FLOAT4,
+						},
+					},
+				}
+			}
 		}
 
 		r.pipelines[pip_type] = sg.make_pipeline(pip_desc)
@@ -66,6 +98,7 @@ renderer_init :: proc(r: ^Renderer) {
 	white_pixel: [4]u8 = {255, 255, 255, 255}
 
 	r.bindings.samplers[shaders.SMP_smp] = sg.make_sampler({})
+	r.bindings.samplers[shaders.SMP_skinned_smp] = r.bindings.samplers[shaders.SMP_smp]
 	r.bindings.views[shaders.VIEW_tex] = sg.make_view({
 		texture = {
 			image = sg.make_image({
@@ -83,6 +116,7 @@ renderer_init :: proc(r: ^Renderer) {
 			}),
 		},
 	})
+	r.bindings.views[shaders.VIEW_skinned_tex] = r.bindings.views[shaders.VIEW_tex]
 }
 
 
@@ -90,6 +124,44 @@ Vertex :: struct {
 	position: [3]f32,
 	color:    [4]u8,
 	uv:       [2]u16,
+}
+
+Skinned_Vertex :: struct {
+	position: [3]f32,
+	color:    [4]u8,
+	uv:       [2]u16,
+	joints:   [4]f32,
+	weights:  [4]f32,
+}
+
+Skinned_Mesh :: struct {
+	vertex_buffer: sg.Buffer,
+	index_buffer:  sg.Buffer,
+	index_count:   i32,
+}
+
+skinned_mesh_make_from_data :: proc(vertices: []Skinned_Vertex, indices: []u16) -> Skinned_Mesh {
+	mesh: Skinned_Mesh
+
+	mesh.vertex_buffer = sg.make_buffer({
+		data = {
+			ptr = raw_data(vertices),
+			size = len(vertices) * size_of(Skinned_Vertex),
+		},
+	})
+
+	mesh.index_buffer = sg.make_buffer({
+		usage = {index_buffer = true},
+		data = {ptr = raw_data(indices), size = len(indices) * size_of(u16)},
+	})
+	mesh.index_count = i32(len(indices))
+
+	return mesh
+}
+
+skinned_mesh_destroy :: proc(m: ^Skinned_Mesh) {
+	sg.destroy_buffer(m.vertex_buffer)
+	sg.destroy_buffer(m.index_buffer)
 }
 
 draw_debug_wire_mesh :: proc(
@@ -138,6 +210,34 @@ draw_mesh_wireframe_matrix :: proc(
 		.Unlit_Lines,
 		model_matrix,
 	)
+}
+
+draw_skinned_mesh_matrix :: proc(
+	mesh: Skinned_Mesh,
+	model_matrix: matrix[4, 4]f32,
+	bones: []matrix[4, 4]f32,
+) {
+	sg.apply_pipeline(g_state.renderer.pipelines[.Skinned_Triangles])
+
+	vs_params: shaders.Vs_Skinned_Params
+	vs_params.mvp = camera_view_projection_matrix() * model_matrix
+
+	bone_count := min(len(bones), 64)
+	for i in 0 ..< bone_count {
+		vs_params.bones[i] = bones[i]
+	}
+
+	sg.apply_uniforms(
+		shaders.UB_vs_skinned_params,
+		{ptr = &vs_params, size = size_of(vs_params)},
+	)
+
+	g_state.renderer.bindings.vertex_buffers[0] = mesh.vertex_buffer
+	g_state.renderer.bindings.index_buffer = mesh.index_buffer
+
+	sg.apply_bindings(g_state.renderer.bindings)
+
+	sg.draw(0, mesh.index_count, 1)
 }
 
 @(private = "file")

@@ -49,6 +49,21 @@ freecam_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
 	}
 }
 
+freecam_set_enabled :: proc(enabled: bool) {
+	freecam := &g_state.freecam
+	camera  := &g_state.camera
+
+	freecam.enabled = enabled
+	g_state.follow_cam.enabled = !enabled
+
+	if enabled {
+		dir := linalg.normalize(camera.target - camera.position)
+		freecam.pitch = math.asin(clamp(dir.y, -1.0, 1.0))
+		freecam.yaw   = math.atan2(dir.x, -dir.z)
+		freecam.move_dir = {0, 0, 0}
+	}
+}
+
 freecam_update_input_event :: proc(ev: sapp.Event) {
 	freecam := &g_state.freecam
 	camera  := &g_state.camera
@@ -111,4 +126,31 @@ freecam_update :: proc(dt: f32) {
 	}
 	camera.target = camera.position + forward
 	camera.up     = up
+}
+
+// follow cam
+Follow_Camera :: struct {
+	enabled:    bool,
+	target:     [3]f32,
+	offset:     [3]f32,
+	smoothness: f32,
+}
+
+follow_camera_init :: proc(offset: [3]f32 = {0, 0, 3.0}, smoothness: f32 = 12.0) {
+	g_state.follow_cam = {
+		enabled    = true,
+		offset     = offset,
+		smoothness = smoothness,
+	}
+}
+
+follow_camera_update :: proc(target_pos: [3]f32, dt: f32) {
+	if !g_state.follow_cam.enabled do return
+	cam := &g_state.camera
+	fc := &g_state.follow_cam
+
+	fc.target = linalg.lerp(fc.target, target_pos, clamp(fc.smoothness * dt, 0, 1))
+	cam.target = fc.target
+	cam.position = fc.target + fc.offset
+	cam.up = {0, 1, 0}
 }
