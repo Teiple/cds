@@ -10,7 +10,6 @@ import sg "sokol/gfx"
 import sglue "sokol/glue"
 import slog "sokol/log"
 import ui "ui"
-import uis "ui_sokol"
 
 g_odin_ctx := runtime.default_context()
 
@@ -58,7 +57,7 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 	renderer_init(&g_state.renderer)
 	debug_drawer_init(&g_state.debug_drawer)
 
-	append(&g_state.models, mesh_make_model(#load("../assets/models/pistol.glb")))
+	append(&g_state.models, model_load_from_memory(#load("../assets/models/pistol.glb")))
 }
 
 game_destroy :: proc() {
@@ -70,7 +69,7 @@ game_destroy :: proc() {
 	delete(g_state.primitive_meshes)
 
 	for &model in g_state.models {
-		mesh_destroy_model(&model)
+		model_destroy(&model)
 	}
 	delete(g_state.models)
 
@@ -113,7 +112,7 @@ game_update :: proc(dt: f32) {
 
 game_draw :: proc() {
 	for model in g_state.models {
-		draw_model(model)
+		model_draw(model)
 	}
 
 	debug_draw_grid(slices = 10, spacing = 0.5, color = {80, 80, 80, 255})

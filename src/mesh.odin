@@ -2,19 +2,8 @@ package game
 
 import "core:math"
 import sg "sokol/gfx"
-import gltf "glTF2"
 
 MESH_DEFAULT_VERTEX_COLOR :: [4]u8{0, 255, 0, 255} // green
-
-Model_Attribute :: enum {
-	Position,
-	UV,
-}
-
-MODEL_ATTRIBUTES :: [Model_Attribute]string {
-	.Position = "POSITION",
-	.UV       = "TEXCOORD_0", 
-}
 
 Mesh :: struct {
 	vertex_buffer           : sg.Buffer,
@@ -22,11 +11,6 @@ Mesh :: struct {
 	index_count             : i32,
 	debug_wire_index_buffer : sg.Buffer, // debug meshes will only loaded in ODIN_DEBUG
 	debug_wire_index_count  : i32,
-}
-
-Model :: struct {
-	meshes    : [dynamic]Mesh,
-	gltf_data : ^gltf.Data
 }
 
 mesh_make_from_data :: proc(vertices: []Vertex, indices: []u16) -> Mesh {
@@ -434,61 +418,4 @@ mesh_make_line_indices :: proc(tri_indices: []u16) -> []u16 {
 	}
 
 	return line_indices
-}
-
-mesh_make_from_gltf_primitive :: proc(
-	data      : ^gltf.Data,
-	primitive : gltf.Mesh_Primitive,
-	color     : [4]u8 = MESH_DEFAULT_VERTEX_COLOR,
-) -> Mesh {
-	// Expect triangles primitives
-
-	positions := gltf.buffer_slice(data, primitive.attributes[MODEL_ATTRIBUTES[.Position]]).([][3]f32)
-	uv := gltf.buffer_slice(data, primitive.attributes[MODEL_ATTRIBUTES[.UV]]).([][2]f32)
-	assert(len(positions) == len(uv))
-
-	vert_count := len(positions)	
-	vertices   := make([]Vertex, vert_count)
-	defer delete(vertices)
-
-	for i in 0 ..< vert_count {
-		vertices[i].position = positions[i]
-		vertices[i].color    = color
-		vertices[i].uv       = cast([2]u16)[2]f32{uv[i].x * 32767, uv[i].y * 32767} 
-	}
-
-	indices := gltf.buffer_slice(data, primitive.indices.?).([]u16)
-
-	return mesh_make_from_data(vertices, indices)
-}
-
-// .glb only
-mesh_make_model :: proc(file_data : []byte) -> Model {
-	model : Model = {
-		meshes    = make([dynamic]Mesh, 0, 1),
-	}
-	
-	gtlf_data, err := gltf.parse(file_data, { is_glb = true })
-	assert(err == nil)
-
-	model.gltf_data = gtlf_data
-
-	for &m in model.gltf_data.meshes {
-		for &primitive in m.primitives {
-			append(
-				&model.meshes,
-				mesh_make_from_gltf_primitive(model.gltf_data, primitive)
-			)
-		}
-	}
-
-	return model
-}
-
-mesh_destroy_model :: proc(model : ^Model) {
-	gltf.unload(model.gltf_data)
-	for &m in model.meshes {
-		mesh_destroy(&m)
-	}
-	delete(model.meshes)
 }

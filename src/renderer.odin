@@ -97,13 +97,9 @@ draw_debug_wire_mesh :: proc(
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
-	draw_mesh_by_buffers(
-		mesh.vertex_buffer,
-		mesh.debug_wire_index_buffer,
-		mesh.debug_wire_index_count,
-		.Unlit_Lines,
-		position,
-		rotation,
+	draw_mesh_wireframe_matrix(
+		mesh,
+		linalg.matrix4_translate_f32(position) * linalg.matrix4_from_quaternion(rotation),
 	)
 }
 
@@ -112,13 +108,35 @@ draw_mesh :: proc(
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
+	draw_mesh_matrix(
+		mesh,
+		linalg.matrix4_translate_f32(position) * linalg.matrix4_from_quaternion(rotation),
+	)
+}
+
+draw_mesh_matrix :: proc(
+	mesh: Mesh,
+	model_matrix: matrix[4, 4]f32,
+) {
 	draw_mesh_by_buffers(
 		mesh.vertex_buffer,
 		mesh.index_buffer,
 		mesh.index_count,
 		.Unlit_Triangles,
-		position,
-		rotation,
+		model_matrix,
+	)
+}
+
+draw_mesh_wireframe_matrix :: proc(
+	mesh: Mesh,
+	model_matrix: matrix[4, 4]f32,
+) {
+	draw_mesh_by_buffers(
+		mesh.vertex_buffer,
+		mesh.debug_wire_index_buffer,
+		mesh.debug_wire_index_count,
+		.Unlit_Lines,
+		model_matrix,
 	)
 }
 
@@ -128,14 +146,9 @@ draw_mesh_by_buffers :: proc(
 	ibuffer: sg.Buffer,
 	index_count: i32,
 	pip_type: Pipeline_Type,
-	position: [3]f32 = {0, 0, 0},
-	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
+	model_matrix: matrix[4, 4]f32,
 ) {
 	sg.apply_pipeline(g_state.renderer.pipelines[pip_type])
-
-	model_matrix :=
-		linalg.matrix4_translate_f32(position) *
-		linalg.matrix4_from_quaternion(rotation)
 
 	vs_params: shaders.Vs_Params = {
 		mvp = camera_view_projection_matrix() * model_matrix,
@@ -152,15 +165,4 @@ draw_mesh_by_buffers :: proc(
 	sg.apply_bindings(g_state.renderer.bindings)
 
 	sg.draw(0, index_count, 1)
-}
-
-draw_model :: proc(
-	model    : Model,
-	position : [3]f32 = {0, 0, 0},
-	rotation : quaternion128 = linalg.QUATERNIONF32_IDENTITY,
-) {
-	for mesh in model.meshes {
-		// per mesh transform is not yet supported
-		draw_mesh(mesh, position, rotation)
-	}
 }
