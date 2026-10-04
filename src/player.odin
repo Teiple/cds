@@ -1,7 +1,7 @@
 package game
 
 import "core:math"
-import lg "core:math/linalg"
+import "core:math/linalg"
 import b3 "vendor:box3d"
 
 Player :: struct {
@@ -13,26 +13,26 @@ Player :: struct {
 }
 
 euler_degrees_to_quat :: proc(angles: [3]f32) -> quaternion128 {
-	r := lg.matrix4_from_euler_angles_xyz_f32(
+	r := linalg.matrix4_from_euler_angles_xyz_f32(
 		math.to_radians_f32(angles.x),
 		math.to_radians_f32(angles.y),
 		math.to_radians_f32(angles.z),
 	)
-	return lg.quaternion_from_matrix4(r)
+	return linalg.quaternion_from_matrix4(r)
 }
 
-player_init :: proc(position: [3]f32 = {0, 0.5, 0}) -> Player {
-	player: Player
+player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
+	player := &g_state.player
 
 	player.model = model_load_from_memory(#load("../assets/models/pistol.glb"))
 	player.visual_offset = {0.030, -0.039, 0}
 	player.visual_rotation = euler_degrees_to_quat({0, 90, 0})
 	player.recoil_offset = {-0.023, 0.001, 0}
 
-	body_def := b3.DefaultBodyDef()
-	body_def.type = .dynamicBody
-	body_def.position = position
-	body_def.rotation = lg.QUATERNIONF32_IDENTITY
+	body_def                     := b3.DefaultBodyDef()
+	body_def.type                = .dynamicBody
+	body_def.position            = position
+	body_def.rotation            = linalg.QUATERNIONF32_IDENTITY
 	body_def.motionLocks.linearZ = true
 
 	player.body = b3.CreateBody(g_state.physics.world, body_def)
@@ -107,19 +107,19 @@ player_init :: proc(position: [3]f32 = {0, 0.5, 0}) -> Player {
 			{1, 1, 1},
 		)
 	}
-
-	return player
 }
 
-player_destroy :: proc(player: ^Player) {
-	model_destroy(&player.model)
+player_destroy :: proc() {
+	model_destroy(&g_state.player.model)
 }
 
-player_update :: proc(player: ^Player, dt: f32) {
+player_update :: proc(dt: f32) {
+	player := &g_state.player
+
 	model_update_animation(&player.model, dt)
 
 	target_pos := viewport_get_mouse_world_position_on_zplane(0)
-	player_update_aim(player, target_pos)
+	player_update_aim(target_pos)
 
 	if is_mouse_pressed(.Left) {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
@@ -139,11 +139,11 @@ player_update :: proc(player: ^Player, dt: f32) {
 }
 
 player_update_aim :: proc(
-	player: ^Player,
 	target_pos: [3]f32,
 	max_turn_speed: f32 = 25.0,
 	turn_mult: f32 = 1.0,
 ) {
+	player := &g_state.player
 	player_pos := b3.Body_GetPosition(player.body)
 	look_vec := target_pos - player_pos
 	look_vec.z = 0
@@ -151,22 +151,22 @@ player_update_aim :: proc(
 	len_sqr := look_vec.x * look_vec.x + look_vec.y * look_vec.y
 	if len_sqr < 0.0001 do return
 
-	look_dir := lg.normalize(look_vec)
+	look_dir := linalg.normalize(look_vec)
 
 	z_axis := [3]f32{0, 0, look_vec.x < 0 ? -1 : 1}
 	x_axis := look_dir
-	y_axis := lg.normalize(lg.cross(z_axis, x_axis))
+	y_axis := linalg.normalize(linalg.cross(z_axis, x_axis))
 
 	mat := matrix[3, 3]f32{
 		x_axis.x, y_axis.x, z_axis.x,
 		x_axis.y, y_axis.y, z_axis.y,
 		x_axis.z, y_axis.z, z_axis.z,
 	}
-	target_quat := lg.quaternion_from_matrix3(mat)
+	target_quat := linalg.quaternion_from_matrix3(mat)
 	current_quat := b3.Body_GetRotation(player.body)
 
-	diff_quat := target_quat * lg.quaternion_inverse(current_quat)
-	angle, axis := lg.angle_axis_from_quaternion(diff_quat)
+	diff_quat := target_quat * linalg.quaternion_inverse(current_quat)
+	angle, axis := linalg.angle_axis_from_quaternion(diff_quat)
 
 	if angle > math.PI do angle -= math.TAU
 
@@ -176,20 +176,21 @@ player_update_aim :: proc(
 	b3.Body_SetAngularVelocity(player.body, target_angular_vel)
 }
 
-player_draw :: proc(player: Player) {
+player_draw :: proc() {
+	player := &g_state.player
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
-	body_mat := lg.matrix4_translate_f32(pos) * lg.matrix4_from_quaternion(rot)
-	visual_mat := lg.matrix4_translate_f32(player.visual_offset) * lg.matrix4_from_quaternion(player.visual_rotation)
+	body_mat := linalg.matrix4_translate_f32(pos) * linalg.matrix4_from_quaternion(rot)
+	visual_mat := linalg.matrix4_translate_f32(player.visual_offset) * linalg.matrix4_from_quaternion(player.visual_rotation)
 	final_mat := body_mat * visual_mat
 
 	final_pos := [3]f32{final_mat[0, 3], final_mat[1, 3], final_mat[2, 3]}
-	final_rot := lg.quaternion_from_matrix4(final_mat)
+	final_rot := linalg.quaternion_from_matrix4(final_mat)
 
 	model_draw(player.model, final_pos, final_rot)
 }
 
-player_get_position :: proc(player: Player) -> [3]f32 {
-	return b3.Body_GetPosition(player.body)
+player_get_position :: proc() -> [3]f32 {
+	return b3.Body_GetPosition(g_state.player.body)
 }

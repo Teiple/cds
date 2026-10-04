@@ -13,7 +13,7 @@ main :: proc() {
 		window_title     = "Sokol Odin UI",
 		width            = SCREEN_BASE_WIDTH,
 		height           = SCREEN_BASE_HEIGHT,
-		// disable_vsync    = true,
+		disable_vsync    = true,
 		enable_clipboard = true,
 		clipboard_size   = 65536, // For ui
 		init_cb = proc "c" () {

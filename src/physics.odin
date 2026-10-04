@@ -37,14 +37,6 @@ physics_filter_make :: proc(
 	}
 }
 
-physics_destroy :: proc() {
-	b3.DestroyWorld(g_state.physics.world)
-}
-
-physics_update :: proc(dt: f32) {
-	b3.World_Step(g_state.physics.world, dt, 4)
-}
-
 //region: b3 debug draw
 Debug_Shape_Data :: struct {
 	type       : b3.ShapeType,
@@ -157,9 +149,13 @@ debug_draw_b3_point :: proc "c" (p: b3.Pos, size: f32, color: b3.HexColor, ctx: 
 }
 
 Physics :: struct {
-	world:      b3.WorldId,
-	debug_draw: b3.DebugDraw,
+	world:       b3.WorldId,
+	debug_draw:  b3.DebugDraw,
+	accumulator: f32,
 }
+
+PHYSICS_TICK_RATE :: 120.0
+PHYSICS_DT        :: 1.0 / PHYSICS_TICK_RATE
 
 physics_init :: proc() {
 	world_def := b3.DefaultWorldDef()
@@ -168,6 +164,7 @@ physics_init :: proc() {
 	world_def.destroyDebugShape = debug_draw_b3_destroy_shape
 
 	g_state.physics.world = b3.CreateWorld(world_def)
+	g_state.physics.accumulator = 0
 
 	g_state.physics.debug_draw = b3.DefaultDebugDraw()
 	g_state.physics.debug_draw.DrawShapeFcn = debug_draw_b3_shape
@@ -176,6 +173,21 @@ physics_init :: proc() {
 	g_state.physics.debug_draw.DrawSphereFcn = debug_draw_b3_sphere
 	g_state.physics.debug_draw.DrawPointFcn = debug_draw_b3_point
 	g_state.physics.debug_draw.drawShapes = true
+}
+
+physics_destroy :: proc() {
+	b3.DestroyWorld(g_state.physics.world)
+}
+
+physics_update :: proc(dt: f32) {
+	p := &g_state.physics
+	p.accumulator += dt
+	p.accumulator = min(p.accumulator, 0.2)
+
+	for p.accumulator >= PHYSICS_DT {
+		b3.World_Step(p.world, PHYSICS_DT, 4)
+		p.accumulator -= PHYSICS_DT
+	}
 }
 
 physics_debug_render :: proc() {

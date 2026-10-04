@@ -63,7 +63,7 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 	debug_drawer_init(&g_state.debug_drawer)
 
 	g_state.environment = environment_init()
-	g_state.player = player_init({0, 1.5, 0})
+	player_init({0, 1.5, 0})
 
 	mouse_set_locked(true)
 }
@@ -71,7 +71,7 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 game_destroy :: proc() {
 	viewport_destroy()
 
-	player_destroy(&g_state.player)
+	player_destroy()
 	environment_destroy(&g_state.environment)
 	physics_destroy()
 
@@ -115,15 +115,15 @@ game_update :: proc(dt: f32) {
 	if g_state.freecam.enabled {
 		freecam_update(dt)
 	} else {
-		player_update(&g_state.player, dt)
-		follow_camera_update(player_get_position(g_state.player), dt)
+		player_update(dt)
+		follow_camera_update(player_get_position(), dt)
 	}
 
 	viewport_update({sapp.widthf(), sapp.heightf()})
 }
 
 game_draw :: proc() {
-	player_draw(g_state.player)
+	player_draw()
 
 	debug_draw_grid(slices = 20, spacing = 1.0, color = {50, 50, 50, 255})
 	physics_debug_render()
