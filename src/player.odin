@@ -24,10 +24,10 @@ euler_degrees_to_quat :: proc(angles: [3]f32) -> quaternion128 {
 player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 	player := &g_state.player
 
-	player.model = model_load_from_memory(#load("../assets/models/pistol.glb"))
-	player.visual_offset = {0.030, -0.039, 0}
+	player.model           = model_load_from_memory(#load("../assets/models/pistol.glb"))
+	player.visual_offset   = {0.030, -0.039, 0}
 	player.visual_rotation = euler_degrees_to_quat({0, 90, 0})
-	player.recoil_offset = {-0.023, 0.001, 0}
+	player.recoil_offset   = {-0.023, 0.001, 0}
 
 	body_def                     := b3.DefaultBodyDef()
 	body_def.type                = .dynamicBody
@@ -43,12 +43,12 @@ player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 		rotation: quaternion128,
 	} {
 		{
-			size = {0.191, 0.060, 0.034},
+			size     = {0.191, 0.060, 0.034},
 			position = {0.033, 0.001, 0},
 			rotation = euler_degrees_to_quat({0, 0, 0}),
 		},
 		{
-			size = {0.065, 0.106, 0.032},
+			size     = {0.065, 0.106, 0.032},
 			position = {-0.024, -0.070, 0},
 			rotation = euler_degrees_to_quat({0, 0, -12.086}),
 		},
