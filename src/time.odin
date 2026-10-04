@@ -3,7 +3,7 @@ package game
 // in seconds
 FPS_COUNT_INTERVAL :: 1
 
-Game_Frame_Time :: struct {
+Frame_Time :: struct {
 	time:                 f32,
 	// Fps counter
 	interval_fps_sum:     f32,
@@ -12,7 +12,7 @@ Game_Frame_Time :: struct {
 	average_fps:          f32,
 }
 
-game_time_update :: proc(dt: f32) {
+frame_time_update :: proc(dt: f32) {
 	frame_time := &g_state.frame_time
 	
 	frame_time.time += dt

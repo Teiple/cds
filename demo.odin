@@ -1,9 +1,8 @@
 package main
 
 import "core:fmt"
-
-my_map : map[string]i32 
+import "core:strings"
 
 main :: proc() {
-	fmt.println(my_map["Hello World"])
+	// fmt.println(strings.fields("hello ", " "))
 }

@@ -359,20 +359,23 @@ Text_Box_State :: struct {
 }
 
 text_box :: proc(
-	buffer       : ^[dynamic]u8,
-	edit_mode    : ^bool,
-	max_len      : int = 256,
-	blink_rate   : int = 120,
-	password     : bool = false,
-	password_char: rune = '*',
-	width        : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
-	height       : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
-	disabled     : bool = false,
-	id           : Maybe(ui.Id) = nil,
-	reuse_id     : bool = false,
-	font_index   : Maybe(i32) = nil,
-	font_size    : Maybe(f32) = nil,
-	loc          : = #caller_location,
+	buffer         : ^[dynamic]u8,
+	edit_mode      : ^bool,
+	max_len        : int = 256,
+	blink_rate     : int = 120,
+	password       : bool = false,
+	password_char  : rune = '*',
+	width          : ui.Sizing_Axis = {mode = ui.Fixed_Size{160}},
+	height         : ui.Sizing_Axis = {mode = ui.Fixed_Size{28}},
+	disabled       : bool = false,
+	id             : Maybe(ui.Id) = nil,
+	reuse_id       : bool = false,
+	font_index     : Maybe(i32) = nil,
+	font_size      : Maybe(f32) = nil,
+	typing_content : ^string = nil, 
+	use_tab 			: bool = false,
+	use_enter      : bool = false,
+	loc            : = #caller_location,
 ) -> (
 	changed: bool,
 	committed: bool,
@@ -714,7 +717,7 @@ text_box :: proc(
 				g_extra.text_box.blink_counter = 0
 			}
 		}
-		if ui.is_key_pressed(.Enter) {
+		if !use_enter && ui.is_key_pressed(.Enter) {
 			if buffer != &g_extra.text_box.buffer {
 				clear(buffer)
 				append(buffer, ..g_extra.text_box.buffer[:])
@@ -729,7 +732,9 @@ text_box :: proc(
 			g_extra.text_box.id = 0
 			edit_mode^ = false
 		}
-		if ui.is_key_pressed(.Tab) {
+		// if use_tab is true (for example textbox with autocompletion)/
+		// normal tab navigation is off
+		if !use_tab && ui.is_key_pressed(.Tab) {
 			if buffer != &g_extra.text_box.buffer {
 				clear(buffer)
 				append(buffer, ..g_extra.text_box.buffer[:])
@@ -854,6 +859,10 @@ text_box :: proc(
 		}
 	}
 
+	if typing_content != nil {
+		typing_content^ = string(g_extra.text_box.buffer[:])
+	} 
+
 	return changed, committed
 }
 
@@ -896,6 +905,19 @@ find_cursor_row_col :: proc(
 	return 0, 0
 }
 
+text_box_set_text :: proc(text: string) {
+	clear(&g_extra.text_box.buffer)
+	append(&g_extra.text_box.buffer, ..transmute([]u8)text)
+	g_extra.text_box.cursor_pos = len(g_extra.text_box.buffer)
+	g_extra.text_box.select_start = g_extra.text_box.cursor_pos
+	g_extra.text_box.select_length = 0
+	g_extra.text_box.blink_counter = 0
+}
+
+text_box_get_text :: proc() -> string {
+	return string(g_extra.text_box.buffer[:])
+}
+
 text_box_multi :: proc(
 	buffer       : ^[dynamic]u8,
 	edit_mode    : ^bool,
@@ -909,6 +931,9 @@ text_box_multi :: proc(
 	reuse_id     : bool = false,
 	font_index   : Maybe(i32) = nil,
 	font_size    : Maybe(f32) = nil,
+	typing_content : ^string = nil, 
+	use_tab 			: bool = false,
+	use_enter      : bool = false,
 	loc          : = #caller_location,
 ) -> (
 	changed: bool,
@@ -1285,7 +1310,7 @@ text_box_multi :: proc(
 			}
 			g_extra.text_box.blink_counter = 0
 		}
-		if ui.is_key_pressed(.Enter) {
+		if !use_enter && ui.is_key_pressed(.Enter) {
 			if g_extra.text_box.select_length != 0 {
 				s_start := min(
 					g_extra.text_box.select_start,
@@ -1396,7 +1421,7 @@ text_box_multi :: proc(
 			g_extra.text_box.id = 0
 			edit_mode^ = false
 		}
-		if ui.is_key_pressed(.Tab) {
+		if !use_tab && ui.is_key_pressed(.Tab) {
 			if buffer != &g_extra.text_box.buffer {
 				clear(buffer)
 				append(buffer, ..g_extra.text_box.buffer[:])
@@ -1534,6 +1559,8 @@ text_box_multi :: proc(
 			)
 		}
 	}
+
+	typing_content^ = string(g_extra.text_box.buffer[:])
 
 	return changed, committed
 }

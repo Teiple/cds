@@ -1259,7 +1259,7 @@ get_anchor_offset :: proc(anchor: Anchor_Point) -> [2]f32 {
 	return {0, 0}
 }
 
-calculate_position :: proc(ctx: ^Context, index: Index) {
+calculate_position_and_scroll :: proc(ctx: ^Context, index: Index) {
 	current := &ctx.elements[index]
 	layout, ok := current.attributes.(Layout_Attributes)
 	if !ok {
@@ -1297,10 +1297,27 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 		return
 	}
 
+	// incase of non-scroll that scroll_data contribute nothing to element offset
 	scroll_data := ctx.input_event.scrolls[current.id]
 	scroll_offsets := [Axis]f32 {
 		.X = scroll_data.offset.x,
 		.Y = scroll_data.offset.y,
+	}
+
+	// calculate scrolls
+	if layout.config.scroll {
+		content_size := [2]f32{layout_get_content_size(ctx, index, layout, .X), layout_get_content_size(ctx, index, layout, .Y)}
+
+		min_offset := [2]f32{-(content_size.x - (current.size.x - layout_get_pad(layout, .X))), -(content_size.y - (current.size.y - layout_get_pad(layout, .Y)))}
+		
+		scroll_offsets[.X] = clamp(scroll_offsets[.X], min_offset.x, 0)
+		scroll_offsets[.Y] = clamp(scroll_offsets[.Y], min_offset.y, 0)
+		
+		scroll_data.offset = {scroll_offsets[.X], scroll_offsets[.Y]}
+		scroll_data.content_size = content_size
+		scroll_data.min_offset = min_offset
+		
+		ctx.input_event.scrolls[current.id] = scroll_data
 	}
 
 	offsets: [Axis]f32
@@ -1324,9 +1341,9 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 				remaining -= f32(child_count - 1) * layout.config.child_gap
 			}
 
-			offsets[axis] +=
-				remaining *
-				align_get_offset(layout.config.child_alignment, axis)
+			if remaining > 0 {
+				offsets[axis] += remaining * align_get_offset(layout.config.child_alignment, axis)
+			}
 		}
 	}
 
@@ -1346,22 +1363,24 @@ calculate_position :: proc(ctx: ^Context, index: Index) {
 					layout_get_pad(layout, axis) -
 					ele_get_size(child, axis)
 
-				align_offset :=
-					remaining *
-					align_get_offset(layout.config.child_alignment, axis)
+				if remaining > 0 {
+					align_offset :=
+						remaining *
+						align_get_offset(layout.config.child_alignment, axis)
 
-				ele_set_pos(
-					child,
-					ele_get_pos(child, axis) + align_offset,
-					axis,
-				)
+					ele_set_pos(
+						child,
+						ele_get_pos(child, axis) + align_offset,
+						axis,
+					)
+				}
 			} else {
 				offsets[axis] +=
 					ele_get_size(child, axis) + layout.config.child_gap
 			}
 		}
 
-		calculate_position(ctx, child_index)
+		calculate_position_and_scroll(ctx, child_index)
 	}
 }
 
@@ -1484,7 +1503,7 @@ end :: proc(ctx: ^Context, _: [2]f32) {
 	fit_sizing_tree(ctx, 0, .Y)
 	grow_and_percent_sizing_tree(ctx, 0, .Y)
 
-	calculate_position(ctx, 0)
+	calculate_position_and_scroll(ctx, 0)
 
 	handle_floats(ctx)
 
@@ -1735,7 +1754,7 @@ handle_floats :: proc(ctx: ^Context) {
 		grow_and_percent_sizing_tree(ctx, float_index, .Y)
 
 		calculate_float_root_position(ctx, float_index)
-		calculate_position(ctx, float_index)
+		calculate_position_and_scroll(ctx, float_index)
 	}
 }
 
@@ -1980,11 +1999,7 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 			}
 
 			if layout.config.scroll {
-				content_size: [2]f32 = {layout_get_content_size(ctx, idx, layout, .X), layout_get_content_size(ctx, idx, layout, .Y)}
-				min_offset: [2]f32 = {-(content_size.x - (ele.size.x - layout_get_pad(layout, .X))), -(content_size.y - (ele.size.y - layout_get_pad(layout, .Y)))}
-
 				cur_scroll := ctx.input_event.scrolls[ele.id]
-				next_scroll_offset := cur_scroll.offset
 
 				if !ctx.input_event.scroll_captured && ctx.input.pointer.scroll != {0, 0} {
 					ele_rect := ele_get_rect(ele)
@@ -1994,17 +2009,14 @@ detect_pointer :: proc(ctx: ^Context, index: Index) {
 					}
 
 					if rect_contains(ctx.input.pointer.position, clipped_rect) {
-						next_scroll_offset += ctx.input.pointer.scroll * 20.0
+						cur_scroll.offset += ctx.input.pointer.scroll * 20.0
+						cur_scroll.offset = {
+							clamp(cur_scroll.offset.x, cur_scroll.min_offset.x, 0),
+							clamp(cur_scroll.offset.y, cur_scroll.min_offset.y, 0),
+						}
+						ctx.input_event.scrolls[ele.id] = cur_scroll
 						ctx.input_event.scroll_captured = true
 					}
-				}
-
-				next_scroll_offset = {clamp(next_scroll_offset.x, min_offset.x, 0), clamp(next_scroll_offset.y, min_offset.y, 0)}
-
-				ctx.input_event.scrolls[ele.id] = {
-					offset       = next_scroll_offset,
-					content_size = content_size,
-					min_offset   = min_offset,
 				}
 			}
 
@@ -2391,7 +2403,7 @@ layout :: proc(
 	width               : Sizing_Axis = {mode = Fit_Size{}},
 	height              : Sizing_Axis = {mode = Fit_Size{}},
 	padding             : Padding = {0, 0, 0, 0},
-	child_gap           : f32 = 2,
+	child_gap           : f32 = 0,
 	layout_direction    : Layout_Direction = .Left_To_Right,
 	child_alignment     : Alignment = {.Left, .Top},
 	background_color    : [4]u8 = {0, 0, 0, 0},

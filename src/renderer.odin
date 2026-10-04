@@ -138,10 +138,9 @@ draw_mesh_by_buffers :: proc(
 		linalg.matrix4_from_quaternion(rotation)
 
 	vs_params: shaders.Vs_Params = {
-		mvp = camera_view_projection_matrix(
-			g_state.camera,
-		) * model_matrix,
+		mvp = camera_view_projection_matrix() * model_matrix,
 	}
+	
 	sg.apply_uniforms(
 		shaders.UB_vs_params,
 		{ptr = &vs_params, size = size_of(vs_params)},

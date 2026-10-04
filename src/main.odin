@@ -21,7 +21,7 @@ main :: proc() {
 		window_title     = "Sokol Odin UI",
 		width            = SCREEN_BASE_WIDTH,
 		height           = SCREEN_BASE_HEIGHT,
-		disable_vsync    = true,
+		// disable_vsync    = true,
 		enable_clipboard = true,
 		clipboard_size   = 65536, // For ui
 		init_cb          = proc "c" () {
@@ -72,14 +72,9 @@ main :: proc() {
 
 				// Logic Update 
 				{
-					game_time_update(dt)
+					frame_time_update(dt)
 					free_camera_update(dt)
 					viewport_update({sapp.widthf(), sapp.heightf()})
-				}
-
-				// User interface
-				if ui_draw() {
-					console_update_ui()
 				}
 
 				// 3D
@@ -87,6 +82,11 @@ main :: proc() {
 					for model in g_state.models {
 						draw_model(model)
 					}
+				}
+
+				// User interface
+				if ui_draw() {
+					console_update_ui()
 				}
 			}
 

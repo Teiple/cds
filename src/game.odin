@@ -30,9 +30,9 @@ Game_State :: struct {
 	primitive_meshes : [dynamic]Mesh,
 	models           : [dynamic]Model,
 	renderer         : Renderer,
-	frame_time       : Game_Frame_Time,
+	frame_time       : Frame_Time,
 	camera           : Camera,
-	free_cam         : Free_Camera,
+	freecam          : Free_Camera,
 	viewport         : Viewport,
 	audio            : aud.Context(Sound_Id, Music_Id),
 	ui               : Game_UI,
@@ -49,7 +49,7 @@ update_input_event :: proc(ev: sapp.Event) {
 			sapp.quit()
 		}
 	}
-	// free_camera_update_input_event(ev)
+	free_camera_update_input_event(ev)
 	console_update_input_event(ev)
 	ui_update_input_event(ev)
 }

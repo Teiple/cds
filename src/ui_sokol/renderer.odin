@@ -1352,5 +1352,14 @@ render :: proc(
 		sg.draw(b.element_base, b.num_elements, 1)
 	}
 
+	// reset to viewport size
+	sg.apply_scissor_rectf(
+		dest_rect.x,
+		dest_rect.y,
+		dest_rect.width,
+		dest_rect.height,
+		true,
+	)
+
 	ui.input_end_frame(&ctx.input)
 }
