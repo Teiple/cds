@@ -158,29 +158,31 @@ PHYSICS_TICK_RATE :: 120.0
 PHYSICS_DT        :: 1.0 / PHYSICS_TICK_RATE
 
 physics_init :: proc() {
+	s := scene_state(Scene_State_Gameplay)
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -10, 0}
 	world_def.createDebugShape = debug_draw_b3_create_shape
 	world_def.destroyDebugShape = debug_draw_b3_destroy_shape
 
-	g_state.physics.world = b3.CreateWorld(world_def)
-	g_state.physics.accumulator = 0
+	s.physics.world = b3.CreateWorld(world_def)
+	s.physics.accumulator = 0
 
-	g_state.physics.debug_draw = b3.DefaultDebugDraw()
-	g_state.physics.debug_draw.DrawShapeFcn = debug_draw_b3_shape
-	g_state.physics.debug_draw.DrawSegmentFcn = debug_draw_b3_segment
-	g_state.physics.debug_draw.DrawBoxFcn = debug_draw_b3_box
-	g_state.physics.debug_draw.DrawSphereFcn = debug_draw_b3_sphere
-	g_state.physics.debug_draw.DrawPointFcn = debug_draw_b3_point
-	g_state.physics.debug_draw.drawShapes = true
+	s.physics.debug_draw = b3.DefaultDebugDraw()
+	s.physics.debug_draw.DrawShapeFcn = debug_draw_b3_shape
+	s.physics.debug_draw.DrawSegmentFcn = debug_draw_b3_segment
+	s.physics.debug_draw.DrawBoxFcn = debug_draw_b3_box
+	s.physics.debug_draw.DrawSphereFcn = debug_draw_b3_sphere
+	s.physics.debug_draw.DrawPointFcn = debug_draw_b3_point
+	s.physics.debug_draw.drawShapes = true
 }
 
 physics_destroy :: proc() {
-	b3.DestroyWorld(g_state.physics.world)
+	s := scene_state(Scene_State_Gameplay)
+	b3.DestroyWorld(s.physics.world)
 }
 
 physics_update :: proc(dt: f32) {
-	p := &g_state.physics
+	p := &scene_state(Scene_State_Gameplay).physics
 	p.accumulator += dt
 	p.accumulator = min(p.accumulator, 0.2)
 
@@ -191,9 +193,10 @@ physics_update :: proc(dt: f32) {
 }
 
 physics_debug_render :: proc() {
+	s := scene_state(Scene_State_Gameplay)
 	b3.World_Draw(
-		g_state.physics.world,
-		&g_state.physics.debug_draw,
+		s.physics.world,
+		&s.physics.debug_draw,
 		transmute(u64)ALL_PHYSICS_LAYERS,
 	)
 }

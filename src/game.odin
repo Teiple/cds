@@ -1,6 +1,5 @@
 package game
 
-import "base:intrinsics"
 import "core:os"
 import "base:runtime"
 import sapp "sokol/app"
@@ -8,6 +7,10 @@ import sg "sokol/gfx"
 import sglue "sokol/glue"
 import slog "sokol/log"
 import ui "ui"
+
+
+GAME_SCREEN_BASE_WIDTH  :: 800
+GAME_SCREEN_BASE_HEIGHT :: 480
 
 g_odin_ctx := runtime.default_context()
 
@@ -18,29 +21,19 @@ Game_State :: struct {
 	models           : [dynamic]Model,
 	renderer         : Renderer,
 	frame_time       : Frame_Time,
-	camera           : Camera,
-	freecam          : Free_Camera,
-	follow_cam       : Follow_Camera,
 	viewport         : Viewport,
 	audio            : Audio,
 	ui               : Game_UI,
 	console          : Console,
 	debug_drawer     : Debug_Drawer,
 	mouse            : Mouse_Input,
-	physics          : Physics,
-	player           : Player,
-	environment      : Environment,
 	scene            : struct {
-		state      : Scene_State,
-		callbacks  : Scene_Callbacks,
+		state         : Scene_State,
+		callbacks     : Scene_Callbacks,
 	},
 }
 
 g_state: Game_State
-
-scene_state :: proc($S : typeid) -> (state: ^S, ok: bool) #optional_ok { 
-	return &g_state.scene.state.(S)
-}
 
 game_init :: proc(entry_point: runtime.Source_Code_Location) {
 	g_state.entry_point = entry_point
@@ -51,36 +44,22 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 		logger = {func = slog.func},
 	})
 
-	viewport_init(base_size = {SCREEN_BASE_WIDTH, SCREEN_BASE_HEIGHT})
-	freecam_init()
-	follow_camera_init(offset = {0, 0.2, 3.5})
-
+	viewport_init(base_size = {GAME_SCREEN_BASE_WIDTH, GAME_SCREEN_BASE_HEIGHT})
 	ui_init()
 	audio_init()
-	physics_init()
-
-	g_state.camera = {
-		fovy_degrees = 60,
-		position     = {0, 1.0, 3.5},
-		target       = {0, 1.0, 0},
-		up           = {0, 1, 0},
-	}
-
 	renderer_init(&g_state.renderer)
 	debug_drawer_init(&g_state.debug_drawer)
+	console_init()
 
-	g_state.environment = environment_init()
-	player_init({0, 1.5, 0})
-
-	mouse_set_locked(true)
+	scene_set(Scene_State_Gameplay{})
 }
 
 game_destroy :: proc() {
-	viewport_destroy()
+	if g_state.scene.callbacks.destroy != nil {
+		g_state.scene.callbacks.destroy()
+	}
 
-	player_destroy()
-	environment_destroy(&g_state.environment)
-	physics_destroy()
+	viewport_destroy()
 
 	for &mesh in g_state.primitive_meshes {
 		mesh_destroy(&mesh)
@@ -117,27 +96,24 @@ game_frame :: proc() {
 
 game_update :: proc(dt: f32) {
 	frame_time_update(dt)
-	physics_update(dt)
-
-	if g_state.freecam.enabled {
-		freecam_update(dt)
-	} else {
-		player_update(dt)
-		follow_camera_update(player_get_position(), dt)
-	}
-
 	viewport_update({sapp.widthf(), sapp.heightf()})
+
+	if g_state.scene.callbacks.update != nil {
+		g_state.scene.callbacks.update(dt)
+	}
 }
 
 game_draw :: proc() {
-	player_draw()
-
-	debug_draw_grid(slices = 20, spacing = 1.0, color = {50, 50, 50, 255})
-	physics_debug_render()
-	debug_render(&g_state.debug_drawer)
+	if g_state.scene.callbacks.draw_3d != nil {
+		g_state.scene.callbacks.draw_3d()
+	}
 
 	if ui_draw() {
 		console_update_ui()
+	}
+
+	if g_state.scene.callbacks.draw_ui != nil {
+		g_state.scene.callbacks.draw_ui()
 	}
 }
 
@@ -149,12 +125,14 @@ game_update_input_event :: proc(ev: sapp.Event) {
 	if ui_is_capturing_input() {
 		mouse_reset_input()
 		freecam_reset_input()
+		if g_state.scene.callbacks.handle_input_ui != nil {
+			g_state.scene.callbacks.handle_input_ui(ev)
+		}
 		return
 	}
 
-	mouse_update_input_event(ev)
-	if g_state.freecam.enabled {
-		freecam_update_input_event(ev)
+	if g_state.scene.callbacks.handle_input_3d != nil {
+		g_state.scene.callbacks.handle_input_3d(ev)
 	}
 }
 

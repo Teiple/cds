@@ -2,8 +2,6 @@ package game
 
 import sapp "sokol/app"
 
-SCREEN_BASE_WIDTH  :: 800
-SCREEN_BASE_HEIGHT :: 480
 
 main :: proc() {	
 	debug_track_allocator_init()
@@ -11,8 +9,8 @@ main :: proc() {
 
 	sapp.run({
 		window_title     = "Sokol Odin UI",
-		width            = SCREEN_BASE_WIDTH,
-		height           = SCREEN_BASE_HEIGHT,
+		width            = GAME_SCREEN_BASE_WIDTH,
+		height           = GAME_SCREEN_BASE_HEIGHT,
 		disable_vsync    = true,
 		enable_clipboard = true,
 		clipboard_size   = 65536, // For ui

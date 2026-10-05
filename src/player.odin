@@ -22,7 +22,8 @@ euler_degrees_to_quat :: proc(angles: [3]f32) -> quaternion128 {
 }
 
 player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
-	player := &g_state.player
+	s := scene_state(Scene_State_Gameplay)
+	player := &s.player
 
 	player.model           = model_load_from_memory(#load("../assets/models/pistol.glb"))
 	player.visual_offset   = {0.030, -0.039, 0}
@@ -35,7 +36,7 @@ player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 	body_def.rotation            = linalg.QUATERNIONF32_IDENTITY
 	body_def.motionLocks.linearZ = true
 
-	player.body = b3.CreateBody(g_state.physics.world, body_def)
+	player.body = b3.CreateBody(s.physics.world, body_def)
 
 	box_colliders := [?]struct {
 		size:     [3]f32,
@@ -110,11 +111,12 @@ player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 }
 
 player_destroy :: proc() {
-	model_destroy(&g_state.player.model)
+	s := scene_state(Scene_State_Gameplay)
+	model_destroy(&s.player.model)
 }
 
 player_update :: proc(dt: f32) {
-	player := &g_state.player
+	player := &scene_state(Scene_State_Gameplay).player
 
 	model_update_animation(&player.model, dt)
 
@@ -143,7 +145,7 @@ player_update_aim :: proc(
 	max_turn_speed: f32 = 25.0,
 	turn_mult: f32 = 1.0,
 ) {
-	player := &g_state.player
+	player := &scene_state(Scene_State_Gameplay).player
 	player_pos := b3.Body_GetPosition(player.body)
 	look_vec := target_pos - player_pos
 	look_vec.z = 0
@@ -177,7 +179,7 @@ player_update_aim :: proc(
 }
 
 player_draw :: proc() {
-	player := &g_state.player
+	player := &scene_state(Scene_State_Gameplay).player
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
@@ -192,5 +194,5 @@ player_draw :: proc() {
 }
 
 player_get_position :: proc() -> [3]f32 {
-	return b3.Body_GetPosition(g_state.player.body)
+	return b3.Body_GetPosition(scene_state(Scene_State_Gameplay).player.body)
 }

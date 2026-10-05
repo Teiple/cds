@@ -44,3 +44,7 @@ scene_get_callbacks :: proc(scene_state : Scene_State) -> Scene_Callbacks {
    }
    panic("Scene state should not be nil right now")
 }
+
+scene_state :: proc($S: typeid) -> (state: ^S, ok: bool) #optional_ok {
+   return &g_state.scene.state.(S)
+}

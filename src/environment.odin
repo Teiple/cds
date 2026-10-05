@@ -7,13 +7,13 @@ Environment :: struct {
 	body: b3.BodyId,
 }
 
-environment_init :: proc() -> Environment {
-	env: Environment
-
+environment_init :: proc() {
+	env := &scene_state(Scene_State_Gameplay).environment
+	
 	body_def := b3.DefaultBodyDef()
 	body_def.type = .staticBody
 	body_def.position = {0, 0, 0}
-	env.body = b3.CreateBody(g_state.physics.world, body_def)
+	env.body = b3.CreateBody(scene_state(Scene_State_Gameplay).physics.world, body_def)
 
 	platforms := [?]struct {
 		size:     [3]f32,
@@ -43,9 +43,7 @@ environment_init :: proc() -> Environment {
 			{1, 1, 1},
 		)
 	}
-
-	return env
 }
 
-environment_destroy :: proc(env: ^Environment) {
+environment_destroy :: proc() {
 }
