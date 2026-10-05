@@ -1,9 +1,8 @@
 package game
 
+import "base:intrinsics"
 import "core:os"
 import "base:runtime"
-import "core:math"
-import linalg "core:math/linalg"
 import sapp "sokol/app"
 import sg "sokol/gfx"
 import sglue "sokol/glue"
@@ -31,9 +30,17 @@ Game_State :: struct {
 	physics          : Physics,
 	player           : Player,
 	environment      : Environment,
+	scene            : struct {
+		state      : Scene_State,
+		callbacks  : Scene_Callbacks,
+	},
 }
 
 g_state: Game_State
+
+scene_state :: proc($S : typeid) -> (state: ^S, ok: bool) #optional_ok { 
+	return &g_state.scene.state.(S)
+}
 
 game_init :: proc(entry_point: runtime.Source_Code_Location) {
 	g_state.entry_point = entry_point
