@@ -11,10 +11,10 @@ Camera :: struct {
 	fovy_degrees : f32,
 }
 
-camera_view_projection_matrix :: proc(camera: ^Camera) -> matrix[4, 4]f32 {
+camera_view_projection_matrix :: proc(camera: ^Camera, vp: ^Viewport) -> matrix[4, 4]f32 {
 	proj := linalg.matrix4_perspective_f32(
 		fovy = math.to_radians_f32(camera.fovy_degrees),
-		aspect = viewport_get_aspect(),
+		aspect = viewport_get_aspect(vp),
 		near = 0.01,
 		far = 100,
 	)

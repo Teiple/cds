@@ -10,7 +10,7 @@ import uie "ui_extra"
 Console_Command :: struct {
    name        : string,
 	description : string,
-	proc_call   : proc(args: []string),
+	proc_call   : proc(console: ^Console, args: []string),
 }
 
 Console :: struct {
@@ -28,73 +28,73 @@ Console :: struct {
 	selected_suggestion : int,
 }
 
-console_log :: proc(msg: string) {
-   append(&g_state.console.history, strings.clone(msg))
-   g_state.console.scroll_to_bottom = true
+console_log :: proc(console: ^Console, msg: string) {
+   append(&console.history, strings.clone(msg))
+   console.scroll_to_bottom = true
 }
 
-console_logf :: proc(format: string, args: ..any) {
-   console_log(fmt.tprintf(format, ..args))
+console_logf :: proc(console: ^Console, format: string, args: ..any) {
+   console_log(console, fmt.tprintf(format, ..args))
 }
 
 CONSOLE_COMMANDS :: [?]Console_Command {
    {
       name        = "exit",
       description = "Exit program",
-      proc_call   = proc(args : []string) {
+      proc_call   = proc(console: ^Console, args: []string) {
          game_quit()
       }
    },
    {
       name        = "show_fps",
       description = "Show fps: 0 or 1",
-      proc_call   = proc(args : []string) {
+      proc_call   = proc(console: ^Console, args: []string) {
          if len(args) < 1 {
-            console_log("Wrong usage!")
+            console_log(console, "Wrong usage!")
             return
          }
          
          game_ui := &g_state.ui
          game_ui.show_fps = args[0] != "0"
          
-         console_logf("FPS display %s.", game_ui.show_fps ? "enabled" : "disabled" )
+         console_logf(console, "FPS display %s.", game_ui.show_fps ? "enabled" : "disabled")
       }
    },
    {
       name        = "freecam",
       description = "Override camera motion: 0 or 1",
-      proc_call   = proc(args : []string) {
+      proc_call   = proc(console: ^Console, args: []string) {
          if len(args) < 1 {
-            console_log("Wrong usage!")
+            console_log(console, "Wrong usage!")
             return
          }
 
          s, ok := scene_state(Scene_State_Gameplay)
          if !ok {
-            console_log("Only available in gameplay!")
+            console_log(console, "Only available in gameplay!")
             return
          }
 
          enabled := args[0] != "0"
          freecam_set_enabled(&s.freecam, &s.camera, &s.follow_cam, enabled)
          
-         console_logf("Freecam %s.", enabled ? "enabled" : "disabled")
+         console_logf(console, "Freecam %s.", enabled ? "enabled" : "disabled")
       }
    },
    {
       name        = "clear",
       description = "Clear console output",
-      proc_call   = proc(args : []string) {
-         for cmd in g_state.console.history {
+      proc_call   = proc(console: ^Console, args: []string) {
+         for cmd in console.history {
             delete(cmd)
          }
-         clear(&g_state.console.history)
+         clear(&console.history)
       }
    },
 }
 
-console_init :: proc() {
-   g_state.console = {
+console_init :: proc(console: ^Console) {
+   console^ = {
       history_index     = -1,
       saved_input       = make([dynamic]u8, 0, 20),
       input_buffer      = make([dynamic]u8, 0, 20),
@@ -104,9 +104,7 @@ console_init :: proc() {
    }
 }
 
-console_update_input_event :: proc(ev : sapp.Event) {
-   console := &g_state.console
-   
+console_update_input_event :: proc(console: ^Console, ev : sapp.Event) {
    if ev.type == .KEY_DOWN && ev.key_code == .GRAVE_ACCENT {
       if !console.open {
          console.open_next_frame   = true
@@ -118,9 +116,7 @@ console_update_input_event :: proc(ev : sapp.Event) {
    }
 }
 
-console_update_ui :: proc() {   
-   console := &g_state.console
-   
+console_update_ui :: proc(console: ^Console) {   
    if !console.open {
       if console.open_next_frame {
          console.open            = true
@@ -290,14 +286,14 @@ console_update_ui :: proc() {
          )
 
          if ui.has_modifier(.Ctrl) && ui.is_key_pressed(.Space) {
-            console_fetch_suggestions(typing_cmd, show_all_when_empty = true)
+            console_fetch_suggestions(console, typing_cmd, show_all_when_empty = true)
          }
 
          cmd_content := string(console.input_buffer[:])
          if changed {
             console.history_index = -1
             if len(typing_cmd) > 0 {
-               console_fetch_suggestions(typing_cmd)
+               console_fetch_suggestions(console, typing_cmd)
             } else {
                clear(&console.suggestions)
             }
@@ -308,7 +304,7 @@ console_update_ui :: proc() {
                append(&console.nav_history, strings.clone(cmd_content))
             }
             
-            console_match_and_run_cmd(cmd_content)
+            console_match_and_run_cmd(console, cmd_content)
             
             clear(&console.input_buffer)
             clear(&console.suggestions)
@@ -323,25 +319,23 @@ console_update_ui :: proc() {
    
 }
 
-console_destroy :: proc() {
-   delete(g_state.console.saved_input)
-   delete(g_state.console.input_buffer)
-   for cmd_content in g_state.console.history {
+console_destroy :: proc(console: ^Console) {
+   delete(console.saved_input)
+   delete(console.input_buffer)
+   for cmd_content in console.history {
       delete(cmd_content)
    } 
-   delete(g_state.console.history)
-   for cmd_content in g_state.console.nav_history {
+   delete(console.history)
+   for cmd_content in console.nav_history {
       delete(cmd_content)
    }
-   delete(g_state.console.nav_history)
-   delete(g_state.console.suggestions)
+   delete(console.nav_history)
+   delete(console.suggestions)
 }
 
 @(private = "file")
-console_match_and_run_cmd :: proc(cmd_content : string) {
+console_match_and_run_cmd :: proc(console: ^Console, cmd_content : string) {
    assert(len(cmd_content) > 0)
-   
-   console := &g_state.console
    
    tokens := strings.fields(cmd_content)
    defer delete(tokens)
@@ -354,19 +348,17 @@ console_match_and_run_cmd :: proc(cmd_content : string) {
    for cmd in CONSOLE_COMMANDS {
       if command == cmd.name {
          append(&console.history, strings.concatenate({"cmd:", cmd_content}))
-         cmd.proc_call(args)
+         cmd.proc_call(console, args)
          return
       } 
    }
 
    append(&console.history, strings.clone(cmd_content))
-   console_log("Unknown command!")
+   console_log(console, "Unknown command!")
 }
 
 @(private = "file")
-console_fetch_suggestions :: proc(prefix : string, show_all_when_empty : bool = false) {
-   console := &g_state.console
-   
+console_fetch_suggestions :: proc(console: ^Console, prefix : string, show_all_when_empty : bool = false) {
    clear(&console.suggestions)
    console.selected_suggestion = 0
 

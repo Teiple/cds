@@ -167,6 +167,7 @@ skinned_mesh_destroy :: proc(m: ^Skinned_Mesh) {
 draw_debug_wire_mesh :: proc(
 	mesh: Mesh,
 	camera: ^Camera,
+	vp: ^Viewport,
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
@@ -174,12 +175,14 @@ draw_debug_wire_mesh :: proc(
 		mesh,
 		linalg.matrix4_translate_f32(position) * linalg.matrix4_from_quaternion(rotation),
 		camera,
+		vp,
 	)
 }
 
 draw_mesh :: proc(
 	mesh: Mesh,
 	camera: ^Camera,
+	vp: ^Viewport,
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
@@ -187,6 +190,7 @@ draw_mesh :: proc(
 		mesh,
 		linalg.matrix4_translate_f32(position) * linalg.matrix4_from_quaternion(rotation),
 		camera,
+		vp,
 	)
 }
 
@@ -194,6 +198,7 @@ draw_mesh_matrix :: proc(
 	mesh: Mesh,
 	model_matrix: matrix[4, 4]f32,
 	camera: ^Camera,
+	vp: ^Viewport,
 ) {
 	draw_mesh_by_buffers(
 		mesh.vertex_buffer,
@@ -202,6 +207,7 @@ draw_mesh_matrix :: proc(
 		.Unlit_Triangles,
 		model_matrix,
 		camera,
+		vp,
 	)
 }
 
@@ -209,6 +215,7 @@ draw_mesh_wireframe_matrix :: proc(
 	mesh: Mesh,
 	model_matrix: matrix[4, 4]f32,
 	camera: ^Camera,
+	vp: ^Viewport,
 ) {
 	draw_mesh_by_buffers(
 		mesh.vertex_buffer,
@@ -217,6 +224,7 @@ draw_mesh_wireframe_matrix :: proc(
 		.Unlit_Lines,
 		model_matrix,
 		camera,
+		vp,
 	)
 }
 
@@ -225,11 +233,12 @@ draw_skinned_mesh_matrix :: proc(
 	model_matrix: matrix[4, 4]f32,
 	bones: []matrix[4, 4]f32,
 	camera: ^Camera,
+	vp: ^Viewport,
 ) {
 	sg.apply_pipeline(g_state.renderer.pipelines[.Skinned_Triangles])
 
 	vs_params: shaders.Vs_Skinned_Params
-	vs_params.mvp = camera_view_projection_matrix(camera) * model_matrix
+	vs_params.mvp = camera_view_projection_matrix(camera, vp) * model_matrix
 
 	bone_count := min(len(bones), 64)
 	for i in 0 ..< bone_count {
@@ -257,11 +266,12 @@ draw_mesh_by_buffers :: proc(
 	pip_type: Pipeline_Type,
 	model_matrix: matrix[4, 4]f32,
 	camera: ^Camera,
+	vp: ^Viewport,
 ) {
 	sg.apply_pipeline(g_state.renderer.pipelines[pip_type])
 
 	vs_params: shaders.Vs_Params = {
-		mvp = camera_view_projection_matrix(camera) * model_matrix,
+		mvp = camera_view_projection_matrix(camera, vp) * model_matrix,
 	}
 	
 	sg.apply_uniforms(

@@ -44,12 +44,12 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 		logger = {func = slog.func},
 	})
 
-	viewport_init(base_size = {GAME_SCREEN_BASE_WIDTH, GAME_SCREEN_BASE_HEIGHT})
-	ui_init()
-	audio_init()
+	viewport_init(&g_state.viewport, base_size = {GAME_SCREEN_BASE_WIDTH, GAME_SCREEN_BASE_HEIGHT})
+	ui_init(&g_state.ui, g_state.entry_dir)
+	audio_init(&g_state.audio)
 	renderer_init(&g_state.renderer)
 	debug_drawer_init(&g_state.debug_drawer)
-	console_init()
+	console_init(&g_state.console)
 
 	scene_set(Scene_State_Gameplay{})
 }
@@ -59,7 +59,7 @@ game_destroy :: proc() {
 		g_state.scene.callbacks.destroy()
 	}
 
-	viewport_destroy()
+	viewport_destroy(&g_state.viewport)
 
 	for &mesh in g_state.primitive_meshes {
 		mesh_destroy(&mesh)
@@ -71,62 +71,64 @@ game_destroy :: proc() {
 	}
 	delete(g_state.models)
 
-	ui_destroy()
-	console_destroy()
+	ui_destroy(&g_state.ui)
+	console_destroy(&g_state.console)
 	debug_drawer_destroy(&g_state.debug_drawer)
-	audio_destroy()
+	audio_destroy(&g_state.audio)
 
 	sg.shutdown()
 }
 
-game_frame :: proc() {
-	dt := cast(f32)sapp.frame_duration_unfiltered()
-
-	viewport_begin()
+game_update :: proc(dt: f32) {
+	viewport_begin(&g_state.viewport)
 	{
-		defer viewport_end()
+		defer viewport_end(&g_state.viewport)
+		
+		frame_time_update(dt)
+		viewport_update(&g_state.viewport, {sapp.widthf(), sapp.heightf()})
 
-		game_update(dt)
+		if g_state.scene.callbacks.update != nil {
+			g_state.scene.callbacks.update(dt)
+		}
+
 		game_draw()
 	}
 
-	mouse_end_frame()
+	mouse_end_frame(&g_state.mouse)
 	free_all(context.temp_allocator)
 }
 
-game_update :: proc(dt: f32) {
-	frame_time_update(dt)
-	viewport_update({sapp.widthf(), sapp.heightf()})
-
-	if g_state.scene.callbacks.update != nil {
-		g_state.scene.callbacks.update(dt)
-	}
-}
-
 game_draw :: proc() {
+	// 3D
 	if g_state.scene.callbacks.draw_3d != nil {
 		g_state.scene.callbacks.draw_3d()
 	}
 
-	if ui_draw() {
-		console_update_ui()
-	}
+	// UI
+	if ui_begin(&g_state.ui, &g_state.viewport) {
+		console_update_ui(&g_state.console)
+		
+		if g_state.scene.callbacks.draw_ui != nil {
+			g_state.scene.callbacks.draw_ui()
+		}
 
-	if g_state.scene.callbacks.draw_ui != nil {
-		g_state.scene.callbacks.draw_ui()
+		ui_end(&g_state.ui, &g_state.viewport, g_state.frame_time.average_fps)
 	}
+	
 }
 
 game_update_input_event :: proc(ev: sapp.Event) {
-	console_update_input_event(ev)
-	ui_update_input_event(ev)
+	console_update_input_event(&g_state.console, ev)
+	ui_update_input_event(&g_state.ui, &g_state.viewport, ev)
 	
 	// 3D only receives input if UI didn't consume it
 	if ui_is_capturing_input() {
-		mouse_reset_input()
+		mouse_reset_input(&g_state.mouse)
+
 		if g_state.scene.callbacks.handle_input_ui != nil {
 			g_state.scene.callbacks.handle_input_ui(ev)
 		}
+		
 		return
 	}
 

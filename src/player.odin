@@ -111,10 +111,10 @@ player_destroy :: proc(player: ^Player) {
 	model_destroy(&player.model)
 }
 
-player_update :: proc(player: ^Player, camera: ^Camera, dt: f32) {
+player_update :: proc(player: ^Player, camera: ^Camera, vp: ^Viewport, audio: ^Audio, dt: f32) {
 	model_update_animation(&player.model, dt)
 
-	target_pos := viewport_get_mouse_world_position_on_zplane(camera, 0)
+	target_pos := viewport_get_mouse_world_position_on_zplane(vp, camera, 0)
 	player_update_aim(player, target_pos)
 
 	if is_mouse_pressed(.Left) {
@@ -122,14 +122,14 @@ player_update :: proc(player: ^Player, camera: ^Camera, dt: f32) {
 		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 2.0, recoil_point, true)
 
-		audio_play_sound(.Fire_Primary)
+		audio_play_sound(audio, .Fire_Primary)
 		model_play_animation_by_name(&player.model, "fire", .Once)
 	} else if is_mouse_pressed(.Right) {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
 		recoil_dir := b3.Body_GetWorldVector(player.body, {-1, 0, 0})
 		b3.Body_ApplyLinearImpulse(player.body, recoil_dir * 4.0, recoil_point, true)
 
-		audio_play_sound(.Fire_Secondary)
+		audio_play_sound(audio, .Fire_Secondary)
 		model_play_animation_by_name(&player.model, "fire", .Once)
 	}
 }
@@ -172,7 +172,7 @@ player_update_aim :: proc(
 	b3.Body_SetAngularVelocity(player.body, target_angular_vel)
 }
 
-player_draw :: proc(player: ^Player, camera: ^Camera) {
+player_draw :: proc(player: ^Player, camera: ^Camera, vp: ^Viewport) {
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
@@ -183,7 +183,7 @@ player_draw :: proc(player: ^Player, camera: ^Camera) {
 	final_pos := [3]f32{final_mat[0, 3], final_mat[1, 3], final_mat[2, 3]}
 	final_rot := linalg.quaternion_from_matrix4(final_mat)
 
-	model_draw(player.model, camera, final_pos, final_rot)
+	model_draw(player.model, camera, vp, final_pos, final_rot)
 }
 
 player_get_position :: proc(player: ^Player) -> [3]f32 {

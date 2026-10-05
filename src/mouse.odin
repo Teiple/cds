@@ -24,22 +24,20 @@ Mouse_Input :: struct {
 	locked:      bool,
 }
 
-mouse_init :: proc() {
-	g_state.mouse = {}
+mouse_init :: proc(mouse: ^Mouse_Input) {
+	mouse^ = {}
 }
 
-mouse_set_locked :: proc(locked: bool) {
-	g_state.mouse.locked = locked
+mouse_set_locked :: proc(mouse: ^Mouse_Input, locked: bool) {
+	mouse.locked = locked
 	sapp.lock_mouse(locked)
 }
 
-mouse_is_locked :: proc() -> bool {
-	return g_state.mouse.locked
+mouse_is_locked :: proc(mouse: ^Mouse_Input) -> bool {
+	return mouse.locked
 }
 
-mouse_update_input_event :: proc(ev: sapp.Event) {
-	mouse := &g_state.mouse
-
+mouse_update_input_event :: proc(mouse: ^Mouse_Input, vp: ^Viewport, ev: sapp.Event) {
 	#partial switch ev.type {
 	case .MOUSE_DOWN:
 		btn: Mouse_Button
@@ -66,10 +64,10 @@ mouse_update_input_event :: proc(ev: sapp.Event) {
 		mouse.delta = {ev.mouse_dx, ev.mouse_dy}
 
 		if mouse.locked {
-			viewport_handle_mouse_delta(mouse.delta)
-			mouse.position = viewport_get_mouse_position()
+			viewport_handle_mouse_delta(vp, mouse.delta)
+			mouse.position = viewport_get_mouse_position(vp)
 		} else {
-			mouse.position = viewport_screen_to_virtual(mouse.screen_pos)
+			mouse.position = viewport_screen_to_virtual(vp, mouse.screen_pos)
 		}
 
 	case .MOUSE_SCROLL:
@@ -77,16 +75,13 @@ mouse_update_input_event :: proc(ev: sapp.Event) {
 	}
 }
 
-mouse_reset_input :: proc() {
-	mouse := &g_state.mouse
-
-	g_state.mouse.buttons = {}
-	g_state.mouse.delta = {0, 0}
-	g_state.mouse.scroll = {0, 0}
+mouse_reset_input :: proc(mouse: ^Mouse_Input) {
+	mouse.buttons = {}
+	mouse.delta = {0, 0}
+	mouse.scroll = {0, 0}
 }
 
-mouse_end_frame :: proc() {
-	mouse := &g_state.mouse
+mouse_end_frame :: proc(mouse: ^Mouse_Input) {
 	mouse.delta = {0, 0}
 	mouse.scroll = {0, 0}
 

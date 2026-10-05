@@ -4,8 +4,10 @@ import sapp "sokol/app"
 
 
 main :: proc() {	
-	debug_track_allocator_init()
-	defer debug_track_allocator_stop()
+	when ODIN_DEBUG {
+		debug_track_allocator_init()
+		defer debug_track_allocator_stop()
+	}
 
 	sapp.run({
 		window_title     = "Sokol Odin UI",
@@ -24,7 +26,9 @@ main :: proc() {
 		},
 		frame_cb = proc "c" () {
 			context = g_odin_ctx
-			game_frame()
+			
+			dt := cast(f32)sapp.frame_duration_unfiltered()
+			game_update(dt)
 		},
 		cleanup_cb = proc "c" () {
 			context = g_odin_ctx

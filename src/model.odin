@@ -492,6 +492,7 @@ model_solve_node_recursive :: proc(model: ^Model, node_index: int, parent_mat: m
 model_draw :: proc(
 	model: Model,
 	camera: ^Camera,
+	vp: ^Viewport,
 	position: [3]f32 = {0, 0, 0},
 	rotation: quaternion128 = linalg.QUATERNIONF32_IDENTITY,
 ) {
@@ -505,12 +506,12 @@ model_draw :: proc(
 				#partial switch part.kind {
 				case .Rigid:
 					final_mat := base_mat * node.global_mat
-					draw_mesh_matrix(part.rigid, final_mat, camera)
+					draw_mesh_matrix(part.rigid, final_mat, camera, vp)
 				case .Skinned:
 					skin_idx := node.skin_index.? or_else 0
 					if skin_idx >= 0 && skin_idx < len(model.skins) {
 						skin := model.skins[skin_idx]
-						draw_skinned_mesh_matrix(part.skinned, base_mat, skin.bone_matrices[:], camera)
+						draw_skinned_mesh_matrix(part.skinned, base_mat, skin.bone_matrices[:], camera, vp)
 					}
 				}
 			}

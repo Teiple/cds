@@ -100,7 +100,7 @@ debug_draw_b3_shape :: proc "c" (
 	#partial switch data.type {
 	case .sphereShape:
 		p := b3_transform_point(data.sphere.center, transform.p, transform.q)
-		debug_draw_sphere(p, data.sphere.radius, 16, c)
+		debug_draw_sphere(p, data.sphere.radius, 12, 16, c)
 	case .capsuleShape:
 		p1 := b3_transform_point(data.capsule.center1, transform.p, transform.q)
 		p2 := b3_transform_point(data.capsule.center2, transform.p, transform.q)
@@ -139,13 +139,13 @@ debug_draw_b3_box :: proc "c" (extents: b3.Vec3, transform: b3.WorldTransform, c
 debug_draw_b3_sphere :: proc "c" (p: b3.Pos, radius: f32, color: b3.HexColor, alpha: f32, ctx: rawptr) {
 	context = g_odin_ctx
 	c := b3_hex_to_color(color, alpha)
-	debug_draw_sphere(p, radius, 16, c)
+	debug_draw_sphere(p, radius, 12, 16, c)
 }
 
 debug_draw_b3_point :: proc "c" (p: b3.Pos, size: f32, color: b3.HexColor, ctx: rawptr) {
 	context = g_odin_ctx
 	c := b3_hex_to_color(color)
-	debug_draw_sphere(p, size * 0.1, 8, c)
+	debug_draw_sphere(p, size * 0.1, 8, 8, c)
 }
 
 Physics :: struct {

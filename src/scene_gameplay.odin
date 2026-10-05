@@ -28,7 +28,7 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
 
       environment_init(&s.environment, s.physics.world)
       player_init(&s.player, s.physics.world, {0, 1.5, 0})
-      mouse_set_locked(true)
+      mouse_set_locked(&g_state.mouse, true)
    },
    destroy = proc() {
       s := scene_state(Scene_State_Gameplay)
@@ -45,18 +45,18 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
       if s.freecam.enabled {
          freecam_update(&s.freecam, &s.camera, dt)
       } else {
-         player_update(&s.player, &s.camera, dt)
+         player_update(&s.player, &s.camera, &g_state.viewport, &g_state.audio, dt)
          follow_camera_update(&s.follow_cam, &s.camera, player_get_position(&s.player), dt)
       }
    },
    draw_3d = proc() {
       s := scene_state(Scene_State_Gameplay)
 
-      player_draw(&s.player, &s.camera)
+      player_draw(&s.player, &s.camera, &g_state.viewport)
 
       debug_draw_grid(slices = 20, spacing = 1.0, color = {50, 50, 50, 255})
       physics_debug_render(&s.physics)
-      debug_render(&g_state.debug_drawer, &s.camera)
+      debug_render(&g_state.debug_drawer, &s.camera, &g_state.viewport)
    },
    draw_ui = proc() {
 
@@ -66,7 +66,7 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
       freecam_reset_input(&s.freecam)
    },
    handle_input_3d = proc(ev : sapp.Event) {
-      mouse_update_input_event(ev)
+      mouse_update_input_event(&g_state.mouse, &g_state.viewport, ev)
       s := scene_state(Scene_State_Gameplay)
       if s.freecam.enabled {
          freecam_update_input_event(&s.freecam, ev)
