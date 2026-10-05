@@ -13,16 +13,16 @@ Rect :: struct {
 }
 
 Viewport :: struct {
-	base_size:       [2]f32,
-	dest_rect:       Rect,
-	scale:           f32,
-	vmouse_position: [2]f32,
-	bg_color:        [4]u8,
-	bars_color:      [4]u8,
-	bg_pipeline:     sg.Pipeline,
-	bg_bindings:     sg.Bindings,
-	white_image:     sg.Image,
-	white_view:      sg.View,
+	base_size       : [2]f32,
+	dest_rect       : Rect,
+	scale           : f32,
+	vmouse_position : [2]f32,
+	bg_color        : [4]u8,
+	bars_color      : [4]u8,
+	bg_pipeline     : sg.Pipeline,
+	bg_bindings     : sg.Bindings,
+	white_image     : sg.Image,
+	white_view      : sg.View,
 }
 
 viewport_init :: proc(
@@ -32,7 +32,8 @@ viewport_init :: proc(
 ) {
 	vp := &g_state.viewport
 	vp.base_size = base_size
-	vp.vmouse_position = base_size * 0.5
+	// initial offset to avoid feedback loop for mouse aim in gameplay
+	vp.vmouse_position = base_size * 0.5 + base_size * {0.1, 0}
 	vp.bg_color = bg_color
 	vp.bars_color = bars_color
 
@@ -59,9 +60,9 @@ viewport_init :: proc(
 
 	bg_vertices := [4]Vertex {
 		{{-1.0, -1.0, 0.0}, bg_color, {0, 0}},
-		{{1.0, -1.0, 0.0}, bg_color, {32767, 0}},
-		{{1.0, 1.0, 0.0}, bg_color, {32767, 32767}},
-		{{-1.0, 1.0, 0.0}, bg_color, {0, 32767}},
+		{{ 1.0, -1.0, 0.0}, bg_color, {32767, 0}},
+		{{ 1.0,  1.0, 0.0}, bg_color, {32767, 32767}},
+		{{-1.0,  1.0, 0.0}, bg_color, {0, 32767}},
 	}
 	bg_indices := [6]u16{0, 1, 2, 0, 2, 3}
 
@@ -210,12 +211,12 @@ viewport_get_aspect :: proc() -> f32 {
 	return g_state.viewport.base_size.x / g_state.viewport.base_size.y
 }
 
-viewport_get_mouse_world_position_on_zplane :: proc(z_plane: f32 = 0) -> [3]f32 {
+viewport_get_mouse_world_position_on_zplane :: proc(camera: ^Camera, z_plane: f32 = 0) -> [3]f32 {
 	vmouse := viewport_get_mouse_position()
 	ndc_x := (vmouse.x / g_state.viewport.base_size.x) * 2.0 - 1.0
 	ndc_y := 1.0 - (vmouse.y / g_state.viewport.base_size.y) * 2.0
 
-	inv_vp := linalg.matrix4_inverse(camera_view_projection_matrix())
+	inv_vp := linalg.matrix4_inverse(camera_view_projection_matrix(camera))
 
 	near_clip := inv_vp * [4]f32{ndc_x, ndc_y, -1.0, 1.0}
 	far_clip  := inv_vp * [4]f32{ndc_x, ndc_y, 1.0, 1.0}

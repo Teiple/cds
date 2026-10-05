@@ -11,20 +11,7 @@ Camera :: struct {
 	fovy_degrees : f32,
 }
 
-scene_camera :: proc() -> ^Camera {
-	#partial switch &s in g_state.scene.state {
-	case Scene_State_Gameplay:
-		return &s.camera
-	case Scene_State_Main_Menu:
-		return &s.camera
-	case:
-		panic("Active scene has no camera")
-	}
-}
-
-camera_view_projection_matrix :: proc() -> matrix[4, 4]f32 {
-	camera := scene_camera()
-	
+camera_view_projection_matrix :: proc(camera: ^Camera) -> matrix[4, 4]f32 {
 	proj := linalg.matrix4_perspective_f32(
 		fovy = math.to_radians_f32(camera.fovy_degrees),
 		aspect = viewport_get_aspect(),
@@ -51,9 +38,8 @@ Free_Camera :: struct {
 	move_dir:     [3]f32,
 }
 
-freecam_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
-	s := scene_state(Scene_State_Gameplay)
-	s.freecam = {
+freecam_init :: proc(freecam: ^Free_Camera, speed: f32 = 5.0, sensitivity: f32 = 0.003) {
+	freecam^ = {
 		speed = speed,
 		sensitivity = sensitivity,
 		yaw = 0,
@@ -61,13 +47,11 @@ freecam_init :: proc(speed: f32 = 5.0, sensitivity: f32 = 0.003) {
 	}
 }
 
-freecam_set_enabled :: proc(enabled: bool) {
-	s := scene_state(Scene_State_Gameplay)
-	freecam := &s.freecam
-	camera  := &s.camera
-
+freecam_set_enabled :: proc(freecam: ^Free_Camera, camera: ^Camera, follow_cam: ^Follow_Camera, enabled: bool) {
 	freecam.enabled = enabled
-	s.follow_cam.enabled = !enabled
+	if follow_cam != nil {
+		follow_cam.enabled = !enabled
+	}
 
 	if enabled {
 		dir := linalg.normalize(camera.target - camera.position)
@@ -77,11 +61,7 @@ freecam_set_enabled :: proc(enabled: bool) {
 	}
 }
 
-freecam_update_input_event :: proc(ev: sapp.Event) {
-	s := scene_state(Scene_State_Gameplay)
-	freecam := &s.freecam
-	camera  := &s.camera
-
+freecam_update_input_event :: proc(freecam: ^Free_Camera, ev: sapp.Event) {
 	#partial switch ev.type {
 	case .KEY_DOWN:
 		#partial switch ev.key_code {
@@ -111,18 +91,11 @@ freecam_update_input_event :: proc(ev: sapp.Event) {
 	}
 }
 
-freecam_reset_input :: proc() {
-	#partial switch &s in g_state.scene.state {
-	case Scene_State_Gameplay:
-		s.freecam.move_dir = {0, 0, 0}
-	}
+freecam_reset_input :: proc(freecam: ^Free_Camera) {
+	freecam.move_dir = {0, 0, 0}
 }
 
-freecam_update :: proc(dt: f32) {
-	s := scene_state(Scene_State_Gameplay)
-	freecam := s.freecam
-	camera   := &s.camera
-	
+freecam_update :: proc(freecam: ^Free_Camera, camera: ^Camera, dt: f32) {
 	if !freecam.enabled do return
 
 	forward := [3]f32{
@@ -153,32 +126,24 @@ Follow_Camera :: struct {
 	smoothness: f32,
 }
 
-follow_camera_init :: proc(offset: [3]f32 = {0, 0, 3.0}, smoothness: f32 = 12.0) {
-	s := scene_state(Scene_State_Gameplay)
-	s.follow_cam = {
+follow_camera_init :: proc(fc: ^Follow_Camera, offset: [3]f32 = {0, 0, 3.0}, smoothness: f32 = 12.0) {
+	fc^ = {
 		enabled    = true,
 		offset     = offset,
 		smoothness = smoothness,
 	}
 }
 
-follow_camera_update :: proc(dt: f32) {
-	s := scene_state(Scene_State_Gameplay)
-	
-	if !s.follow_cam.enabled do return
-	
-	cam        := &s.camera
-	follow_cam := &s.follow_cam
+follow_camera_update :: proc(fc: ^Follow_Camera, camera: ^Camera, target_pos: [3]f32, dt: f32) {
+	if !fc.enabled do return
 
-	target_pos := player_get_position()
-
-	follow_cam.target = linalg.lerp(
-		follow_cam.target,
+	fc.target = linalg.lerp(
+		fc.target,
 		target_pos,
-		clamp(follow_cam.smoothness * dt, 0, 1)
+		clamp(fc.smoothness * dt, 0, 1),
 	)
 
-	cam.target = follow_cam.target
-	cam.position = follow_cam.target + follow_cam.offset
-	cam.up = {0, 1, 0}
+	camera.target = fc.target
+	camera.position = fc.target + fc.offset
+	camera.up = {0, 1, 0}
 }

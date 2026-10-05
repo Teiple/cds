@@ -15,10 +15,9 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
    init = proc() {
       s := scene_state(Scene_State_Gameplay)
 
-      freecam_init()
-      follow_camera_init(offset = {0, 0.2, 3.5})
-      physics_init()
-      environment_init()
+      physics_init(&s.physics)
+      freecam_init(&s.freecam)
+      follow_camera_init(&s.follow_cam, offset = {0, 0.2, 3.5})
 
       s.camera = {
          fovy_degrees = 60,
@@ -27,46 +26,50 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
          up           = {0, 1, 0},
       }
 
-      player_init({0, 1.5, 0})
+      environment_init(&s.environment, s.physics.world)
+      player_init(&s.player, s.physics.world, {0, 1.5, 0})
       mouse_set_locked(true)
    },
    destroy = proc() {
       s := scene_state(Scene_State_Gameplay)
 
-      player_destroy()
-      environment_destroy()
-      physics_destroy()
+      player_destroy(&s.player)
+      environment_destroy(&s.environment)
+      physics_destroy(&s.physics)
    },
    update  = proc(dt : f32) {
       s := scene_state(Scene_State_Gameplay)
       
-      physics_update(dt)
+      physics_update(&s.physics, dt)
 
       if s.freecam.enabled {
-         freecam_update(dt)
+         freecam_update(&s.freecam, &s.camera, dt)
       } else {
-         player_update(dt)
-         follow_camera_update(dt)
+         player_update(&s.player, &s.camera, dt)
+         follow_camera_update(&s.follow_cam, &s.camera, player_get_position(&s.player), dt)
       }
    },
    draw_3d = proc() {
-      player_draw()
+      s := scene_state(Scene_State_Gameplay)
+
+      player_draw(&s.player, &s.camera)
 
       debug_draw_grid(slices = 20, spacing = 1.0, color = {50, 50, 50, 255})
-      physics_debug_render()
-      debug_render(&g_state.debug_drawer)
+      physics_debug_render(&s.physics)
+      debug_render(&g_state.debug_drawer, &s.camera)
    },
    draw_ui = proc() {
 
    },
    handle_input_ui = proc(ev : sapp.Event) {
-
+      s := scene_state(Scene_State_Gameplay)
+      freecam_reset_input(&s.freecam)
    },
    handle_input_3d = proc(ev : sapp.Event) {
       mouse_update_input_event(ev)
       s := scene_state(Scene_State_Gameplay)
       if s.freecam.enabled {
-         freecam_update_input_event(ev)
+         freecam_update_input_event(&s.freecam, ev)
       }
    },
 }

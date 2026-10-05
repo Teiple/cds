@@ -157,46 +157,42 @@ Physics :: struct {
 PHYSICS_TICK_RATE :: 120.0
 PHYSICS_DT        :: 1.0 / PHYSICS_TICK_RATE
 
-physics_init :: proc() {
-	s := scene_state(Scene_State_Gameplay)
+physics_init :: proc(physics: ^Physics) {
 	world_def := b3.DefaultWorldDef()
 	world_def.gravity = {0, -10, 0}
 	world_def.createDebugShape = debug_draw_b3_create_shape
 	world_def.destroyDebugShape = debug_draw_b3_destroy_shape
 
-	s.physics.world = b3.CreateWorld(world_def)
-	s.physics.accumulator = 0
+	physics.world = b3.CreateWorld(world_def)
+	physics.accumulator = 0
 
-	s.physics.debug_draw = b3.DefaultDebugDraw()
-	s.physics.debug_draw.DrawShapeFcn = debug_draw_b3_shape
-	s.physics.debug_draw.DrawSegmentFcn = debug_draw_b3_segment
-	s.physics.debug_draw.DrawBoxFcn = debug_draw_b3_box
-	s.physics.debug_draw.DrawSphereFcn = debug_draw_b3_sphere
-	s.physics.debug_draw.DrawPointFcn = debug_draw_b3_point
-	s.physics.debug_draw.drawShapes = true
+	physics.debug_draw = b3.DefaultDebugDraw()
+	physics.debug_draw.DrawShapeFcn = debug_draw_b3_shape
+	physics.debug_draw.DrawSegmentFcn = debug_draw_b3_segment
+	physics.debug_draw.DrawBoxFcn = debug_draw_b3_box
+	physics.debug_draw.DrawSphereFcn = debug_draw_b3_sphere
+	physics.debug_draw.DrawPointFcn = debug_draw_b3_point
+	physics.debug_draw.drawShapes = true
 }
 
-physics_destroy :: proc() {
-	s := scene_state(Scene_State_Gameplay)
-	b3.DestroyWorld(s.physics.world)
+physics_destroy :: proc(physics: ^Physics) {
+	b3.DestroyWorld(physics.world)
 }
 
-physics_update :: proc(dt: f32) {
-	p := &scene_state(Scene_State_Gameplay).physics
-	p.accumulator += dt
-	p.accumulator = min(p.accumulator, 0.2)
+physics_update :: proc(physics: ^Physics, dt: f32) {
+	physics.accumulator += dt
+	physics.accumulator = min(physics.accumulator, 0.2)
 
-	for p.accumulator >= PHYSICS_DT {
-		b3.World_Step(p.world, PHYSICS_DT, 4)
-		p.accumulator -= PHYSICS_DT
+	for physics.accumulator >= PHYSICS_DT {
+		b3.World_Step(physics.world, PHYSICS_DT, 4)
+		physics.accumulator -= PHYSICS_DT
 	}
 }
 
-physics_debug_render :: proc() {
-	s := scene_state(Scene_State_Gameplay)
+physics_debug_render :: proc(physics: ^Physics) {
 	b3.World_Draw(
-		s.physics.world,
-		&s.physics.debug_draw,
+		physics.world,
+		&physics.debug_draw,
 		transmute(u64)ALL_PHYSICS_LAYERS,
 	)
 }

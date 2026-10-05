@@ -124,7 +124,6 @@ game_update_input_event :: proc(ev: sapp.Event) {
 	// 3D only receives input if UI didn't consume it
 	if ui_is_capturing_input() {
 		mouse_reset_input()
-		freecam_reset_input()
 		if g_state.scene.callbacks.handle_input_ui != nil {
 			g_state.scene.callbacks.handle_input_ui(ev)
 		}

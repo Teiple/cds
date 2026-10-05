@@ -21,10 +21,7 @@ euler_degrees_to_quat :: proc(angles: [3]f32) -> quaternion128 {
 	return linalg.quaternion_from_matrix4(r)
 }
 
-player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
-	s := scene_state(Scene_State_Gameplay)
-	player := &s.player
-
+player_init :: proc(player: ^Player, world: b3.WorldId, position: [3]f32 = {0, 1.5, 0}) {
 	player.model           = model_load_from_memory(#load("../assets/models/pistol.glb"))
 	player.visual_offset   = {0.030, -0.039, 0}
 	player.visual_rotation = euler_degrees_to_quat({0, 90, 0})
@@ -36,7 +33,7 @@ player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 	body_def.rotation            = linalg.QUATERNIONF32_IDENTITY
 	body_def.motionLocks.linearZ = true
 
-	player.body = b3.CreateBody(s.physics.world, body_def)
+	player.body = b3.CreateBody(world, body_def)
 
 	box_colliders := [?]struct {
 		size:     [3]f32,
@@ -110,18 +107,15 @@ player_init :: proc(position: [3]f32 = {0, 1.5, 0}) {
 	}
 }
 
-player_destroy :: proc() {
-	s := scene_state(Scene_State_Gameplay)
-	model_destroy(&s.player.model)
+player_destroy :: proc(player: ^Player) {
+	model_destroy(&player.model)
 }
 
-player_update :: proc(dt: f32) {
-	player := &scene_state(Scene_State_Gameplay).player
-
+player_update :: proc(player: ^Player, camera: ^Camera, dt: f32) {
 	model_update_animation(&player.model, dt)
 
-	target_pos := viewport_get_mouse_world_position_on_zplane(0)
-	player_update_aim(target_pos)
+	target_pos := viewport_get_mouse_world_position_on_zplane(camera, 0)
+	player_update_aim(player, target_pos)
 
 	if is_mouse_pressed(.Left) {
 		recoil_point := b3.Body_GetWorldPoint(player.body, player.recoil_offset)
@@ -141,11 +135,11 @@ player_update :: proc(dt: f32) {
 }
 
 player_update_aim :: proc(
+	player: ^Player,
 	target_pos: [3]f32,
 	max_turn_speed: f32 = 25.0,
 	turn_mult: f32 = 1.0,
 ) {
-	player := &scene_state(Scene_State_Gameplay).player
 	player_pos := b3.Body_GetPosition(player.body)
 	look_vec := target_pos - player_pos
 	look_vec.z = 0
@@ -178,8 +172,7 @@ player_update_aim :: proc(
 	b3.Body_SetAngularVelocity(player.body, target_angular_vel)
 }
 
-player_draw :: proc() {
-	player := &scene_state(Scene_State_Gameplay).player
+player_draw :: proc(player: ^Player, camera: ^Camera) {
 	pos := b3.Body_GetPosition(player.body)
 	rot := b3.Body_GetRotation(player.body)
 
@@ -190,9 +183,9 @@ player_draw :: proc() {
 	final_pos := [3]f32{final_mat[0, 3], final_mat[1, 3], final_mat[2, 3]}
 	final_rot := linalg.quaternion_from_matrix4(final_mat)
 
-	model_draw(player.model, final_pos, final_rot)
+	model_draw(player.model, camera, final_pos, final_rot)
 }
 
-player_get_position :: proc() -> [3]f32 {
-	return b3.Body_GetPosition(scene_state(Scene_State_Gameplay).player.body)
+player_get_position :: proc(player: ^Player) -> [3]f32 {
+	return b3.Body_GetPosition(player.body)
 }

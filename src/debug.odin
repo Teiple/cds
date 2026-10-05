@@ -165,7 +165,7 @@ debug_draw_grid :: proc(slices: int = 10, spacing: f32 = 1.0, color: [4]u8 = {10
 	}
 }
 
-debug_render :: proc(d: ^Debug_Drawer) {
+debug_render :: proc(d: ^Debug_Drawer, camera: ^Camera) {
 	if len(d.lines) == 0 do return
 
 	if len(d.lines) > d.capacity {
@@ -188,7 +188,7 @@ debug_render :: proc(d: ^Debug_Drawer) {
 	sg.apply_pipeline(d.lines_pipeline)
 
 	vs_params: shaders.Vs_Params = {
-		mvp = camera_view_projection_matrix(),
+		mvp = camera_view_projection_matrix(camera),
 	}
 	sg.apply_uniforms(
 		shaders.UB_vs_params,

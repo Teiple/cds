@@ -28,9 +28,18 @@ Console :: struct {
 	selected_suggestion : int,
 }
 
+console_log :: proc(msg: string) {
+   append(&g_state.console.history, strings.clone(msg))
+   g_state.console.scroll_to_bottom = true
+}
+
+console_logf :: proc(format: string, args: ..any) {
+   console_log(fmt.tprintf(format, ..args))
+}
+
 CONSOLE_COMMANDS :: [?]Console_Command {
    {
-      name        = "quit",
+      name        = "exit",
       description = "Exit program",
       proc_call   = proc(args : []string) {
          game_quit()
@@ -40,19 +49,36 @@ CONSOLE_COMMANDS :: [?]Console_Command {
       name        = "show_fps",
       description = "Show fps: 0 or 1",
       proc_call   = proc(args : []string) {
-         if len(args) < 1 do return
+         if len(args) < 1 {
+            console_log("Wrong usage!")
+            return
+         }
          
          game_ui := &g_state.ui
          game_ui.show_fps = args[0] != "0"
+         
+         console_logf("FPS display %s.", game_ui.show_fps ? "enabled" : "disabled" )
       }
    },
    {
       name        = "freecam",
-      description = "Override camera motion",
+      description = "Override camera motion: 0 or 1",
       proc_call   = proc(args : []string) {
-         if len(args) < 1 do return
+         if len(args) < 1 {
+            console_log("Wrong usage!")
+            return
+         }
 
-         freecam_set_enabled(args[0] != "0")
+         s, ok := scene_state(Scene_State_Gameplay)
+         if !ok {
+            console_log("Only available in gameplay!")
+            return
+         }
+
+         enabled := args[0] != "0"
+         freecam_set_enabled(&s.freecam, &s.camera, &s.follow_cam, enabled)
+         
+         console_logf("Freecam %s.", enabled ? "enabled" : "disabled")
       }
    },
    {
@@ -119,7 +145,7 @@ console_update_ui :: proc() {
          height     = ui.fixed(200), 
          float_mode = ui.Float_At_Root{},
          padding          = ui.pad_all(4), 
-         background_color = uie.hsva_to_rgba({140, 0.5, 0.5, 0.5}),
+         background_color = uie.hsva_to_rgba({140, 0.5, 0.5, 0.8}),
          layout_direction = .Top_To_Bottom,
       ) {
          cmd_history_id := ui.local_id("command_history")
@@ -137,7 +163,7 @@ console_update_ui :: proc() {
             id               = cmd_history_id,
             width            = ui.grow(),
             height           = ui.grow(),
-            background_color = uie.hsva_to_rgba({0, 0, 0, 0.5}),
+            background_color = uie.hsva_to_rgba({0, 0, 0, 0.6}),
             corner_radius    = ui.corner_radius_all(2), 
             padding          = ui.pad_all(2),
             layout_direction = .Top_To_Bottom,
@@ -147,10 +173,11 @@ console_update_ui :: proc() {
          ) {
             for cmd_content in console.history {
                if ui.layout() {
+                  is_cmd := strings.starts_with(cmd_content, "cmd:")
                   ui.text(
-                     cmd_content,
+                     is_cmd ? cmd_content[4:] : cmd_content,
                      font_index = FONT_INDEX_MONO,
-                     color = uie.hsv_to_rgb({0, 0, 1})
+                     color = is_cmd ? uie.hsv_to_rgb({200, 0.5, 1}) : uie.hsv_to_rgb({0, 0, 1})
                   )
                }
             }
@@ -277,12 +304,10 @@ console_update_ui :: proc() {
          }
 
          if commited && len(cmd_content) > 0 {
-            append(&console.history, strings.clone(cmd_content))
-
             if len(console.nav_history) == 0 || console.nav_history[len(console.nav_history) - 1] != cmd_content {
                append(&console.nav_history, strings.clone(cmd_content))
             }
-
+            
             console_match_and_run_cmd(cmd_content)
             
             clear(&console.input_buffer)
@@ -316,6 +341,8 @@ console_destroy :: proc() {
 console_match_and_run_cmd :: proc(cmd_content : string) {
    assert(len(cmd_content) > 0)
    
+   console := &g_state.console
+   
    tokens := strings.fields(cmd_content)
    defer delete(tokens)
 
@@ -326,10 +353,14 @@ console_match_and_run_cmd :: proc(cmd_content : string) {
          
    for cmd in CONSOLE_COMMANDS {
       if command == cmd.name {
+         append(&console.history, strings.concatenate({"cmd:", cmd_content}))
          cmd.proc_call(args)
          return
       } 
    }
+
+   append(&console.history, strings.clone(cmd_content))
+   console_log("Unknown command!")
 }
 
 @(private = "file")
