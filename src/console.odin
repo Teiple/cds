@@ -16,7 +16,6 @@ Console_Command :: struct {
 Console :: struct {
 	open                : bool,
 	open_next_frame     : bool,
-   edit_mode           : bool,
    scroll_to_bottom    : bool,
    history_index       : int,
    saved_input         : [dynamic]u8,
@@ -43,6 +42,13 @@ CONSOLE_COMMANDS :: [?]Console_Command {
       description = "Exit program",
       proc_call   = proc(console: ^Console, args: []string) {
          game_quit()
+      }
+   },
+   {
+      name        = "close",
+      description = "Close console",
+      proc_call   = proc(console: ^Console, args: []string) {
+         console_close(console)
       }
    },
    {
@@ -111,8 +117,6 @@ console_update_input_event :: proc(console: ^Console, ev : sapp.Event) {
       } else {
          console.open = false
       }
-      
-      console.edit_mode = console.open
    }
 }
 
@@ -120,7 +124,6 @@ console_update_ui :: proc(console: ^Console) {
    if !console.open {
       if console.open_next_frame {
          console.open            = true
-         console.edit_mode       = true
          console.open_next_frame = false
       }
       return
@@ -372,4 +375,8 @@ console_fetch_suggestions :: proc(console: ^Console, prefix : string, show_all_w
    slice.sort_by(console.suggestions[:], proc(i, j: Console_Command) -> bool {
       return i.name < j.name
    })
+}
+
+console_close :: proc(console : ^Console) {
+   console.open = false
 }

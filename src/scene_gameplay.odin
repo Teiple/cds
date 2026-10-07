@@ -1,8 +1,11 @@
 package game
 
 import sapp "sokol/app"
+import ui "ui"
+import uie "ui_extra"
 
 Scene_State_Gameplay :: struct {
+   is_paused   : bool,
    camera      : Camera,
    freecam     : Free_Camera,
    player      : Player,
@@ -59,7 +62,12 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
       debug_render(&g_state.debug_drawer, &s.camera, &g_state.viewport)
    },
    draw_ui = proc() {
+      s := scene_state(Scene_State_Gameplay)
 
+      // Pause menu
+      if s.is_paused {
+         pause_menu()
+      }
    },
    handle_input_ui = proc(ev : sapp.Event) {
       s := scene_state(Scene_State_Gameplay)
@@ -68,8 +76,25 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
    handle_input_3d = proc(ev : sapp.Event) {
       mouse_update_input_event(&g_state.mouse, &g_state.viewport, ev)
       s := scene_state(Scene_State_Gameplay)
+      
       if s.freecam.enabled {
          freecam_update_input_event(&s.freecam, ev)
       }
+
+      if ev.type == .KEY_UP && ev.key_code == .ESCAPE {
+         s.is_paused = !s.is_paused 
+      }
    },
+}
+
+pause_menu :: proc() {
+   if ui.layout(
+      layout_direction = .Top_To_Bottom,
+      width            = ui.grow(),
+      height           = ui.grow(),
+      background_color = uie.hsva_to_rgba({0, 0, 0, 0.25}),
+      float_mode       = ui.Float_At_Root{}, 
+   ) {
+      uie.button("Resume")
+   }
 }
