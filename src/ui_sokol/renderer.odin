@@ -67,10 +67,10 @@ init :: proc(r: ^Renderer, max_vertices := 65536, max_indices := 131072) {
 	})
 
 	pip_desc: sg.Pipeline_Desc = {
-		shader = sg.make_shader(ui_shader_desc(sg.query_backend())),
+		shader     = sg.make_shader(ui_shader_desc(sg.query_backend())),
 		index_type = .UINT16,
-		cull_mode = .NONE,
-		depth = {compare = .ALWAYS, write_enabled = false},
+		cull_mode  = .NONE,
+		depth      = {compare = .ALWAYS, write_enabled = false},
 	}
 	pip_desc.layout.attrs[ATTR_ui_pos] = {
 		format = .FLOAT2,
@@ -84,6 +84,8 @@ init :: proc(r: ^Renderer, max_vertices := 65536, max_indices := 131072) {
 		format = .UBYTE4N,
 		offset = i32(offset_of(Vertex, color)),
 	}
+
+	// Baisics overlay blend
 	pip_desc.colors[0].blend = {
 		enabled          = true,
 		src_factor_rgb   = .SRC_ALPHA,
@@ -96,23 +98,25 @@ init :: proc(r: ^Renderer, max_vertices := 65536, max_indices := 131072) {
 	r.sampler = sg.make_sampler({
 		min_filter = .LINEAR,
 		mag_filter = .LINEAR,
-		wrap_u = .CLAMP_TO_EDGE,
-		wrap_v = .CLAMP_TO_EDGE,
+		wrap_u     = .CLAMP_TO_EDGE,
+		wrap_v     = .CLAMP_TO_EDGE,
 	})
 
 	// ui shader always sample images, incase we don't need images,
 	// we sample this white 1-pixel image
 	white_pixel: [4]u8 = {255, 255, 255, 255}
+	
 	r.white_image = sg.make_image({
-		width = 1,
-		height = 1,
-		pixel_format = .RGBA8,
-		data = {
+		width         = 1,
+		height        = 1,
+		pixel_format  = .RGBA8,
+		data          = {
 			mip_levels = {
-				0 = {ptr = raw_data(white_pixel[:]), size = len(white_pixel)},
+				0       = {ptr = raw_data(white_pixel[:]), size = len(white_pixel)},
 			},
 		},
 	})
+
 	r.white_view = sg.make_view({texture = {image = r.white_image}})
 }
 

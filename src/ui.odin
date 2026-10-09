@@ -82,20 +82,6 @@ ui_end :: proc(game_ui: ^Game_UI, vp: ^Viewport, avg_fps: f32) {
    }
 
    vmouse := viewport_get_mouse_position(vp)
-   if ui.layout(
-      id         = ui.global_id("virtual_cursor"),
-      width      = ui.fixed(8),
-      height     = ui.fixed(8),
-      float_mode = ui.Float_At_Root{
-         attach_points = {.CenterCenter, .LeftTop},
-         offset        = vmouse,
-         z_index       = 1000,
-      },
-      background_color = {255, 255, 255, 255},
-      corner_radius    = ui.corner_radius_all(4),
-      border           = {thickness = 1, color = {0, 0, 0, 255}},
-      pointer_mode     = .Ignore,
-   ) {}
 
    ui.end(&game_ui.ctx, {})
 

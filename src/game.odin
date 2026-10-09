@@ -28,8 +28,8 @@ Game_State :: struct {
 	debug_drawer     : Debug_Drawer,
 	mouse            : Mouse_Input,
 	scene            : struct {
-		state         : Scene_State,
-		callbacks     : Scene_Callbacks,
+		state        : Scene_State,
+		callbacks    : Scene_Callbacks,
 	},
 }
 
@@ -45,10 +45,13 @@ game_init :: proc(entry_point: runtime.Source_Code_Location) {
 	})
 
 	viewport_init(&g_state.viewport, base_size = {GAME_SCREEN_BASE_WIDTH, GAME_SCREEN_BASE_HEIGHT})
+	
 	ui_init(&g_state.ui, g_state.entry_dir)
 	audio_init(&g_state.audio)
+	
 	renderer_init(&g_state.renderer)
 	debug_drawer_init(&g_state.debug_drawer)
+
 	console_init(&g_state.console)
 
 	scene_set(Scene_State_Gameplay{})
@@ -72,9 +75,11 @@ game_destroy :: proc() {
 	delete(g_state.models)
 
 	ui_destroy(&g_state.ui)
-	console_destroy(&g_state.console)
-	debug_drawer_destroy(&g_state.debug_drawer)
 	audio_destroy(&g_state.audio)
+
+	debug_drawer_destroy(&g_state.debug_drawer)
+	
+	console_destroy(&g_state.console)
 
 	sg.shutdown()
 }
@@ -85,7 +90,7 @@ game_update :: proc(dt: f32) {
 		defer viewport_end(&g_state.viewport)
 		
 		frame_time_update(dt)
-		viewport_update(&g_state.viewport, {sapp.widthf(), sapp.heightf()})
+		viewport_update(&g_state.viewport, window_size = {sapp.widthf(), sapp.heightf()})
 
 		if g_state.scene.callbacks.update != nil {
 			g_state.scene.callbacks.update(dt)
@@ -95,6 +100,7 @@ game_update :: proc(dt: f32) {
 	}
 
 	mouse_end_frame(&g_state.mouse)
+
 	free_all(context.temp_allocator)
 }
 
@@ -106,15 +112,16 @@ game_draw :: proc() {
 
 	// UI
 	if ui_begin(&g_state.ui, &g_state.viewport) {
-		console_update_ui(&g_state.console)
 		
 		if g_state.scene.callbacks.draw_ui != nil {
 			g_state.scene.callbacks.draw_ui()
 		}
 
+		// console draws over everything else
+		console_update_ui(&g_state.console)
+
 		ui_end(&g_state.ui, &g_state.viewport, g_state.frame_time.average_fps)
 	}
-	
 }
 
 game_update_input_event :: proc(ev: sapp.Event) {

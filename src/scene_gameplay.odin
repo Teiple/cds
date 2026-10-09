@@ -1,5 +1,6 @@
 package game
 
+import "core:fmt"
 import sapp "sokol/app"
 import ui "ui"
 import uie "ui_extra"
@@ -82,19 +83,34 @@ SCENE_CALLBACKS_GAMEPLAY : Scene_Callbacks : {
       }
 
       if ev.type == .KEY_UP && ev.key_code == .ESCAPE {
-         s.is_paused = !s.is_paused 
+         s.is_paused = !s.is_paused
       }
    },
 }
 
 pause_menu :: proc() {
+   // backdrops
    if ui.layout(
-      layout_direction = .Top_To_Bottom,
       width            = ui.grow(),
       height           = ui.grow(),
       background_color = uie.hsva_to_rgba({0, 0, 0, 0.25}),
-      float_mode       = ui.Float_At_Root{}, 
+      float_mode       = ui.Float_At_Root{},
+   ) {}
+
+   // options
+   if ui.layout(
+      layout_direction = .Top_To_Bottom,
+      float_mode       = ui.Float_At_Root{
+         attach_points = {
+            element = .LeftCenter,
+            parent  = .CenterCenter,
+         }
+      },
    ) {
-      uie.button("Resume")
+      uie.label_button("Resume")
+      uie.label_button("Restart")
+      uie.label_button("Settings")
+      uie.label_button("Main Menu")
+      uie.label_button("Exit game")
    }
 }

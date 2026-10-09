@@ -3399,3 +3399,28 @@ v_line :: proc(
 		loc              = loc,
 	){}
 }
+
+// region: image
+image :: proc(
+	texture : ui.Texture_Id,
+	id      : Maybe(ui.Id)   = nil,
+	width   : ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
+	height  : ui.Sizing_Axis = {mode = ui.Fixed_Size{200}},
+	source  : ui.Rect        = {},
+	tint    : [4]u8          = {255, 255, 255, 255},
+	fit     : ui.Image_Fit   = .Stretch,
+	npatch  : Maybe(ui.Nine_Patch_Config) = nil,
+) {
+	if ui.layout(
+		id               = id,
+		width            = width,
+		height           = height,
+		background_image = ui.Image {
+			texture = texture,
+			source  = source,
+			tint    = tint,
+			fit     = fit,
+			npatch  = npatch,
+		},
+	) {}
+}
